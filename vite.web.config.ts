@@ -9,6 +9,11 @@ export default defineConfig({
   root: resolve(__dirname, 'src/renderer'),
   // サブフォルダに置いても動くよう相対パスで出力する
   base: './',
+  // PWA は「オリジン（localhost:ポート）＋マニフェストの id」で同じアプリかどうか判断される。
+  // Vite 既定の 5173 / 4173 は他のアプリ（LabelDrop など）とも共用になり、
+  // インストール済みの別アプリのアイコンや Service Worker と混ざるので、このアプリ専用のポートを使う。
+  server: { port: 5310, strictPort: true },
+  preview: { port: 4310, strictPort: true },
   resolve: { alias: { '@': resolve(__dirname, 'src/renderer/src') } },
   plugins: [
     react(),
@@ -16,6 +21,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectRegister: 'script',
       manifest: {
+        // 同じオリジンに別のアプリがあっても混ざらないよう、固有の id を付ける
+        id: 'com.goonruntongue.whiteboard-animation-maker',
         name: 'Whiteboard Animation Maker',
         short_name: 'WB Animator',
         description: '清書画像から「手が描いていく」アニメーションを作るアプリ',

@@ -11,7 +11,7 @@
     "dev": "electron-vite dev",
     "dev:web": "vite --config vite.web.config.ts",
     "build:web": "vite build --config vite.web.config.ts",
-    "preview:web": "vite preview --config vite.web.config.ts --port 4173 --strictPort",
+    "preview:web": "vite preview --config vite.web.config.ts",
     "icons:pwa": "python scripts/make-pwa-icons.py assets/icon/app-icon-hand.png src/renderer/public/icons",
     "build": "electron-vite build",
     "preview": "electron-vite preview",

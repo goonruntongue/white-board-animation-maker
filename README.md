@@ -60,7 +60,7 @@ npm run build:web
 ```
 
 `dist/web/` を HTTPS のサーバーに置くと、スマホから開いてホーム画面に追加できます（PWA は HTTPS が必要。localhost は例外）。
-手元で確認するときは `npm run preview:web`（http://localhost:4173 ）。
+手元で確認するときは `npm run preview:web`（http://localhost:4310 ）。
 
 ## 開発
 
@@ -80,7 +80,7 @@ node node_modules/electron/install.js
 | コマンド | 内容 |
 | --- | --- |
 | `npm run dev` | Electron 版を開発モードで起動（ホットリロード） |
-| `npm run dev:web` | ブラウザ版（PWA 版）を開発モードで起動（http://localhost:5173 ） |
+| `npm run dev:web` | ブラウザ版（PWA 版）を開発モードで起動（http://localhost:5310 ） |
 | `npm run build:web` / `npm run preview:web` | PWA 版を `dist/web/` にビルド / ビルド結果を確認 |
 | `npm run typecheck` | TypeScript の型チェック |
 | `npm run build` | `out/` にビルド |
