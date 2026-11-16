@@ -2,16 +2,36 @@
 
 使い方: npm run icons:pwa
 （= python scripts/make-pwa-icons.py assets/icon/app-icon-hand.png src/renderer/public/icons）
-元画像は背景透過の PNG。透明な余白は自動で切り落とす。Pillow が必要（pip install pillow）。
+元画像は背景透過の PNG。透明な余白は自動で切り落とし、本体から離れた半透明の点々（透過のゴミ）も取り除く。Pillow が必要（pip install pillow）。
 """
 import os
 import sys
 
-from PIL import Image
+from PIL import Image, ImageChops, ImageFilter
 
 src, out = sys.argv[1], sys.argv[2]
 os.makedirs(out, exist_ok=True)
 im = Image.open(src).convert('RGBA')
+
+
+def clean_alpha(img):
+    """背景透過の「ゴミ」を取り除く。
+    本体（ほぼ不透明な部分）から離れた半透明の点々を消し、縁のなめらかさ（アンチエイリアス）は残す。
+    　1. ほぼ不透明な画素だけのマスクを作る
+    　2. 開く処理（縮めてから広げる）で小さな点を消す
+    　3. 少し広げてぼかし、元のアルファと重ねる（縁は元の階調を使う）
+    """
+    alpha = img.getchannel('A')
+    body = alpha.point(lambda a: 255 if a >= 200 else 0)
+    body = body.filter(ImageFilter.MinFilter(9)).filter(ImageFilter.MaxFilter(9))  # 点々を除去
+    body = body.filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.GaussianBlur(1.5))  # 縁に少し余裕
+    cleaned = ImageChops.multiply(alpha, body)
+    out = img.copy()
+    out.putalpha(cleaned)
+    return out
+
+
+im = clean_alpha(im)
 # 透明な余白を切り落とす
 im = im.crop(im.getchannel('A').point(lambda a: 255 if a > 8 else 0).getbbox())
 side = max(im.size)
