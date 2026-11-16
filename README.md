@@ -36,6 +36,23 @@
 | `Ctrl+Z` / `Ctrl+Y` | 元に戻す / やり直す（選択範囲の変更も含む） |
 | ホイール / `Alt`+ドラッグ / 中ボタンドラッグ | ズーム / 表示移動 |
 
+## スマホ・タブレット（PWA 版）
+
+PC は Electron 版、スマホ・タブレットはブラウザで開いて「ホーム画面に追加」する PWA 版を使います（同じコードから作ります）。
+
+- 1本指でなぞる＝描く／範囲を作る、2本指でピンチ＝拡大縮小・移動
+- 下のボタンで「描き順」「設定」のシートを開く。書き出しもここから
+- 保存・書き出しは共有シートから（「ファイルに保存」やクラウドドライブへ）
+- 動画は WebM、録画できない端末（iPhone など）では MP4
+- 一度開けばオフラインでも起動できる（フォントと手素材は使った分から保存）
+
+```bash
+npm run build:web
+```
+
+`dist/web/` を HTTPS のサーバーに置くと、スマホから開いてホーム画面に追加できます（PWA は HTTPS が必要。localhost は例外）。
+手元で確認するときは `npm run preview:web`（http://localhost:4173 ）。
+
 ## 開発
 
 必要なもの: Node.js 22 以上
@@ -54,7 +71,8 @@ node node_modules/electron/install.js
 | コマンド | 内容 |
 | --- | --- |
 | `npm run dev` | Electron 版を開発モードで起動（ホットリロード） |
-| `npm run dev:web` | ブラウザ版を起動（PRD フェーズ1 の検証用。http://localhost:5173 ） |
+| `npm run dev:web` | ブラウザ版（PWA 版）を開発モードで起動（http://localhost:5173 ） |
+| `npm run build:web` / `npm run preview:web` | PWA 版を `dist/web/` にビルド / ビルド結果を確認 |
 | `npm run typecheck` | TypeScript の型チェック |
 | `npm run build` | `out/` にビルド |
 | `npm run dist:win` | Windows インストーラーを `release/` に作成 |

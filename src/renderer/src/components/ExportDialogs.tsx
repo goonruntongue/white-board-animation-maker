@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { buildStandaloneHtml, defaultHtmlOptions, type HtmlExportOptions } from '../export/exportHtml'
-import { exportWebm, type VideoExportHandle } from '../export/exportVideo'
+import { exportWebm, pickVideoFormat, type VideoExportHandle } from '../export/exportVideo'
 import { formatTime } from '../engine/project'
 import { buildTimeline } from '../engine/wb-engine'
 import { formatBytes } from '../lib/imageTools'
@@ -168,7 +168,10 @@ function VideoExportDialog(): React.JSX.Element {
     handle.current = h
     try {
       const blob = await h.promise
-      const saved = await saveBlobFile(blob, `${project.name || 'whiteboard'}.webm`, [{ name: 'WebM 動画', extensions: ['webm'] }])
+      const { ext } = pickVideoFormat()
+      const saved = await saveBlobFile(blob, `${project.name || 'whiteboard'}.${ext}`, [
+        { name: ext === 'mp4' ? 'MP4 動画' : 'WebM 動画', extensions: [ext] }
+      ])
       if (saved) {
         notify(isDesktop ? `書き出しました: ${saved}` : '動画をダウンロードしました')
         revealInFolder(saved)
@@ -187,10 +190,10 @@ function VideoExportDialog(): React.JSX.Element {
   const running = progress !== null
 
   return (
-    <Modal title="動画 (WebM) として書き出す" onClose={running ? undefined : () => openDialog(null)}>
+    <Modal title={`動画 (${pickVideoFormat().ext.toUpperCase()}) として書き出す`} onClose={running ? undefined : () => openDialog(null)}>
       <div className="modal-body">
         <p className="lead">
-          ブラウザの録画機能で WebM 動画を作ります。実時間で記録するため、書き出しには再生時間（{formatTime(total)}）と同じだけかかります。MP4 が必要な場合は外部ツールで変換してください。
+          ブラウザの録画機能で動画（この端末では {pickVideoFormat().ext.toUpperCase()}）を作ります。実時間で記録するため、書き出しには再生時間（{formatTime(total)}）と同じだけかかります。MP4 が必要な場合は外部ツールで変換してください。
         </p>
         <div className="form-grid">
           <label>フレームレート</label>

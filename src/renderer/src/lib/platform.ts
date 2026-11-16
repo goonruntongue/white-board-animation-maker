@@ -9,6 +9,25 @@ export interface FileFilter {
 
 export const isDesktop = typeof window !== 'undefined' && !!window.desktop
 
+/** 指で操作する端末（スマホ・タブレット） */
+export const isTouchDevice = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
+
+/**
+ * スマホでは「共有」シートで保存先（ファイル・ドライブ・AirDrop など）を選べるようにする。
+ * 共有できない形式・端末ではダウンロードにする。キャンセル時は 'cancel'。
+ */
+async function shareFile(blob: Blob, name: string): Promise<'shared' | 'cancel' | 'unsupported'> {
+  if (!isTouchDevice || typeof navigator.canShare !== 'function') return 'unsupported'
+  const file = new File([blob], name, { type: blob.type || 'application/octet-stream' })
+  if (!navigator.canShare({ files: [file] })) return 'unsupported'
+  try {
+    await navigator.share({ files: [file], title: name })
+    return 'shared'
+  } catch (e) {
+    return e instanceof DOMException && e.name === 'AbortError' ? 'cancel' : 'unsupported'
+  }
+}
+
 export function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader()
@@ -46,7 +65,8 @@ export async function openImageFile(opts?: { allowSvg?: boolean }): Promise<{ na
 
 export async function openProjectFile(): Promise<{ path: string | null; text: string } | null> {
   if (window.desktop) return window.desktop.openProject()
-  const f = await pickFile('.wbanim,application/json')
+  // iOS は独自拡張子を選べないことがあるので、JSON / テキストも受け付ける
+  const f = await pickFile('.wbanim,application/json,text/plain,application/octet-stream')
   return f ? { path: null, text: await f.text() } : null
 }
 
@@ -58,7 +78,11 @@ export async function saveTextFile(
   path?: string
 ): Promise<string | null> {
   if (window.desktop) return window.desktop.saveText({ text, defaultName, filters, path })
-  download(new Blob([text], { type: 'text/plain;charset=utf-8' }), defaultName)
+  const type = defaultName.endsWith('.html') ? 'text/html' : defaultName.endsWith('.wbanim') ? 'application/json' : 'text/plain'
+  const blob = new Blob([text], { type: `${type};charset=utf-8` })
+  const shared = await shareFile(blob, defaultName)
+  if (shared === 'cancel') return null
+  if (shared === 'unsupported') download(blob, defaultName)
   return defaultName
 }
 
@@ -66,7 +90,9 @@ export async function saveBlobFile(blob: Blob, defaultName: string, filters: Fil
   if (window.desktop) {
     return window.desktop.saveBinary({ data: await blob.arrayBuffer(), defaultName, filters })
   }
-  download(blob, defaultName)
+  const shared = await shareFile(blob, defaultName)
+  if (shared === 'cancel') return null
+  if (shared === 'unsupported') download(blob, defaultName)
   return defaultName
 }
 

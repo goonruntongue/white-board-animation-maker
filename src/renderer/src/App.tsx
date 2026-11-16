@@ -17,6 +17,7 @@ import {
 } from './commands'
 import { ExportDialogs } from './components/ExportDialogs'
 import { Inspector } from './components/Inspector'
+import { MobileNav } from './components/MobileNav'
 import { PEN_PRESETS } from './components/PenSizePicker'
 import { Stage } from './components/Stage'
 import { StatusBar } from './components/StatusBar'
@@ -40,6 +41,7 @@ export default function App(): React.JSX.Element {
   const playing = useEditor((s) => s.playing)
   const dirty = useEditor((s) => s.dirty)
   const filePath = useEditor((s) => s.filePath)
+  const mobileSheet = useEditor((s) => s.mobileSheet)
   const [zoom, setZoom] = useState(1)
   const [dragOver, setDragOver] = useState(false)
   const total = useMemo(() => buildTimeline(project).total, [project])
@@ -167,6 +169,7 @@ export default function App(): React.JSX.Element {
   return (
     <div
       className="app"
+      data-sheet={mobileSheet ?? undefined}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('Files')) {
           e.preventDefault()
@@ -188,6 +191,7 @@ export default function App(): React.JSX.Element {
       </div>
       <Timeline />
       <StatusBar zoom={zoom} />
+      <MobileNav />
       <ExportDialogs />
       <Toast />
       {dragOver && (

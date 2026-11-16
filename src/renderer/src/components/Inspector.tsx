@@ -6,6 +6,7 @@ import { dataUrlBytes, formatBytes } from '../lib/imageTools'
 import { useEditor } from '../store'
 import { ColorField, Section, SliderField, ToggleField } from './Field'
 import { Icon } from './Icon'
+import { SheetBar } from './MobileNav'
 
 type Tab = 'stroke' | 'project' | 'assets'
 
@@ -18,6 +19,7 @@ export function Inspector(): React.JSX.Element {
 
   return (
     <aside className="panel right">
+      <SheetBar title="設定" />
       <div className="tabs">
         <button className={active === 'stroke' ? 'on' : ''} disabled={!selectedId} onClick={() => setTab('stroke')}>
           軌跡

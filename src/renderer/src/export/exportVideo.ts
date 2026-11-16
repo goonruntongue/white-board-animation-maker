@@ -1,4 +1,4 @@
-// 動画書き出し（PRD 7.2）。Canvas の captureStream() + MediaRecorder で WebM を作る。
+// 動画書き出し（PRD 7.2）。Canvas の captureStream() + MediaRecorder で WebM（使えない端末では MP4）を作る。
 // MediaRecorder は実時間で記録するため、書き出しには再生時間と同じだけかかる。
 import { loadImage, WBRenderer } from '../engine/wb-engine'
 import type { Project } from '../engine/types'
@@ -15,9 +15,17 @@ export interface VideoExportHandle {
   cancel: () => void
 }
 
-export function pickWebmMime(): string {
-  const candidates = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
-  return candidates.find((m) => MediaRecorder.isTypeSupported(m)) ?? 'video/webm'
+/** 録画できる形式を選ぶ。WebM が使えない端末（iPhone の Safari など）は MP4 */
+export function pickVideoFormat(): { mime: string; ext: 'webm' | 'mp4' } {
+  const candidates: { mime: string; ext: 'webm' | 'mp4' }[] = [
+    { mime: 'video/webm;codecs=vp9', ext: 'webm' },
+    { mime: 'video/webm;codecs=vp8', ext: 'webm' },
+    { mime: 'video/webm', ext: 'webm' },
+    { mime: 'video/mp4;codecs=avc1', ext: 'mp4' },
+    { mime: 'video/mp4', ext: 'mp4' }
+  ]
+  if (typeof MediaRecorder === 'undefined') return candidates[2]
+  return candidates.find((c) => MediaRecorder.isTypeSupported(c.mime)) ?? candidates[2]
 }
 
 export function exportWebm(
@@ -42,15 +50,16 @@ export function exportWebm(
     const octx = out.getContext('2d')!
 
     const stream = out.captureStream(o.fps)
+    const format = pickVideoFormat()
     const recorder = new MediaRecorder(stream, {
-      mimeType: pickWebmMime(),
+      mimeType: format.mime,
       videoBitsPerSecond: o.bitrateMbps * 1_000_000
     })
     const chunks: Blob[] = []
     recorder.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data)
 
     const done = new Promise<Blob>((resolve, reject) => {
-      recorder.onstop = () => (cancelled ? reject(new Error('cancelled')) : resolve(new Blob(chunks, { type: 'video/webm' })))
+      recorder.onstop = () => (cancelled ? reject(new Error('cancelled')) : resolve(new Blob(chunks, { type: format.mime.split(';')[0] })))
       recorder.onerror = () => reject(new Error('録画に失敗しました'))
     })
 

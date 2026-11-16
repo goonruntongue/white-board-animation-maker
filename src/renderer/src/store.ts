@@ -39,6 +39,8 @@ interface EditorState {
   /** 次の録画で置き換える軌跡 */
   rerecordId: string | null
   dialog: 'html' | 'video' | null
+  /** スマホ表示で開いている下部シート */
+  mobileSheet: 'strokes' | 'inspector' | null
 
   // --- 履歴付きの変更 ---
   /** mergeKey が直前と同じで短時間内なら、履歴を1つにまとめる（スライダー操作用） */
@@ -64,6 +66,7 @@ interface EditorState {
   notify: (text: string, kind?: 'info' | 'error') => void
   setRerecord: (id: string | null) => void
   openDialog: (d: 'html' | 'video' | null) => void
+  setMobileSheet: (s: 'strokes' | 'inspector' | null) => void
 }
 
 export const useEditor = create<EditorState>((set, get) => ({
@@ -82,6 +85,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   toast: null,
   rerecordId: null,
   dialog: null,
+  mobileSheet: null,
 
   commit: (fn, mergeKey) => {
     const prev = get().project
@@ -202,5 +206,6 @@ export const useEditor = create<EditorState>((set, get) => ({
   setViewMode: (viewMode) => set({ viewMode }),
   notify: (text, kind = 'info') => set({ toast: { id: Date.now(), text, kind } }),
   setRerecord: (rerecordId) => set(rerecordId ? { rerecordId, tool: 'draw', viewMode: 'edit', playing: false } : { rerecordId }),
-  openDialog: (dialog) => set({ dialog, playing: false })
+  openDialog: (dialog) => set({ dialog, playing: false }),
+  setMobileSheet: (mobileSheet) => set({ mobileSheet })
 }))

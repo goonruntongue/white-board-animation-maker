@@ -46,6 +46,16 @@ type Draft =
     }
 
 const PADDING = 40
+const PADDING_SMALL = 14 // スマホなど狭い画面
+
+/** 2本指操作（ピンチでズーム・ドラッグで移動）の開始時の状態 */
+interface Pinch {
+  dist0: number
+  mid0: Pt
+  zoom0: number
+  /** 開始時に2本指の中点の下にあった画像上の点 */
+  imgPt: Pt
+}
 const DRAG_THRESHOLD = 4 // 画面px。これ未満の移動はクリックとみなす
 const CLOSE_RADIUS = 9 // 画面px。多角形の始点にこれだけ近づいたら閉じる
 
@@ -69,6 +79,15 @@ function hitStroke(strokes: Stroke[], x: number, y: number, tolerance: number): 
 }
 
 /** Shift=追加 / Alt=除外 / Shift+Alt=交差（Photoshop と同じ）。修飾キーがなければオプションバーのモード */
+/** ポインタを要素に固定する（端末やタイミングによって失敗しても操作は続ける） */
+function capture(e: React.PointerEvent): void {
+  try {
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  } catch {
+    /* 既に離れたポインタなど */
+  }
+}
+
 function opFromEvent(e: { shiftKey: boolean; altKey: boolean }, mode: SelectionOp): SelectionOp {
   if (e.shiftKey && e.altKey) return 'intersect'
   if (e.altKey) return 'subtract'
@@ -99,6 +118,10 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const rendererRef = useRef<WBRenderer | null>(null)
   const recording = useRef<Recording | null>(null)
   const panDrag = useRef<PanDrag | null>(null)
+  // タッチ操作：画面に触れている指、ピンチ中の状態、ピンチ後に指が離れきるまで描画を止めるフラグ
+  const touches = useRef(new Map<number, Pt>())
+  const pinch = useRef<Pinch | null>(null)
+  const gestureLock = useRef(false)
   const draft = useRef<Draft | null>(null)
   const cursor = useRef<Pt | null>(null)
   const antsOffset = useRef(0)
@@ -110,7 +133,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
 
   const imgW = image?.width ?? 1920
   const imgH = image?.height ?? 1080
-  const fit = Math.max(0.01, Math.min((size.w - PADDING * 2) / imgW, (size.h - PADDING * 2) / imgH))
+  const pad = size.w < 640 ? PADDING_SMALL : PADDING
+  const fit = Math.max(0.01, Math.min((size.w - pad * 2) / imgW, (size.h - pad * 2) / imgH))
   const scale = fit * view.zoom
   const dispW = imgW * scale
   const dispH = imgH * scale
@@ -407,16 +431,73 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     return () => el.removeEventListener('wheel', onWheel)
   }, [image, fit, size, imgW, imgH])
 
+  // ---- 2本指のピンチ・移動（スマホ・タブレット） ----
+  const containerPoint = (pt: Pt): Pt => {
+    const rect = containerRef.current!.getBoundingClientRect()
+    return { x: pt.x - rect.left, y: pt.y - rect.top }
+  }
+
+  const startPinch = (): void => {
+    const [a, b] = [...touches.current.values()]
+    // 1本目の指で始めていた線や選択は取り消す（ピンチのつもりの誤描画を防ぐ）
+    recording.current = null
+    const d = draft.current
+    if (d && d.pointerId !== null) {
+      if (d.kind === 'lasso' && !d.freehand && d.points.length > 1) {
+        d.points.pop()
+        d.pointerId = null
+      } else {
+        draft.current = null
+        setHasDraft(false)
+      }
+    }
+    panDrag.current = null
+    gestureLock.current = true
+    const mid = containerPoint({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
+    const scale0 = fit * view.zoom
+    const left0 = (size.w - imgW * scale0) / 2 + view.x
+    const top0 = (size.h - imgH * scale0) / 2 + view.y
+    pinch.current = {
+      dist0: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+      mid0: mid,
+      zoom0: view.zoom,
+      imgPt: { x: (mid.x - left0) / scale0, y: (mid.y - top0) / scale0 }
+    }
+    drawOverlay()
+  }
+
+  const updatePinch = (): void => {
+    const pz = pinch.current
+    if (!pz) return
+    const [a, b] = [...touches.current.values()]
+    const mid = containerPoint({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
+    const zoom = Math.max(0.1, Math.min(12, (pz.zoom0 * Math.hypot(a.x - b.x, a.y - b.y)) / pz.dist0))
+    const newScale = fit * zoom
+    // 指の中点の下に、最初と同じ画像上の点が来るように動かす
+    const newLeft = mid.x - pz.imgPt.x * newScale
+    const newTop = mid.y - pz.imgPt.y * newScale
+    setView({ zoom, x: newLeft - (size.w - imgW * newScale) / 2, y: newTop - (size.h - imgH * newScale) / 2 })
+  }
+
   // ---- ポインタ操作 ----
   const onPointerDown = (e: React.PointerEvent): void => {
     if (!image) return
+    if (e.pointerType === 'touch') {
+      touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      capture(e)
+      if (touches.current.size === 2) {
+        startPinch()
+        return
+      }
+      if (touches.current.size > 2 || gestureLock.current) return
+    }
     const st = useEditor.getState()
     // 選択ツールでは Alt は「除外」に使うので、移動は中ボタン／移動ツールのみ
     const wantsPan = e.button === 1 || tool === 'pan' || (e.button === 0 && e.altKey && !isSelTool)
     if (wantsPan) {
       e.preventDefault()
       panDrag.current = { pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y }
-      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+      capture(e)
       return
     }
     if (e.button !== 0) return
@@ -425,7 +506,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     if (isSelTool) {
       if (st.playing) st.setPlaying(false)
       if (st.viewMode !== 'edit') st.setViewMode('edit')
-      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+      capture(e)
       const d = draft.current
       if (tool === 'lasso' && d && d.kind === 'lasso' && !d.freehand) {
         // 多角形モード：頂点を追加。始点の近くなら閉じる
@@ -455,16 +536,25 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       if (st.playing) st.setPlaying(false)
       if (st.viewMode !== 'edit') st.setViewMode('edit')
       recording.current = { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }] }
-      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+      capture(e)
       drawOverlay()
     } else if (tool === 'select') {
-      const hit = hitStroke(project.strokes, p.x, p.y, 8 / scale)
+      // 指でのタップは当たり判定を広めにする
+      const hit = hitStroke(project.strokes, p.x, p.y, (e.pointerType === 'touch' ? 18 : 8) / scale)
       st.select(hit?.id ?? null)
     }
   }
 
   const onPointerMove = (e: React.PointerEvent): void => {
     if (!image) return
+    if (e.pointerType === 'touch' && touches.current.has(e.pointerId)) {
+      touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      if (pinch.current && touches.current.size >= 2) {
+        updatePinch()
+        return
+      }
+      if (gestureLock.current) return
+    }
     const pan = panDrag.current
     if (pan && pan.pointerId === e.pointerId) {
       setView((v) => ({ ...v, x: pan.vx + e.clientX - pan.sx, y: pan.vy + e.clientY - pan.sy }))
@@ -495,11 +585,20 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         rec.points.push({ x: q.x, y: q.y, t: ev.timeStamp - rec.start })
       }
     }
-    cursor.current = p
+    cursor.current = e.pointerType === 'touch' ? null : p
     drawOverlay()
   }
 
   const onPointerUp = (e: React.PointerEvent): void => {
+    if (e.pointerType === 'touch') {
+      touches.current.delete(e.pointerId)
+      if (touches.current.size < 2) pinch.current = null
+      if (gestureLock.current) {
+        // ピンチの指がすべて離れるまでは描画・選択を再開しない
+        if (touches.current.size === 0) gestureLock.current = false
+        return
+      }
+    }
     if (panDrag.current?.pointerId === e.pointerId) {
       panDrag.current = null
       return

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
+import { SheetBar } from './MobileNav'
 
 export function StrokeList(): React.JSX.Element {
   const strokes = useEditor((s) => s.project.strokes)
@@ -13,6 +14,7 @@ export function StrokeList(): React.JSX.Element {
 
   return (
     <aside className="panel left">
+      <SheetBar title="描き順" />
       <header className="panel-header">
         <span>描き順</span>
         <span className="badge">{strokes.length}</span>
