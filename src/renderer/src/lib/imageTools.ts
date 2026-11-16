@@ -1,4 +1,5 @@
 import { loadImage } from '../engine/wb-engine'
+import { makeHandAsset } from '../engine/handPresets'
 import type { HandAsset, ImageAsset } from '../engine/types'
 
 /** これより大きい画像は読み込み時に縮小する（PRD 推奨: 1920×1080 以下） */
@@ -19,18 +20,9 @@ export async function importImage(
   return { asset: { name, dataUrl: out, width: nw, height: nh }, resized: true }
 }
 
+/** 自作の手素材（PNG / WebP / SVG）。ペン先は透過部分から推定し、あとで調整できる */
 export async function importHand(name: string, dataUrl: string): Promise<HandAsset> {
-  const img = await loadImage(dataUrl)
-  // ペン先は左上付近にあると仮定して初期値を置き、インスペクタで調整してもらう
-  return {
-    name,
-    dataUrl,
-    width: img.naturalWidth,
-    height: img.naturalHeight,
-    tipX: Math.round(img.naturalWidth * 0.05),
-    tipY: Math.round(img.naturalHeight * 0.05),
-    builtin: false
-  }
+  return makeHandAsset(name, dataUrl)
 }
 
 export function reencode(img: CanvasImageSource, w: number, h: number, mime: string, quality?: number): string {

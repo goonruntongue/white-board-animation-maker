@@ -51,7 +51,22 @@ async function prepareProjectForExport(project: Project, o: HtmlExportOptions): 
       points: s.points.map((p) => ({ x: Math.round(p.x * scale * 10) / 10, y: Math.round(p.y * scale * 10) / 10, t: p.t }))
     }))
 
-  return { ...project, image: { ...project.image, dataUrl, width: w, height: h }, strokes }
+  return { ...project, image: { ...project.image, dataUrl, width: w, height: h }, strokes, hand: await prepareHand(project, h) }
+}
+
+/**
+ * 手素材を、実際に表示される大きさ（＋高解像度ディスプレイ向けの余裕）まで縮小し、
+ * 透過WebPのデータURLにして埋め込む。元画像が大きくてもHTMLが重くならない。
+ */
+async function prepareHand(project: Project, exportHeight: number): Promise<Project['hand']> {
+  const hand = project.hand
+  const img = await loadImage(hand.dataUrl)
+  const shown = project.settings.handSize * exportHeight
+  const k = Math.min(1, (shown * 1.5) / hand.height)
+  const w = Math.max(1, Math.round(hand.width * k))
+  const h = Math.max(1, Math.round(hand.height * k))
+  const dataUrl = reencode(img, w, h, 'image/webp', 0.9)
+  return { ...hand, dataUrl, width: w, height: h, tipX: hand.tipX * k, tipY: hand.tipY * k }
 }
 
 function escapeHtml(s: string): string {

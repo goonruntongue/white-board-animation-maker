@@ -7,7 +7,8 @@ export interface FileFilter {
 
 const api = {
   isDesktop: true as const,
-  openImage: (): Promise<{ name: string; dataUrl: string } | null> => ipcRenderer.invoke('dialog:openImage'),
+  openImage: (opts?: { allowSvg?: boolean }): Promise<{ name: string; dataUrl: string } | null> =>
+    ipcRenderer.invoke('dialog:openImage', opts),
   openProject: (): Promise<{ path: string; text: string } | null> => ipcRenderer.invoke('dialog:openProject'),
   saveText: (args: { text: string; defaultName: string; path?: string; filters: FileFilter[] }): Promise<string | null> =>
     ipcRenderer.invoke('file:saveText', args),

@@ -1,4 +1,4 @@
-import { builtinHand } from './handAsset'
+import { defaultHand, findPreset } from './handPresets'
 import type { ClipRegion, Project, Stroke, StrokePoint } from './types'
 
 export const PROJECT_EXT = 'wbanim'
@@ -11,7 +11,7 @@ export function createProject(): Project {
     version: 1,
     name: '無題のプロジェクト',
     image: null,
-    hand: builtinHand(penColor),
+    hand: defaultHand(penColor),
     settings: {
       speed: 1,
       startDelay: 600,
@@ -20,7 +20,7 @@ export function createProject(): Project {
       showHand: true,
       handShadow: true,
       handFollowDirection: true,
-      handSize: 0.42,
+      handSize: 0.45,
       penColor,
       defaultRevealWidth: 28,
       defaultDelayAfter: 250
@@ -78,7 +78,19 @@ export function strokeFromRecording(
 }
 
 export function serializeProject(project: Project): string {
-  return JSON.stringify({ app: 'whiteboard-animation-maker', ...project })
+  // 内蔵の手素材は名前だけ保存する（画像本体はアプリに入っている）
+  const hand = project.hand.presetId ? { ...project.hand, dataUrl: '' } : project.hand
+  return JSON.stringify({ app: 'whiteboard-animation-maker', ...project, hand })
+}
+
+function resolveHand(hand: Project['hand'] | undefined, fallback: Project['hand']): Project['hand'] {
+  if (!hand) return fallback
+  if (hand.presetId) {
+    const preset = findPreset(hand.presetId)
+    // 素材が見つからなければ既定の手に置き換える
+    return preset ? { ...hand, dataUrl: preset.url } : fallback
+  }
+  return hand
 }
 
 export function parseProject(text: string): Project {
@@ -91,7 +103,7 @@ export function parseProject(text: string): Project {
     version: 1,
     name: data.name ?? base.name,
     image: data.image ?? null,
-    hand: data.hand ?? base.hand,
+    hand: resolveHand(data.hand, base.hand),
     settings: { ...base.settings, ...data.settings },
     strokes: data.strokes
   }

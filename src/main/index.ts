@@ -10,7 +10,8 @@ const MIME: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp'
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml'
 }
 
 interface FileFilter {
@@ -138,11 +139,15 @@ function buildMenu(): void {
 }
 
 // ---------- IPC ----------
-ipcMain.handle('dialog:openImage', async () => {
+ipcMain.handle('dialog:openImage', async (_e, opts?: { allowSvg?: boolean }) => {
   const res = await dialog.showOpenDialog(mainWindow!, {
-    title: '画像を選択',
+    title: opts?.allowSvg ? '手・ペン素材を選択' : '画像を選択',
     properties: ['openFile'],
-    filters: [{ name: '画像', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
+    filters: [
+      opts?.allowSvg
+        ? { name: '透過画像 (PNG / WebP / SVG)', extensions: ['png', 'webp', 'svg'] }
+        : { name: '画像', extensions: ['png', 'jpg', 'jpeg', 'webp'] }
+    ]
   })
   if (res.canceled || !res.filePaths[0]) return null
   const p = res.filePaths[0]

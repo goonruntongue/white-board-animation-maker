@@ -1,11 +1,15 @@
 import { useState } from 'react'
-import { importHandDialog, importImageDialog, resetHand } from '../commands'
+import { importHandDialog, importImageDialog, selectHandPreset } from '../commands'
+import { builtinHand } from '../engine/handAsset'
+import { getHandPresets } from '../engine/handPresets'
 import { dataUrlBytes, formatBytes } from '../lib/imageTools'
 import { useEditor } from '../store'
 import { ColorField, Section, SliderField, ToggleField } from './Field'
 import { Icon } from './Icon'
 
 type Tab = 'stroke' | 'project' | 'assets'
+
+const builtinSvgThumb = builtinHand('#1f6feb').dataUrl
 
 export function Inspector(): React.JSX.Element {
   const selectedId = useEditor((s) => s.selectedId)
@@ -231,6 +235,8 @@ function AssetInspector(): React.JSX.Element {
   const { updateSettings, commit } = useEditor.getState()
   const st = project.settings
   const hand = project.hand
+  const presets = getHandPresets()
+  const isCustom = !hand.builtin && !hand.presetId
 
   const setTip = (e: React.MouseEvent<HTMLDivElement>): void => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -272,14 +278,66 @@ function AssetInspector(): React.JSX.Element {
         <ColorField label="背景色" value={st.boardColor} onChange={(v) => updateSettings({ boardColor: v })} />
       </Section>
 
-      <Section title="手・ペン">
-        <ToggleField label="手を表示する" checked={st.showHand} onChange={(v) => updateSettings({ showHand: v })} />
-        <ToggleField label="手の影" checked={st.handShadow} onChange={(v) => updateSettings({ handShadow: v })} />
-        <ToggleField
-          label="進行方向に合わせて傾ける"
-          checked={st.handFollowDirection}
-          onChange={(v) => updateSettings({ handFollowDirection: v })}
-        />
+      <Section title="手・ペン素材">
+        <div className="hand-grid" role="listbox" aria-label="手素材">
+          {presets.map((p) => (
+            <button
+              key={p.id}
+              role="option"
+              aria-selected={hand.presetId === p.id}
+              className={`hand-card ${hand.presetId === p.id ? 'on' : ''}`}
+              title={p.id}
+              onClick={() => selectHandPreset(p.id)}
+            >
+              <span className="hand-thumb">
+                <img src={p.url} alt="" draggable={false} />
+              </span>
+              <span className="hand-label">{p.label}</span>
+            </button>
+          ))}
+          <button
+            className={`hand-card ${hand.builtin ? 'on' : ''}`}
+            title="シンプルなイラストの手（ペンの色を変えられます）"
+            onClick={() => selectHandPreset('builtin-svg')}
+          >
+            <span className="hand-thumb">
+              <img src={builtinSvgThumb} alt="" draggable={false} />
+            </span>
+            <span className="hand-label">イラスト</span>
+          </button>
+          {isCustom && (
+            <button className="hand-card on" title={hand.name}>
+              <span className="hand-thumb">
+                <img src={hand.dataUrl} alt="" draggable={false} />
+              </span>
+              <span className="hand-label">自作：{hand.name.replace(/\.[^.]+$/, '')}</span>
+            </button>
+          )}
+          <button className="hand-card upload" title="自作の透過PNG / WebP / SVG を読み込む" onClick={() => void importHandDialog()}>
+            <span className="hand-thumb">
+              <Icon name="upload" size={22} />
+            </span>
+            <span className="hand-label">アップロード</span>
+          </button>
+        </div>
+        <p className="muted-text small">
+          PNG / WebP / SVG（背景透過）を使えます。ペン先が左上を向いた構図だと、位置を自動で合わせます。
+        </p>
+
+        <div className="field">
+          <span className="field-label">ペン先の位置（クリックで調整）</span>
+          <div className="hand-preview" onClick={setTip} title="クリックしてペン先の位置を指定">
+            <img src={hand.dataUrl} alt="" draggable={false} />
+            <span
+              className="tip-marker"
+              style={{ left: `${(hand.tipX / hand.width) * 100}%`, top: `${(hand.tipY / hand.height) * 100}%` }}
+            />
+          </div>
+          <span className="muted-text small">
+            {hand.name} ・ ペン先 ({Math.round(hand.tipX)}, {Math.round(hand.tipY)})
+          </span>
+        </div>
+
         <SliderField
           label="手の大きさ"
           hint="画像の高さに対する比率"
@@ -290,30 +348,14 @@ function AssetInspector(): React.JSX.Element {
           unit="×"
           onChange={(v) => updateSettings({ handSize: v })}
         />
-        {hand.builtin && (
-          <ColorField label="ペンの色" value={st.penColor} onChange={(v) => updateSettings({ penColor: v })} />
-        )}
-        <div className="hand-preview-wrap">
-          <div className="hand-preview" onClick={setTip} title="クリックしてペン先の位置を指定">
-            <img src={hand.dataUrl} alt="" draggable={false} />
-            <span className="tip-marker" style={{ left: `${(hand.tipX / hand.width) * 100}%`, top: `${(hand.tipY / hand.height) * 100}%` }} />
-          </div>
-          <p className="muted-text small">
-            {hand.name}
-            <br />
-            ペン先: ({hand.tipX}, {hand.tipY}) — 画像をクリックして指定
-          </p>
-        </div>
-        <div className="btn-row">
-          <button className="btn" onClick={() => void importHandDialog()}>
-            <Icon name="upload" /> 手素材を読み込む…
-          </button>
-          {!hand.builtin && (
-            <button className="btn" onClick={resetHand}>
-              内蔵素材に戻す
-            </button>
-          )}
-        </div>
+        {hand.builtin && <ColorField label="ペンの色" value={st.penColor} onChange={(v) => updateSettings({ penColor: v })} />}
+        <ToggleField label="手を表示する" checked={st.showHand} onChange={(v) => updateSettings({ showHand: v })} />
+        <ToggleField label="手の影" checked={st.handShadow} onChange={(v) => updateSettings({ handShadow: v })} />
+        <ToggleField
+          label="進行方向に合わせて傾ける"
+          checked={st.handFollowDirection}
+          onChange={(v) => updateSettings({ handFollowDirection: v })}
+        />
       </Section>
     </>
   )

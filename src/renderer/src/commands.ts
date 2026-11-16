@@ -1,5 +1,6 @@
 // メニュー・ツールバー・ショートカットから共通で呼ぶ操作。
 import { builtinHand } from './engine/handAsset'
+import { defaultHand, findPreset } from './engine/handPresets'
 import { createProject, parseProject, PROJECT_EXT, serializeProject } from './engine/project'
 import { invert } from './engine/selection'
 import { buildTimeline } from './engine/wb-engine'
@@ -102,7 +103,7 @@ export async function importImageFile(file: File): Promise<void> {
 }
 
 export async function importHandDialog(): Promise<void> {
-  const res = await openImageFile()
+  const res = await openImageFile({ allowSvg: true })
   if (!res) return
   try {
     const hand = await importHand(res.name, res.dataUrl)
@@ -113,8 +114,17 @@ export async function importHandDialog(): Promise<void> {
   }
 }
 
+/** 内蔵素材（assets/hand の画像）を選ぶ。presetId が 'builtin-svg' ならイラストの手 */
+export function selectHandPreset(id: string): void {
+  get().commit((p) => {
+    if (id === 'builtin-svg') return { ...p, hand: builtinHand(p.settings.penColor) }
+    const preset = findPreset(id)
+    return preset ? { ...p, hand: { ...preset.hand } } : p
+  })
+}
+
 export function resetHand(): void {
-  get().commit((p) => ({ ...p, hand: builtinHand(p.settings.penColor) }))
+  get().commit((p) => ({ ...p, hand: defaultHand(p.settings.penColor) }))
 }
 
 export function totalDuration(): number {

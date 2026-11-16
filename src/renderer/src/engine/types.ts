@@ -57,7 +57,10 @@ export interface HandAsset {
   /** 素材内のペン先位置 (px) */
   tipX: number
   tipY: number
+  /** true = 内蔵のイラスト（SVG・ペン色変更可） */
   builtin: boolean
+  /** assets/hand の内蔵素材のとき、そのファイル名（拡張子なし）。保存時は画像本体を省く */
+  presetId?: string
 }
 
 export interface ProjectSettings {

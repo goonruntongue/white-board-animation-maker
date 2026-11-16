@@ -1169,3 +1169,59 @@ input[type='range'] {
     padding: 0 8px;
   }
 }
+
+/* ---------- 手素材の選択 ---------- */
+.hand-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+.hand-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--bg-2);
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+.hand-card:hover {
+  border-color: var(--text-3);
+}
+.hand-card.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  background: var(--accent-soft);
+}
+.hand-thumb {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 3 / 2;
+  border-radius: 4px;
+  background: #fff;
+  overflow: hidden;
+  color: var(--text-2);
+}
+.hand-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.hand-card.upload .hand-thumb {
+  background: transparent;
+  border: 1.5px dashed var(--line-strong);
+}
+.hand-label {
+  padding: 0 2px;
+  font-size: 11.5px;
+  color: var(--text-1);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.hand-preview {
+  width: 100%;
+}

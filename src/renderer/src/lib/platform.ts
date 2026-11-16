@@ -38,9 +38,9 @@ function download(blob: Blob, name: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 5000)
 }
 
-export async function openImageFile(): Promise<{ name: string; dataUrl: string } | null> {
-  if (window.desktop) return window.desktop.openImage()
-  const f = await pickFile('image/png,image/jpeg,image/webp')
+export async function openImageFile(opts?: { allowSvg?: boolean }): Promise<{ name: string; dataUrl: string } | null> {
+  if (window.desktop) return window.desktop.openImage(opts)
+  const f = await pickFile(opts?.allowSvg ? 'image/png,image/webp,image/svg+xml,.svg' : 'image/png,image/jpeg,image/webp')
   return f ? { name: f.name, dataUrl: await readFileAsDataUrl(f) } : null
 }
 
