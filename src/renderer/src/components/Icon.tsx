@@ -1,0 +1,50 @@
+// 外部依存なしの軽量アイコンセット（24×24, stroke ベース）
+const PATHS: Record<string, string> = {
+  pen: 'M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z',
+  cursor: 'M4 4l7 17 2.5-7.5L21 11Z',
+  hand: 'M18 11V6a2 2 0 0 0-4 0v5 M14 10V4a2 2 0 0 0-4 0v6 M10 10.5V6a2 2 0 0 0-4 0v8 M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.4l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15',
+  play: 'M7 4l13 8-13 8Z',
+  pause: 'M7 4h4v16H7Z M15 4h4v16h-4Z',
+  rewind: 'M19 20L9 12l10-8Z M5 19V5',
+  undo: 'M9 14L4 9l5-5 M4 9h11a5 5 0 0 1 0 10h-3',
+  redo: 'M15 14l5-5-5-5 M20 9H9a5 5 0 0 0 0 10h3',
+  save: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z M17 21v-8H7v8 M7 3v5h8',
+  folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z',
+  file: 'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z M14 3v6h6 M12 12v6 M9 15h6',
+  image: 'M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z M8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z M21 15l-5-5L5 21',
+  code: 'M16 18l6-6-6-6 M8 6l-6 6 6 6',
+  film: 'M3 4h18v16H3Z M7 4v16 M17 4v16 M3 8h4 M3 12h4 M3 16h4 M17 8h4 M17 12h4 M17 16h4',
+  trash: 'M3 6h18 M8 6V4h8v2 M19 6l-1 14H6L5 6',
+  eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
+  eyeOff: 'M3 3l18 18 M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-2.6 3.5 M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6 M9.9 9.9a3 3 0 0 0 4.2 4.2',
+  up: 'M18 15l-6-6-6 6',
+  down: 'M6 9l6 6 6-6',
+  record: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z',
+  fit: 'M3 8V3h5 M21 8V3h-5 M3 16v5h5 M21 16v5h-5',
+  layers: 'M12 2l10 5-10 5L2 7Z M2 17l10 5 10-5 M2 12l10 5 10-5',
+  grip: 'M9 6h.01 M15 6h.01 M9 12h.01 M15 12h.01 M9 18h.01 M15 18h.01',
+  x: 'M18 6L6 18 M6 6l12 12',
+  check: 'M20 6L9 17l-5-5',
+  upload: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12',
+  sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z'
+}
+
+export type IconName = keyof typeof PATHS
+
+export function Icon({ name, size = 16 }: { name: IconName; size?: number }): React.JSX.Element {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.9}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d={PATHS[name]} />
+    </svg>
+  )
+}
