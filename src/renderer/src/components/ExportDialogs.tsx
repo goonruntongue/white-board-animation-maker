@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { buildStandaloneHtml, defaultHtmlOptions, embedSnippet, type HtmlExportOptions } from '../export/exportHtml'
 import { pageProjects } from '../export/sequence'
-import { exportWebm, pickVideoFormat, type VideoExportHandle } from '../export/exportVideo'
+import { canExportMp4, exportMp4, exportWebm, pickVideoFormat, type VideoExportHandle } from '../export/exportVideo'
 import { formatTime } from '../engine/project'
 import { buildTimeline } from '../engine/wb-engine'
 import { formatBytes } from '../lib/imageTools'
@@ -197,20 +197,32 @@ function VideoExportDialog(): React.JSX.Element {
   const { openDialog, notify } = useEditor.getState()
   const [fps, setFps] = useState(30)
   const [maxWidth, setMaxWidth] = useState(1920)
-  const [bitrate, setBitrate] = useState(8)
+  const [bitrate, setBitrate] = useState(4)
   const [progress, setProgress] = useState<number | null>(null)
   const handle = useRef<VideoExportHandle | null>(null)
   const total = pageProjects(project).reduce((sum, pg) => sum + buildTimeline(pg).total, 0)
+  // 'fast' = MP4 を1コマずつ圧縮（待ち時間が短い） / 'record' = 画面の再生を録画（再生時間と同じだけかかる）
+  const [method, setMethod] = useState<'fast' | 'record'>('record')
+  const [fastOk, setFastOk] = useState<boolean | null>(null)
 
   useEffect(() => () => handle.current?.cancel(), [])
+  useEffect(() => {
+    void canExportMp4().then((ok) => {
+      setFastOk(ok)
+      if (ok) setMethod('fast')
+    })
+  }, [])
+
+  const recordExt = pickVideoFormat().ext
+  const ext = method === 'fast' ? 'mp4' : recordExt
 
   const run = async (): Promise<void> => {
     setProgress(0)
-    const h = exportWebm(project, { fps, maxWidth, bitrateMbps: bitrate }, setProgress)
+    const opts = { fps, maxWidth, bitrateMbps: bitrate }
+    const h = method === 'fast' ? exportMp4(project, opts, setProgress) : exportWebm(project, opts, setProgress)
     handle.current = h
     try {
       const blob = await h.promise
-      const { ext } = pickVideoFormat()
       const saved = await saveBlobFile(blob, `${project.name || 'whiteboard'}.${ext}`, [
         { name: ext === 'mp4' ? 'MP4 動画' : 'WebM 動画', extensions: [ext] }
       ])
@@ -232,12 +244,22 @@ function VideoExportDialog(): React.JSX.Element {
   const running = progress !== null
 
   return (
-    <Modal title={`動画 (${pickVideoFormat().ext.toUpperCase()}) として書き出す`} onClose={running ? undefined : () => openDialog(null)}>
+    <Modal title="動画として書き出す" onClose={running ? undefined : () => openDialog(null)}>
       <div className="modal-body">
         <p className="lead">
-          ブラウザの録画機能で動画（この端末では {pickVideoFormat().ext.toUpperCase()}）を作ります。実時間で記録するため、書き出しには再生時間（{formatTime(total)}）と同じだけかかります。MP4 が必要な場合は外部ツールで変換してください。
+          {method === 'fast'
+            ? `MP4（H.264）で書き出します。1コマずつ圧縮するので、再生時間（${formatTime(total)}）を待たずに仕上がり、コマ落ちもしません。`
+            : `画面の再生を録画して ${recordExt.toUpperCase()} を作ります。書き出しには再生時間（${formatTime(total)}）と同じだけかかります。`}
+          {' '}音は入りません。
         </p>
         <div className="form-grid">
+          <label>方式</label>
+          <select className="text-input" disabled={running} value={method} onChange={(e) => setMethod(e.target.value as 'fast' | 'record')}>
+            <option value="fast" disabled={!fastOk}>
+              MP4・高速{fastOk === false ? '（この端末は非対応）' : '（おすすめ）'}
+            </option>
+            <option value="record">{recordExt.toUpperCase()}・録画（再生時間と同じだけかかる）</option>
+          </select>
           <label>フレームレート</label>
           <select className="text-input" disabled={running} value={fps} onChange={(e) => setFps(Number(e.target.value))}>
             <option value={24}>24 fps</option>
@@ -252,7 +274,8 @@ function VideoExportDialog(): React.JSX.Element {
           </select>
           <label>ビットレート</label>
           <select className="text-input" disabled={running} value={bitrate} onChange={(e) => setBitrate(Number(e.target.value))}>
-            <option value={4}>4 Mbps</option>
+            <option value={2}>2 Mbps（軽い）</option>
+            <option value={4}>4 Mbps（標準）</option>
             <option value={8}>8 Mbps</option>
             <option value={16}>16 Mbps</option>
           </select>
