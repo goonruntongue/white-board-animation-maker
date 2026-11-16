@@ -24,8 +24,15 @@ export function SliderField(props: {
   divisor?: number
   onChange: (v: number) => void
   hint?: string
+  /** 'log'：対数目盛り（小さい値を細かく、大きい値まで素早く。ブラシ幅など） */
+  scale?: 'linear' | 'log'
 }): React.JSX.Element {
-  const { label, value, min, max, step = 1, unit, divisor = 1, onChange, hint } = props
+  const { label, value, min, max, step = 1, unit, divisor = 1, onChange, hint, scale = 'linear' } = props
+  const log = scale === 'log' && min > 0
+  // 対数目盛りのときは、スライダー内部を 0〜1000 で扱って値に変換する
+  const toSlider = (v: number): number => (log ? (Math.log(v / min) / Math.log(max / min)) * 1000 : v)
+  const fromSlider = (t: number): number => (log ? Math.round((min * Math.pow(max / min, t / 1000)) / step) * step : t)
+  const clamped = Math.min(max, Math.max(min, value))
   const shown = value / divisor
   const digits = step / divisor < 1 ? Math.min(2, Math.ceil(-Math.log10(step / divisor))) : 0
   return (
@@ -34,12 +41,12 @@ export function SliderField(props: {
       <div className="field-control">
         <input
           type="range"
-          min={min}
-          max={max}
-          step={step}
-          style={{ '--fill': `${((Math.min(max, Math.max(min, value)) - min) / (max - min)) * 100}%` } as React.CSSProperties}
-          value={Math.min(max, Math.max(min, value))}
-          onChange={(e) => onChange(Number(e.target.value))}
+          min={log ? 0 : min}
+          max={log ? 1000 : max}
+          step={log ? 1 : step}
+          style={{ '--fill': `${((toSlider(clamped) - toSlider(min)) / (toSlider(max) - toSlider(min))) * 100}%` } as React.CSSProperties}
+          value={toSlider(clamped)}
+          onChange={(e) => onChange(fromSlider(Number(e.target.value)))}
         />
         <div className="num">
           <input

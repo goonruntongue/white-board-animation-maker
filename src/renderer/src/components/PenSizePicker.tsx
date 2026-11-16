@@ -5,11 +5,17 @@ export const PEN_PRESETS = [
   { label: '細', width: 12, key: '1' },
   { label: '中', width: 28, key: '2' },
   { label: '太', width: 48, key: '3' },
-  { label: '極太', width: 80, key: '4' }
+  { label: '極太', width: 80, key: '4' },
+  { label: '特大', width: 200, key: '5' }
 ] as const
 
 export const PEN_MIN = 4
-export const PEN_MAX = 200
+export const PEN_MAX = 600
+
+/** プリセットの丸の大きさ（大きなサイズでもボタンに収まるよう平方根で縮める） */
+export function penDotSize(width: number, max = 18): number {
+  return Math.round(4 + Math.sqrt(Math.min(width, 200) / 200) * (max - 4))
+}
 
 export function PenSizePicker({ disabled }: { disabled: boolean }): React.JSX.Element {
   const width = useEditor((s) => s.project.settings.defaultRevealWidth)
@@ -20,7 +26,7 @@ export function PenSizePicker({ disabled }: { disabled: boolean }): React.JSX.El
     <div className="tb-group pen-size" title="ペン先のサイズ（これから描く軌跡の幅）">
       <span className="tb-label">ペン先</span>
       {PEN_PRESETS.map((p) => {
-        const dot = 4 + (p.width / 80) * 14
+        const dot = penDotSize(p.width)
         return (
           <button
             key={p.width}

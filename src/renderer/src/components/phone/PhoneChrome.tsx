@@ -20,7 +20,10 @@ import { haptic } from '../../lib/useMedia'
 import { setThemePref, useTheme } from '../../lib/theme'
 import { useEditor, type Tool } from '../../store'
 import { Icon, type IconName } from '../Icon'
-import { PEN_PRESETS, PEN_MAX, PEN_MIN } from '../PenSizePicker'
+import { PEN_PRESETS, PEN_MAX, PEN_MIN, penDotSize } from '../PenSizePicker'
+
+const toLog = (w: number): number => (Math.log(Math.max(PEN_MIN, Math.min(PEN_MAX, w)) / PEN_MIN) / Math.log(PEN_MAX / PEN_MIN)) * 1000
+const fromLog = (t: number): number => Math.round(PEN_MIN * Math.pow(PEN_MAX / PEN_MIN, t / 1000))
 import { ActionSheet, type SheetAction } from './ActionSheet'
 
 type Menu = 'app' | 'export' | 'shape' | null
@@ -111,19 +114,20 @@ function PenOptions(): React.JSX.Element {
       <span className="pc-label">ペン先</span>
       {PEN_PRESETS.map((p) => (
         <button key={p.width} className={`pc-key ${width === p.width ? 'on' : ''}`} aria-label={`${p.label} ${p.width}px`} onClick={() => set(p.width)}>
-          <span className="pen-dot" style={{ width: 5 + (p.width / 80) * 15, height: 5 + (p.width / 80) * 15 }} />
+          <span className="pen-dot" style={{ width: penDotSize(p.width, 20), height: penDotSize(p.width, 20) }} />
           <small>{p.label}</small>
         </button>
       ))}
+      {/* 対数目盛り：細いサイズは細かく、600px まで一気に動かせる */}
       <input
         className="pc-range"
         type="range"
-        min={PEN_MIN}
-        max={120}
-        value={Math.min(120, width)}
-        style={{ '--fill': `${((Math.min(120, width) - PEN_MIN) / (120 - PEN_MIN)) * 100}%` } as React.CSSProperties}
+        min={0}
+        max={1000}
+        value={toLog(width)}
+        style={{ '--fill': `${toLog(width) / 10}%` } as React.CSSProperties}
         aria-label="ペン先のサイズ"
-        onChange={(e) => set(Number(e.target.value))}
+        onChange={(e) => set(fromLog(Number(e.target.value)))}
       />
       <span className="pc-value">{width}</span>
     </>

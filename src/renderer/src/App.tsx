@@ -18,7 +18,7 @@ import {
 import { ExportDialogs } from './components/ExportDialogs'
 import { Inspector } from './components/Inspector'
 import { PhoneAppBar, PhoneContextBar, PhoneDock } from './components/phone/PhoneChrome'
-import { PEN_PRESETS } from './components/PenSizePicker'
+import { PEN_MAX, PEN_MIN, PEN_PRESETS } from './components/PenSizePicker'
 import { Stage } from './components/Stage'
 import { StatusBar } from './components/StatusBar'
 import { StrokeList } from './components/StrokeList'
@@ -146,7 +146,7 @@ export default function App(): React.JSX.Element {
       if (bracket !== 0) {
         e.preventDefault()
         const w = st.project.settings.defaultRevealWidth
-        const next = Math.max(4, Math.min(200, Math.round(w * (bracket < 0 ? 0.85 : 1.18))))
+        const next = Math.max(PEN_MIN, Math.min(PEN_MAX, Math.round(w * (bracket < 0 ? 0.85 : 1.18))))
         return st.updateSettings({ defaultRevealWidth: next })
       }
       const preset = PEN_PRESETS.find((p) => p.key === e.key)

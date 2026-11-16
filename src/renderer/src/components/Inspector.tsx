@@ -6,6 +6,7 @@ import { dataUrlBytes, formatBytes } from '../lib/imageTools'
 import { useEditor } from '../store'
 import { ColorField, Section, SliderField, ToggleField } from './Field'
 import { Icon } from './Icon'
+import { PEN_MAX, PEN_MIN } from './PenSizePicker'
 import { SheetBar } from './SheetBar'
 
 type Tab = 'stroke' | 'project' | 'assets'
@@ -60,8 +61,9 @@ function StrokeInspector(): React.JSX.Element | null {
           label="見せる幅"
           hint="マスクを消す太さ。文字や図の線より少し太めにすると欠けにくい"
           value={stroke.revealWidth}
-          min={4}
-          max={200}
+          min={PEN_MIN}
+          max={PEN_MAX}
+          scale="log"
           unit="px"
           onChange={(v) => set({ revealWidth: v })}
         />
@@ -194,8 +196,9 @@ function ProjectInspector(): React.JSX.Element {
           label="見せる幅"
           hint="ショートカット: [ と ] で調整"
           value={st.defaultRevealWidth}
-          min={4}
-          max={200}
+          min={PEN_MIN}
+          max={PEN_MAX}
+          scale="log"
           unit="px"
           onChange={(v) => updateSettings({ defaultRevealWidth: v })}
         />
