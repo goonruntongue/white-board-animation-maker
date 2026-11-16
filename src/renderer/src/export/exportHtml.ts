@@ -4,6 +4,7 @@ import engineSource from '../engine/wb-engine.js?raw'
 import { loadImage } from '../engine/wb-engine'
 import type { Project } from '../engine/types'
 import { reencode } from '../lib/imageTools'
+import { scaleClip } from '../engine/selection'
 
 export interface HtmlExportOptions {
   title: string
@@ -46,6 +47,7 @@ async function prepareProjectForExport(project: Project, o: HtmlExportOptions): 
     .map((s) => ({
       ...s,
       revealWidth: s.revealWidth * scale,
+      ...(s.clip ? { clip: scaleClip(s.clip, scale) } : {}),
       points: s.points.map((p) => ({ x: Math.round(p.x * scale * 10) / 10, y: Math.round(p.y * scale * 10) / 10, t: p.t }))
     }))
 

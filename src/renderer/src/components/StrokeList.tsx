@@ -94,6 +94,7 @@ export function StrokeList(): React.JSX.Element {
                 )}
                 <span className="stroke-meta">
                   {(s.duration / 1000).toFixed(1)}s · 幅 {Math.round(s.revealWidth)} · 待機 {(s.delayAfter / 1000).toFixed(1)}s
+                  {s.clip && ' · 範囲'}
                 </span>
               </div>
               <div className="row-actions" onClick={(e) => e.stopPropagation()}>

@@ -104,6 +104,18 @@ function buildMenu(): void {
       ]
     },
     {
+      // キー操作はレンダラー側で処理する（registerAccelerator: false）
+      label: '選択範囲',
+      submenu: [
+        { label: '長方形選択', accelerator: 'M', click: () => send('tool-rect'), registerAccelerator: false },
+        { label: '楕円形選択', accelerator: 'Shift+M', click: () => send('tool-ellipse'), registerAccelerator: false },
+        { label: '投げ縄', accelerator: 'L', click: () => send('tool-lasso'), registerAccelerator: false },
+        { type: 'separator' },
+        { label: '選択を解除', accelerator: 'CmdOrCtrl+D', click: () => send('deselect'), registerAccelerator: false },
+        { label: '選択範囲を反転', accelerator: 'CmdOrCtrl+Shift+I', click: () => send('invert-selection'), registerAccelerator: false }
+      ]
+    },
+    {
       label: '再生',
       submenu: [
         { label: '再生 / 一時停止', accelerator: 'Space', click: () => send('toggle-play'), registerAccelerator: false },

@@ -1107,3 +1107,65 @@ input[type='range'] {
   width: 64px;
   margin-left: 4px;
 }
+
+/* ---------- 選択範囲 ---------- */
+.tool-btn.icon-only {
+  padding: 0 7px;
+}
+.stage-banner.info {
+  background: rgba(24, 32, 48, 0.94);
+  border-color: rgba(59, 130, 246, 0.6);
+  color: #cfe0ff;
+  font-size: 12px;
+}
+.sel-badge {
+  color: #9cc2ff;
+}
+.sel-badge::before {
+  content: '';
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 5px;
+  border: 1px dashed currentColor;
+  vertical-align: -1px;
+}
+
+/* ---------- ツールバーの詰め（ウィンドウ幅に応じてラベルを省く） ---------- */
+.tool-btn,
+.tb-label,
+.btn {
+  white-space: nowrap;
+}
+.toolbar {
+  min-width: 0;
+}
+.doc-title {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+@media (max-width: 1720px) {
+  .brand-name {
+    display: none;
+  }
+  .brand {
+    padding-right: 6px;
+  }
+}
+@media (max-width: 1540px) {
+  .tool-btn span {
+    display: none;
+  }
+  .tool-btn {
+    padding: 0 7px;
+  }
+}
+@media (max-width: 1320px) {
+  .tb-label,
+  .doc-title {
+    display: none;
+  }
+  .tb-group.end .btn:not(.primary) {
+    padding: 0 8px;
+  }
+}

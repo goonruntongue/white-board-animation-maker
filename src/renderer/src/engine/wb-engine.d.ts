@@ -1,4 +1,4 @@
-import type { Project, Stroke, StrokePoint } from './types'
+import type { ClipRegion, ClipShape, Project, Stroke, StrokePoint } from './types'
 
 export const ENGINE_VERSION: number
 
@@ -60,3 +60,12 @@ export class WBRenderer {
 }
 
 export function loadImage(src: string): Promise<HTMLImageElement>
+
+export function traceClipShape(
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  shape: ClipShape,
+  width: number,
+  height: number
+): void
+export function rasterizeClip(clip: ClipRegion, width: number, height: number): HTMLCanvasElement | OffscreenCanvas
+export function clipBounds(clip: ClipRegion, width: number, height: number): { x: number; y: number; w: number; h: number }

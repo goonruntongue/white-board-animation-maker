@@ -1,4 +1,4 @@
-import { importImageDialog, newProject, openExport, openProject, saveProject } from '../commands'
+import { deselect, importImageDialog, newProject, openExport, openProject, saveProject } from '../commands'
 import { isDesktop } from '../lib/platform'
 import { useEditor, type Tool } from '../store'
 import { Icon, type IconName } from './Icon'
@@ -6,8 +6,14 @@ import { PenSizePicker } from './PenSizePicker'
 
 const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
   { id: 'draw', icon: 'pen', label: '描く', key: 'D' },
-  { id: 'select', icon: 'cursor', label: '選択', key: 'V' },
+  { id: 'select', icon: 'cursor', label: '軌跡を選ぶ', key: 'V' },
   { id: 'pan', icon: 'hand', label: '移動', key: 'H' }
+]
+
+const SEL_TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
+  { id: 'rect', icon: 'selRect', label: '長方形選択', key: 'M' },
+  { id: 'ellipse', icon: 'selEllipse', label: '楕円形選択', key: 'Shift+M' },
+  { id: 'lasso', icon: 'lasso', label: '投げ縄（ドラッグで自由形 / クリックで多角形）', key: 'L' }
 ]
 
 export function Toolbar(): React.JSX.Element {
@@ -17,6 +23,7 @@ export function Toolbar(): React.JSX.Element {
   const dirty = useEditor((s) => s.dirty)
   const name = useEditor((s) => s.project.name)
   const hasImage = useEditor((s) => !!s.project.image)
+  const hasSelection = useEditor((s) => !!s.selection)
   const { setTool, undo, redo } = useEditor.getState()
 
   return (
@@ -65,6 +72,24 @@ export function Toolbar(): React.JSX.Element {
             <span>{t.label}</span>
           </button>
         ))}
+      </div>
+
+      <div className="tb-group" title="選択範囲：範囲の外はマスクが外れません（Shift で追加・Alt で除外）">
+        {SEL_TOOLS.map((t) => (
+          <button
+            key={t.id}
+            className={`tool-btn icon-only ${tool === t.id ? 'on' : ''}`}
+            title={`${t.label} (${t.key})
+Shift+ドラッグで追加 / Alt+ドラッグで除外`}
+            disabled={!hasImage}
+            onClick={() => setTool(t.id)}
+          >
+            <Icon name={t.icon} />
+          </button>
+        ))}
+        <button className="icon-btn" title="選択を解除 (Ctrl+D)" disabled={!hasSelection} onClick={deselect}>
+          <Icon name="deselect" />
+        </button>
       </div>
 
       <PenSizePicker disabled={!hasImage} />

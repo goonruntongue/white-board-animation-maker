@@ -1,5 +1,5 @@
 import { builtinHand } from './handAsset'
-import type { Project, Stroke, StrokePoint } from './types'
+import type { ClipRegion, Project, Stroke, StrokePoint } from './types'
 
 export const PROJECT_EXT = 'wbanim'
 
@@ -56,7 +56,12 @@ function round1(v: number): number {
   return Math.round(v * 10) / 10
 }
 
-export function strokeFromRecording(project: Project, points: StrokePoint[], index: number): Stroke {
+export function strokeFromRecording(
+  project: Project,
+  points: StrokePoint[],
+  index: number,
+  clip: ClipRegion | null = null
+): Stroke {
   const pts = simplifyPoints(points)
   const recorded = pts.length > 1 ? pts[pts.length - 1].t - pts[0].t : 0
   return {
@@ -67,7 +72,8 @@ export function strokeFromRecording(project: Project, points: StrokePoint[], ind
     duration: Math.max(300, Math.round(recorded)),
     delayAfter: project.settings.defaultDelayAfter,
     useRecordedTiming: true,
-    color: strokeColor(index)
+    color: strokeColor(index),
+    ...(clip ? { clip } : {})
   }
 }
 

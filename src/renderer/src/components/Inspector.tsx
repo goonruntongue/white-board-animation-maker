@@ -37,7 +37,8 @@ export function Inspector(): React.JSX.Element {
 function StrokeInspector(): React.JSX.Element | null {
   const stroke = useEditor((s) => s.project.strokes.find((x) => x.id === s.selectedId))
   const index = useEditor((s) => s.project.strokes.findIndex((x) => x.id === s.selectedId))
-  const { updateStroke, setRerecord, removeStroke } = useEditor.getState()
+  const selection = useEditor((s) => s.selection)
+  const { updateStroke, setRerecord, removeStroke, setSelection } = useEditor.getState()
   if (!stroke) return null
   const set = (patch: Parameters<typeof updateStroke>[1]): void => updateStroke(stroke.id, patch)
   const recorded = stroke.points.length > 1 ? stroke.points[stroke.points.length - 1].t - stroke.points[0].t : 0
@@ -86,6 +87,33 @@ function StrokeInspector(): React.JSX.Element | null {
         />
         <ToggleField label="再生に含める" checked={!stroke.hidden} onChange={(v) => set({ hidden: !v })} />
         <ColorField label="表示色" value={stroke.color} onChange={(v) => set({ color: v })} />
+      </Section>
+      <Section title="表示できる範囲">
+        <p className="muted-text">
+          {stroke.clip
+            ? `選択範囲で制限されています（図形 ${stroke.clip.shapes.length} 個）。範囲の外はこの軌跡では表示されません。`
+            : '制限なし。なぞった幅の分だけ表示されます。'}
+        </p>
+        <div className="btn-row wrap">
+          <button
+            className="btn"
+            disabled={!selection}
+            title="いまの選択範囲を、この軌跡の表示範囲にする"
+            onClick={() => set({ clip: selection ?? undefined })}
+          >
+            いまの選択範囲を適用
+          </button>
+          {stroke.clip && (
+            <>
+              <button className="btn" title="この軌跡の範囲を選択範囲として読み込む" onClick={() => setSelection(stroke.clip ?? null)}>
+                範囲を選択に読み込む
+              </button>
+              <button className="btn" onClick={() => set({ clip: undefined })}>
+                制限を外す
+              </button>
+            </>
+          )}
+        </div>
       </Section>
       <Section title="情報">
         <dl className="info">

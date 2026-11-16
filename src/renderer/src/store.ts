@@ -1,9 +1,16 @@
 import { create } from 'zustand'
 import { builtinHand } from './engine/handAsset'
 import { createProject } from './engine/project'
-import type { Project, ProjectSettings, Stroke } from './engine/types'
+import type { ClipRegion, Project, ProjectSettings, Stroke } from './engine/types'
 
-export type Tool = 'draw' | 'select' | 'pan'
+export type Tool = 'draw' | 'select' | 'pan' | 'rect' | 'ellipse' | 'lasso'
+export const SELECTION_TOOLS: Tool[] = ['rect', 'ellipse', 'lasso']
+
+/** 元に戻す単位。選択範囲も含める（Photoshop と同じく、選択の失敗も Ctrl+Z で戻せる） */
+interface Snapshot {
+  project: Project
+  selection: ClipRegion | null
+}
 
 const HISTORY_LIMIT = 100
 let lastMerge: { key?: string; at: number } = { at: 0 }
@@ -13,8 +20,10 @@ interface EditorState {
   /** 保存先パス（デスクトップ版のみ） */
   filePath: string | null
   dirty: boolean
-  past: Project[]
-  future: Project[]
+  past: Snapshot[]
+  future: Snapshot[]
+  /** 現在の選択範囲。この状態で描いた軌跡は範囲の外を見せない */
+  selection: ClipRegion | null
 
   tool: Tool
   selectedId: string | null
@@ -36,6 +45,7 @@ interface EditorState {
   updateStroke: (id: string, patch: Partial<Stroke>) => void
   removeStroke: (id: string) => void
   moveStroke: (id: string, toIndex: number) => void
+  setSelection: (sel: ClipRegion | null) => void
   undo: () => void
   redo: () => void
 
@@ -58,6 +68,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   dirty: false,
   past: [],
   future: [],
+  selection: null,
   tool: 'draw',
   selectedId: null,
   time: 0,
@@ -71,12 +82,13 @@ export const useEditor = create<EditorState>((set, get) => ({
     const prev = get().project
     const next = fn(prev)
     if (next === prev) return
+    const snap: Snapshot = { project: prev, selection: get().selection }
     const now = Date.now()
     const merge = mergeKey !== undefined && mergeKey === lastMerge.key && now - lastMerge.at < 800
     lastMerge = { key: mergeKey, at: now }
     set((s) => ({
       project: next,
-      past: merge ? s.past : [...s.past, prev].slice(-HISTORY_LIMIT),
+      past: merge ? s.past : [...s.past, snap].slice(-HISTORY_LIMIT),
       future: [],
       dirty: true
     }))
@@ -124,16 +136,41 @@ export const useEditor = create<EditorState>((set, get) => ({
       return { ...p, strokes }
     }),
 
+  setSelection: (selection) => {
+    const { project, selection: prev } = get()
+    if (selection === prev) return
+    lastMerge = { at: 0 }
+    set((s) => ({
+      selection,
+      past: [...s.past, { project, selection: prev }].slice(-HISTORY_LIMIT),
+      future: []
+    }))
+  },
+
   undo: () => {
-    const { past, project, future } = get()
+    const { past, project, selection, future } = get()
     if (past.length === 0) return
-    set({ project: past[past.length - 1], past: past.slice(0, -1), future: [project, ...future], dirty: true })
+    const snap = past[past.length - 1]
+    set({
+      project: snap.project,
+      selection: snap.selection,
+      past: past.slice(0, -1),
+      future: [{ project, selection }, ...future],
+      dirty: snap.project !== project || get().dirty
+    })
   },
 
   redo: () => {
-    const { past, project, future } = get()
+    const { past, project, selection, future } = get()
     if (future.length === 0) return
-    set({ project: future[0], past: [...past, project], future: future.slice(1), dirty: true })
+    const snap = future[0]
+    set({
+      project: snap.project,
+      selection: snap.selection,
+      past: [...past, { project, selection }],
+      future: future.slice(1),
+      dirty: snap.project !== project || get().dirty
+    })
   },
 
   loadProject: (p, filePath) =>
@@ -143,6 +180,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       dirty: false,
       past: [],
       future: [],
+      selection: null,
       selectedId: null,
       time: 0,
       playing: false,

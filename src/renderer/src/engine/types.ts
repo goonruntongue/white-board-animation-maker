@@ -9,6 +9,19 @@ export interface StrokePoint {
   t: number
 }
 
+export type ClipMode = 'add' | 'subtract'
+
+/** 選択範囲を構成する図形。rect / ellipse は外接矩形、poly は頂点列、all は画像全体 */
+export type ClipShape =
+  | { kind: 'rect' | 'ellipse'; mode: ClipMode; x: number; y: number; w: number; h: number }
+  | { kind: 'poly'; mode: ClipMode; points: { x: number; y: number }[] }
+  | { kind: 'all'; mode: ClipMode }
+
+/** 選択範囲。図形を先頭から順に「追加」「除外」して作る */
+export interface ClipRegion {
+  shapes: ClipShape[]
+}
+
 export interface Stroke {
   id: string
   name: string
@@ -21,6 +34,8 @@ export interface Stroke {
   delayAfter: number
   /** なぞったときの速度の緩急を再現する */
   useRecordedTiming: boolean
+  /** この軌跡がマスクを外せる範囲（なければ制限なし） */
+  clip?: ClipRegion
   /** 一時的に再生から外す */
   hidden?: boolean
   /** エディタ上の表示色 */

@@ -161,6 +161,71 @@ function makeCanvas(w, h) {
   return c
 }
 
+// ----------------------------------------------------------------------------
+// 選択範囲（クリップ）
+//   clip = { shapes: [{ kind: 'rect'|'ellipse'|'poly'|'all', mode: 'add'|'subtract', ... }] }
+//   図形を先頭から順に「追加」「除外」して範囲を作る（Photoshop の Shift / Alt と同じ考え方）。
+//   rect / ellipse は外接矩形 {x, y, w, h}、poly は points [{x, y}]、all は画像全体。
+// ----------------------------------------------------------------------------
+
+export function traceClipShape(ctx, shape, width, height) {
+  ctx.beginPath()
+  if (shape.kind === 'all') {
+    ctx.rect(0, 0, width, height)
+  } else if (shape.kind === 'rect') {
+    ctx.rect(shape.x, shape.y, shape.w, shape.h)
+  } else if (shape.kind === 'ellipse') {
+    ctx.ellipse(shape.x + shape.w / 2, shape.y + shape.h / 2, Math.abs(shape.w / 2), Math.abs(shape.h / 2), 0, 0, Math.PI * 2)
+  } else if (shape.kind === 'poly' && shape.points.length) {
+    ctx.moveTo(shape.points[0].x, shape.points[0].y)
+    for (let i = 1; i < shape.points.length; i++) ctx.lineTo(shape.points[i].x, shape.points[i].y)
+  }
+  ctx.closePath()
+}
+
+/** 選択範囲を、範囲内だけ不透明なマスク画像にする */
+export function rasterizeClip(clip, width, height) {
+  const c = makeCanvas(width, height)
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#000'
+  for (const shape of clip.shapes) {
+    ctx.globalCompositeOperation = shape.mode === 'subtract' ? 'destination-out' : 'source-over'
+    traceClipShape(ctx, shape, width, height)
+    ctx.fill()
+  }
+  ctx.globalCompositeOperation = 'source-over'
+  return c
+}
+
+/** 選択範囲が及びうる矩形（「追加」図形の外接矩形の和）。描画範囲を絞るために使う */
+export function clipBounds(clip, width, height) {
+  let x0 = Infinity
+  let y0 = Infinity
+  let x1 = -Infinity
+  let y1 = -Infinity
+  for (const s of clip.shapes) {
+    if (s.mode === 'subtract') continue
+    if (s.kind === 'all') return { x: 0, y: 0, w: width, h: height }
+    if (s.kind === 'poly') {
+      for (const p of s.points) {
+        x0 = Math.min(x0, p.x)
+        y0 = Math.min(y0, p.y)
+        x1 = Math.max(x1, p.x)
+        y1 = Math.max(y1, p.y)
+      }
+    } else {
+      x0 = Math.min(x0, s.x, s.x + s.w)
+      y0 = Math.min(y0, s.y, s.y + s.h)
+      x1 = Math.max(x1, s.x, s.x + s.w)
+      y1 = Math.max(y1, s.y, s.y + s.h)
+    }
+  }
+  if (x0 === Infinity) return { x: 0, y: 0, w: 0, h: 0 }
+  const x = Math.max(0, Math.floor(x0) - 1)
+  const y = Math.max(0, Math.floor(y0) - 1)
+  return { x, y, w: Math.min(width, Math.ceil(x1) + 1) - x, h: Math.min(height, Math.ceil(y1) + 1) - y }
+}
+
 /**
  * プレビュー／書き出し共通のレンダラー。
  *   const r = new WBRenderer(canvas, project, { image, hand })
@@ -185,9 +250,12 @@ export class WBRenderer {
     if (!this.mask || this.mask.width !== w || this.mask.height !== h) {
       this.mask = makeCanvas(w, h)
       this.reveal = makeCanvas(w, h)
+      this.scratch = makeCanvas(w, h)
+      this.clipCache = new Map()
     }
     this.mctx = this.mask.getContext('2d')
     this.rctx = this.reveal.getContext('2d')
+    this.sctx = this.scratch.getContext('2d')
     this.timeline = buildTimeline(project)
     this.resetMask()
   }
@@ -213,23 +281,51 @@ export class WBRenderer {
     const from = this.maskTime
     if (t === from) return
     const m = this.mctx
-    m.lineCap = 'round'
-    m.lineJoin = 'round'
-    m.strokeStyle = '#000'
-    m.fillStyle = '#000'
     for (const seg of this.timeline.segments) {
       if (seg.end <= from || seg.start > t) continue
       const dur = seg.end - seg.start
       const u0 = from <= seg.start ? 0 : (from - seg.start) / dur
       const u1 = t >= seg.end ? 1 : (t - seg.start) / dur
-      this.strokePortion(m, seg.prep, u0, u1)
+      const clip = this.clipFor(seg.prep.stroke)
+      if (!clip) {
+        this.strokePortion(m, seg.prep, u0, u1)
+        continue
+      }
+      // 選択範囲あり：作業用キャンバスに描き、範囲で切り抜いてからマスクへ足す
+      const b = clip.bounds
+      if (b.w <= 0 || b.h <= 0) continue
+      const sc = this.sctx
+      sc.clearRect(b.x, b.y, b.w, b.h)
+      this.strokePortion(sc, seg.prep, u0, u1)
+      sc.globalCompositeOperation = 'destination-in'
+      sc.drawImage(clip.canvas, b.x, b.y, b.w, b.h, b.x, b.y, b.w, b.h)
+      sc.globalCompositeOperation = 'source-over'
+      m.drawImage(this.scratch, b.x, b.y, b.w, b.h, b.x, b.y, b.w, b.h)
     }
     this.maskTime = t
     this.revealDirty = true
   }
 
+  /** 軌跡の選択範囲マスク（同じ範囲はキャッシュして使い回す） */
+  clipFor(stroke) {
+    const clip = stroke.clip
+    if (!clip || !clip.shapes || clip.shapes.length === 0) return null
+    const key = JSON.stringify(clip)
+    let hit = this.clipCache.get(key)
+    if (!hit) {
+      if (this.clipCache.size > 64) this.clipCache.clear()
+      hit = { canvas: rasterizeClip(clip, this.width, this.height), bounds: clipBounds(clip, this.width, this.height) }
+      this.clipCache.set(key, hit)
+    }
+    return hit
+  }
+
   strokePortion(m, prep, u0, u1) {
     const w = prep.stroke.revealWidth
+    m.lineCap = 'round'
+    m.lineJoin = 'round'
+    m.strokeStyle = '#000'
+    m.fillStyle = '#000'
     m.lineWidth = w
     const a = pointAt(prep, u0)
     const b = pointAt(prep, u1)

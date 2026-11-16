@@ -1,6 +1,7 @@
 // メニュー・ツールバー・ショートカットから共通で呼ぶ操作。
 import { builtinHand } from './engine/handAsset'
 import { createProject, parseProject, PROJECT_EXT, serializeProject } from './engine/project'
+import { invert } from './engine/selection'
 import { buildTimeline } from './engine/wb-engine'
 import { importHand, importImage } from './lib/imageTools'
 import { openImageFile, openProjectFile, readFileAsDataUrl, saveTextFile } from './lib/platform'
@@ -164,6 +165,20 @@ export function selectRelative(delta: number): void {
   select(project.strokes[next].id)
 }
 
+export function deselect(): void {
+  const st = get()
+  if (!st.selection) return
+  st.setSelection(null)
+  st.notify('選択を解除しました')
+}
+
+export function invertSelection(): void {
+  const st = get()
+  if (!st.project.image) return
+  st.setSelection(invert(st.selection))
+  if (st.viewMode !== 'edit') st.setViewMode('edit')
+}
+
 /** Electron のメニューから届くコマンド */
 export function runMenuCommand(cmd: string, payload?: unknown): void {
   switch (cmd) {
@@ -198,5 +213,15 @@ export function runMenuCommand(cmd: string, payload?: unknown): void {
       return togglePlay()
     case 'rewind':
       return rewind()
+    case 'deselect':
+      return deselect()
+    case 'invert-selection':
+      return invertSelection()
+    case 'tool-rect':
+      return get().setTool('rect')
+    case 'tool-ellipse':
+      return get().setTool('ellipse')
+    case 'tool-lasso':
+      return get().setTool('lasso')
   }
 }

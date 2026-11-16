@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { importImageDialog } from '../commands'
 import { simplifyPoints, strokeFromRecording } from '../engine/project'
-import type { Stroke, StrokePoint } from '../engine/types'
-import { buildTimeline, WBRenderer } from '../engine/wb-engine'
+import { combine, isDegenerate, normalizeBox, type SelectionOp } from '../engine/selection'
+import type { ClipShape, Stroke, StrokePoint } from '../engine/types'
+import { buildTimeline, rasterizeClip, traceClipShape, WBRenderer } from '../engine/wb-engine'
 import { useAssets } from '../lib/useAssets'
-import { useEditor } from '../store'
+import { SELECTION_TOOLS, useEditor } from '../store'
 import { Icon } from './Icon'
 
 interface View {
@@ -27,9 +28,27 @@ interface PanDrag {
   vy: number
 }
 
-const PADDING = 40
+type Pt = { x: number; y: number }
 
-function distToSegment(px: number, py: number, a: StrokePoint, b: StrokePoint): number {
+/** 作成途中の選択範囲 */
+type Draft =
+  | { kind: 'rect' | 'ellipse'; op: SelectionOp; pointerId: number; start: Pt; cur: Pt }
+  | {
+      kind: 'lasso'
+      op: SelectionOp
+      points: Pt[]
+      /** 押している間のポインタ（多角形モードで離している間は null） */
+      pointerId: number | null
+      downClient: Pt
+      /** ドラッグで自由に描いているか（false ならクリックで頂点を打つ多角形モード） */
+      freehand: boolean
+    }
+
+const PADDING = 40
+const DRAG_THRESHOLD = 4 // 画面px。これ未満の移動はクリックとみなす
+const CLOSE_RADIUS = 9 // 画面px。多角形の始点にこれだけ近づいたら閉じる
+
+function distToSegment(px: number, py: number, a: Pt, b: Pt): number {
   const dx = b.x - a.x
   const dy = b.y - a.y
   const len2 = dx * dx + dy * dy
@@ -48,6 +67,15 @@ function hitStroke(strokes: Stroke[], x: number, y: number, tolerance: number): 
   return null
 }
 
+function opFromEvent(e: { shiftKey: boolean; altKey: boolean }): SelectionOp {
+  return e.altKey ? 'subtract' : e.shiftKey ? 'add' : 'new'
+}
+
+function draftShape(d: Draft): ClipShape | null {
+  if (d.kind === 'lasso') return { kind: 'poly', mode: 'add', points: d.points }
+  return normalizeBox({ kind: d.kind, mode: 'add' as const, x: d.start.x, y: d.start.y, w: d.cur.x - d.start.x, h: d.cur.y - d.start.y })
+}
+
 export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): React.JSX.Element {
   const project = useEditor((s) => s.project)
   const tool = useEditor((s) => s.tool)
@@ -55,16 +83,22 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const viewMode = useEditor((s) => s.viewMode)
   const selectedId = useEditor((s) => s.selectedId)
   const rerecordId = useEditor((s) => s.rerecordId)
+  const selection = useEditor((s) => s.selection)
   const assets = useAssets(project)
   const image = project.image
 
   const containerRef = useRef<HTMLDivElement>(null)
   const renderCanvasRef = useRef<HTMLCanvasElement>(null)
+  const dimRef = useRef<HTMLCanvasElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const rendererRef = useRef<WBRenderer | null>(null)
   const recording = useRef<Recording | null>(null)
   const panDrag = useRef<PanDrag | null>(null)
-  const cursor = useRef<{ x: number; y: number } | null>(null)
+  const draft = useRef<Draft | null>(null)
+  const cursor = useRef<Pt | null>(null)
+  const antsOffset = useRef(0)
+  const scratch = useRef<HTMLCanvasElement | null>(null)
+  const [hasDraft, setHasDraft] = useState(false)
 
   const [size, setSize] = useState({ w: 800, h: 600 })
   const [view, setView] = useState<View>({ zoom: 1, x: 0, y: 0 })
@@ -77,8 +111,15 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const dispH = imgH * scale
   const left = (size.w - dispW) / 2 + view.x
   const top = (size.h - dispH) / 2 + view.y
+  const isSelTool = SELECTION_TOOLS.includes(tool)
 
   const timeline = useMemo(() => buildTimeline(project), [project])
+  const selMask = useMemo(() => (selection && image ? rasterizeClip(selection, imgW, imgH) : null), [selection, image, imgW, imgH])
+  const selectedStroke = project.strokes.find((s) => s.id === selectedId)
+  const selectedClipMask = useMemo(
+    () => (selectedStroke?.clip && image ? rasterizeClip(selectedStroke.clip, imgW, imgH) : null),
+    [selectedStroke?.clip, image, imgW, imgH]
+  )
 
   useEffect(() => onZoomChange(scale), [scale, onZoomChange])
 
@@ -94,6 +135,12 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     return () => ro.disconnect()
   }, [])
 
+  // ツールを切り替えたら作成途中の選択はやめる
+  useEffect(() => {
+    draft.current = null
+    setHasDraft(false)
+  }, [tool])
+
   // ---- レンダラー（プレビュー／カバレッジ表示） ----
   useEffect(() => {
     const canvas = renderCanvasRef.current
@@ -103,8 +150,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     }
     if (!rendererRef.current || rendererRef.current.canvas !== canvas) {
       rendererRef.current = new WBRenderer(canvas, project, assets)
-    }
-    else {
+    } else {
       rendererRef.current.setAssets(assets)
       rendererRef.current.setProject(project)
     }
@@ -118,7 +164,51 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     else r.renderAt(timeline.total, { hand: false, background: false })
   }, [project, assets, time, viewMode, image, timeline])
 
-  // ---- オーバーレイ（軌跡の中心線・番号・録画中の線・ブラシカーソル） ----
+  // ---- 選択範囲の外を暗くする層 ----
+  useEffect(() => {
+    const c = dimRef.current
+    if (!c || !image) return
+    if (c.width !== imgW) c.width = imgW
+    if (c.height !== imgH) c.height = imgH
+    const ctx = c.getContext('2d')!
+    ctx.clearRect(0, 0, imgW, imgH)
+    if (!selMask || viewMode !== 'edit') return
+    ctx.fillStyle = 'rgba(12, 18, 32, 0.42)'
+    ctx.fillRect(0, 0, imgW, imgH)
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.drawImage(selMask, 0, 0)
+    ctx.globalCompositeOperation = 'source-over'
+  }, [selMask, viewMode, image, imgW, imgH])
+
+  /** 範囲で切り抜いた帯を描く（録画中の線・選択中の軌跡の幅表示） */
+  const drawClippedBand = useCallback(
+    (ctx: CanvasRenderingContext2D, pts: StrokePoint[], width: number, color: string, mask: CanvasImageSource | null) => {
+      if (!mask) {
+        ctx.strokeStyle = color
+        ctx.lineWidth = width
+        polyline(ctx, pts)
+        return
+      }
+      let sc = scratch.current
+      if (!sc) sc = scratch.current = document.createElement('canvas')
+      if (sc.width !== imgW) sc.width = imgW
+      if (sc.height !== imgH) sc.height = imgH
+      const s = sc.getContext('2d')!
+      s.clearRect(0, 0, imgW, imgH)
+      s.lineCap = 'round'
+      s.lineJoin = 'round'
+      s.strokeStyle = color
+      s.lineWidth = width
+      polyline(s, pts)
+      s.globalCompositeOperation = 'destination-in'
+      s.drawImage(mask, 0, 0)
+      s.globalCompositeOperation = 'source-over'
+      ctx.drawImage(sc, 0, 0)
+    },
+    [imgW, imgH]
+  )
+
+  // ---- オーバーレイ（軌跡・番号・録画中の線・選択範囲・ブラシカーソル） ----
   const drawOverlay = useCallback(() => {
     const c = overlayRef.current
     if (!c || !image) return
@@ -135,11 +225,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         if (s.points.length === 0) return
         const selected = s.id === selectedId
         const replacing = s.id === rerecordId
-        if (selected) {
-          ctx.strokeStyle = s.color + '40'
-          ctx.lineWidth = s.revealWidth
-          polyline(ctx, s.points)
-        }
+        if (selected) drawClippedBand(ctx, s.points, s.revealWidth, s.color + '40', selectedClipMask)
         ctx.setLineDash(s.hidden || replacing ? [6 * px, 5 * px] : [])
         ctx.strokeStyle = s.hidden ? '#8a8f98' : s.color
         ctx.globalAlpha = s.hidden ? 0.6 : 1
@@ -176,12 +262,37 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     const rec = recording.current
     if (rec && rec.points.length) {
       const w = useEditor.getState().project.settings.defaultRevealWidth
-      ctx.strokeStyle = 'rgba(31,111,235,0.28)'
-      ctx.lineWidth = w
-      polyline(ctx, rec.points)
+      drawClippedBand(ctx, rec.points, w, 'rgba(31,111,235,0.32)', selMask)
       ctx.strokeStyle = '#1f6feb'
       ctx.lineWidth = 2 * px
       polyline(ctx, rec.points)
+    }
+
+    // 選択範囲の点線（動く点線）
+    if (viewMode === 'edit') {
+      if (selection) for (const shape of selection.shapes) drawAnts(ctx, shape, imgW, imgH, px, antsOffset.current)
+      const d = draft.current
+      if (d) {
+        const shape = draftShape(d)
+        if (shape) {
+          if (d.kind === 'lasso') drawAntsPath(ctx, d.points, false, px, antsOffset.current)
+          else drawAnts(ctx, shape, imgW, imgH, px, antsOffset.current)
+        }
+        // 多角形モード：カーソルまでの仮の辺と、始点の目印
+        if (d.kind === 'lasso' && !d.freehand && d.points.length) {
+          const cur = cursor.current
+          if (cur) drawAntsPath(ctx, [d.points[d.points.length - 1], cur], false, px, antsOffset.current)
+          const p0 = d.points[0]
+          const near = cur && Math.hypot(cur.x - p0.x, cur.y - p0.y) <= CLOSE_RADIUS * px && d.points.length >= 3
+          ctx.fillStyle = near ? '#ffd43b' : '#fff'
+          ctx.strokeStyle = '#000'
+          ctx.lineWidth = 1 * px
+          ctx.beginPath()
+          ctx.arc(p0.x, p0.y, (near ? 6 : 4) * px, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.stroke()
+        }
+      }
     }
 
     const cur = cursor.current
@@ -197,12 +308,69 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       ctx.arc(cur.x, cur.y, w / 2 + px, 0, Math.PI * 2)
       ctx.stroke()
     }
-  }, [image, imgW, imgH, scale, viewMode, project, selectedId, rerecordId, tool])
+  }, [image, imgW, imgH, scale, viewMode, project, selectedId, rerecordId, tool, selection, selMask, selectedClipMask, drawClippedBand])
 
   useEffect(() => drawOverlay(), [drawOverlay])
 
+  // 選択範囲があるあいだ、点線を動かす
+  useEffect(() => {
+    if ((!selection && !hasDraft) || viewMode !== 'edit') return
+    const id = setInterval(() => {
+      antsOffset.current = (antsOffset.current + 1) % 1000
+      if (!recording.current) drawOverlay()
+    }, 90)
+    return () => clearInterval(id)
+  }, [selection, hasDraft, viewMode, drawOverlay])
+
+  // ---- 選択範囲の確定 ----
+  const finishDraft = useCallback(() => {
+    const d = draft.current
+    draft.current = null
+    setHasDraft(false)
+    if (!d) return
+    const st = useEditor.getState()
+    const shape = draftShape(d)
+    if (!shape || isDegenerate(shape)) {
+      // クリックしただけなら選択解除（Photoshop と同じ）
+      if (d.op === 'new') st.setSelection(null)
+      drawOverlay()
+      return
+    }
+    st.setSelection(combine(st.selection, shape, d.op))
+  }, [drawOverlay])
+
+  // 多角形投げ縄の Enter（確定）/ Esc（取り消し）/ Backspace（1つ戻る）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const d = draft.current
+      if (!d || d.kind !== 'lasso' || d.freehand) return
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        finishDraft()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        draft.current = null
+        setHasDraft(false)
+        drawOverlay()
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        d.points.pop()
+        if (d.points.length === 0) {
+          draft.current = null
+          setHasDraft(false)
+        }
+        drawOverlay()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [finishDraft, drawOverlay])
+
   // ---- 座標変換 ----
-  const toImage = (clientX: number, clientY: number): { x: number; y: number } => {
+  const toImage = (clientX: number, clientY: number): Pt => {
     const rect = overlayRef.current!.getBoundingClientRect()
     return { x: ((clientX - rect.left) / rect.width) * imgW, y: ((clientY - rect.top) / rect.height) * imgH }
   }
@@ -238,7 +406,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const onPointerDown = (e: React.PointerEvent): void => {
     if (!image) return
     const st = useEditor.getState()
-    const wantsPan = e.button === 1 || tool === 'pan' || (e.button === 0 && e.altKey)
+    // 選択ツールでは Alt は「除外」に使うので、移動は中ボタン／移動ツールのみ
+    const wantsPan = e.button === 1 || tool === 'pan' || (e.button === 0 && e.altKey && !isSelTool)
     if (wantsPan) {
       e.preventDefault()
       panDrag.current = { pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y }
@@ -247,6 +416,36 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     }
     if (e.button !== 0) return
     const p = toImage(e.clientX, e.clientY)
+
+    if (isSelTool) {
+      if (st.playing) st.setPlaying(false)
+      if (st.viewMode !== 'edit') st.setViewMode('edit')
+      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+      const d = draft.current
+      if (tool === 'lasso' && d && d.kind === 'lasso' && !d.freehand) {
+        // 多角形モード：頂点を追加。始点の近くなら閉じる
+        const p0 = d.points[0]
+        if (d.points.length >= 3 && Math.hypot(p.x - p0.x, p.y - p0.y) <= CLOSE_RADIUS / scale) {
+          finishDraft()
+          return
+        }
+        d.points.push(p)
+        d.pointerId = e.pointerId
+        d.downClient = { x: e.clientX, y: e.clientY }
+        drawOverlay()
+        return
+      }
+      const op = opFromEvent(e)
+      if (tool === 'lasso') {
+        draft.current = { kind: 'lasso', op, points: [p], pointerId: e.pointerId, downClient: { x: e.clientX, y: e.clientY }, freehand: false }
+      } else {
+        draft.current = { kind: tool as 'rect' | 'ellipse', op, pointerId: e.pointerId, start: p, cur: p }
+      }
+      setHasDraft(true)
+      drawOverlay()
+      return
+    }
+
     if (tool === 'draw') {
       if (st.playing) st.setPlaying(false)
       if (st.viewMode !== 'edit') st.setViewMode('edit')
@@ -266,22 +465,49 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       setView((v) => ({ ...v, x: pan.vx + e.clientX - pan.sx, y: pan.vy + e.clientY - pan.sy }))
       return
     }
+    const p = toImage(e.clientX, e.clientY)
+    const d = draft.current
+    if (d) {
+      if (d.kind !== 'lasso') {
+        if (d.pointerId === e.pointerId) d.cur = p
+      } else if (d.pointerId === e.pointerId) {
+        // 押したまま動かしたら自由な投げ縄
+        if (!d.freehand && d.points.length === 1 && Math.hypot(e.clientX - d.downClient.x, e.clientY - d.downClient.y) >= DRAG_THRESHOLD) {
+          d.freehand = true
+        }
+        if (d.freehand) {
+          const events = typeof e.nativeEvent.getCoalescedEvents === 'function' ? e.nativeEvent.getCoalescedEvents() : []
+          for (const ev of events.length ? events : [e.nativeEvent]) d.points.push(toImage(ev.clientX, ev.clientY))
+        }
+      }
+    }
     const rec = recording.current
     if (rec && rec.pointerId === e.pointerId) {
       const events = typeof e.nativeEvent.getCoalescedEvents === 'function' ? e.nativeEvent.getCoalescedEvents() : []
       const list = events.length ? events : [e.nativeEvent]
       for (const ev of list) {
-        const p = toImage(ev.clientX, ev.clientY)
-        rec.points.push({ x: p.x, y: p.y, t: ev.timeStamp - rec.start })
+        const q = toImage(ev.clientX, ev.clientY)
+        rec.points.push({ x: q.x, y: q.y, t: ev.timeStamp - rec.start })
       }
     }
-    cursor.current = toImage(e.clientX, e.clientY)
+    cursor.current = p
     drawOverlay()
   }
 
   const onPointerUp = (e: React.PointerEvent): void => {
     if (panDrag.current?.pointerId === e.pointerId) {
       panDrag.current = null
+      return
+    }
+    const d = draft.current
+    if (d && d.pointerId === e.pointerId) {
+      if (d.kind === 'lasso' && !d.freehand) {
+        // クリックだった：多角形モードを続ける（頂点はクリックごとに追加）
+        d.pointerId = null
+        drawOverlay()
+        return
+      }
+      finishDraft()
       return
     }
     const rec = recording.current
@@ -292,15 +518,31 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       if (st.rerecordId) {
         const pts = simplifyPoints(rec.points)
         const recorded = pts.length > 1 ? pts[pts.length - 1].t - pts[0].t : 0
-        st.updateStroke(st.rerecordId, { points: pts, duration: Math.max(300, Math.round(recorded)) })
+        const prev = st.project.strokes.find((s) => s.id === st.rerecordId)
+        st.updateStroke(st.rerecordId, {
+          points: pts,
+          duration: Math.max(300, Math.round(recorded)),
+          // 選択範囲があればそれを使い、なければ元の範囲を残す
+          clip: st.selection ?? prev?.clip
+        })
         st.select(st.rerecordId)
         st.setRerecord(null)
         st.notify('軌跡を録り直しました')
       } else {
-        st.addStroke(strokeFromRecording(st.project, rec.points, st.project.strokes.length))
+        st.addStroke(strokeFromRecording(st.project, rec.points, st.project.strokes.length, st.selection))
       }
     }
     drawOverlay()
+  }
+
+  const onDoubleClick = (): void => {
+    const d = draft.current
+    if (d && d.kind === 'lasso' && !d.freehand) {
+      // ダブルクリックの2回目で打たれた重複点を除いて確定
+      const n = d.points.length
+      if (n >= 2 && Math.hypot(d.points[n - 1].x - d.points[n - 2].x, d.points[n - 1].y - d.points[n - 2].y) < 1) d.points.pop()
+      finishDraft()
+    }
   }
 
   const onPointerLeave = (): void => {
@@ -318,6 +560,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
           ? 'cur-default'
           : 'cur-crosshair'
 
+  const lassoPolyActive = hasDraft && draft.current?.kind === 'lasso' && !draft.current.freehand
+
   return (
     <div
       ref={containerRef}
@@ -327,6 +571,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
       onPointerLeave={onPointerLeave}
+      onDoubleClick={onDoubleClick}
       onAuxClick={(e) => e.preventDefault()}
     >
       {!image ? (
@@ -355,6 +600,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         >
           {viewMode === 'edit' && <img className="layer trace" src={image.dataUrl} alt="" draggable={false} />}
           <canvas ref={renderCanvasRef} className="layer" />
+          <canvas ref={dimRef} className="layer" />
           <canvas ref={overlayRef} className="layer" />
         </div>
       )}
@@ -363,6 +609,19 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
           録り直し中：{project.strokes.find((s) => s.id === rerecordId)?.name} をなぞってください
           <button className="btn small" onClick={() => useEditor.getState().setRerecord(null)}>
             キャンセル
+          </button>
+        </div>
+      )}
+      {image && !rerecordId && lassoPolyActive && (
+        <div className="stage-banner info">
+          クリックで頂点を追加 ・ 始点クリック / ダブルクリック / Enter で確定 ・ Backspace で1つ戻る ・ Esc で取り消し
+        </div>
+      )}
+      {image && !rerecordId && !lassoPolyActive && selection && viewMode === 'edit' && (
+        <div className="stage-banner info" title="この状態で描いた軌跡に、選択範囲が記録されます">
+          選択範囲の中だけ表示されます
+          <button className="btn small" onClick={() => useEditor.getState().setSelection(null)}>
+            選択解除 (Ctrl+D)
           </button>
         </div>
       )}
@@ -377,7 +636,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   )
 }
 
-function polyline(ctx: CanvasRenderingContext2D, pts: StrokePoint[]): void {
+function polyline(ctx: CanvasRenderingContext2D, pts: Pt[]): void {
   if (pts.length === 0) return
   ctx.beginPath()
   ctx.moveTo(pts[0].x, pts[0].y)
@@ -385,3 +644,35 @@ function polyline(ctx: CanvasRenderingContext2D, pts: StrokePoint[]): void {
   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y)
   ctx.stroke()
 }
+
+/** 白黒の動く点線で図形の輪郭を描く */
+function drawAnts(ctx: CanvasRenderingContext2D, shape: ClipShape, w: number, h: number, px: number, offset: number): void {
+  if (shape.kind === 'all') return
+  ctx.save()
+  traceClipShape(ctx, shape, w, h)
+  strokeAnts(ctx, px, offset, shape.mode === 'subtract')
+  ctx.restore()
+}
+
+function drawAntsPath(ctx: CanvasRenderingContext2D, pts: Pt[], close: boolean, px: number, offset: number): void {
+  if (pts.length < 2) return
+  ctx.save()
+  ctx.beginPath()
+  ctx.moveTo(pts[0].x, pts[0].y)
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y)
+  if (close) ctx.closePath()
+  strokeAnts(ctx, px, offset, false)
+  ctx.restore()
+}
+
+function strokeAnts(ctx: CanvasRenderingContext2D, px: number, offset: number, subtract: boolean): void {
+  ctx.lineWidth = 1.2 * px
+  ctx.setLineDash([])
+  ctx.strokeStyle = subtract ? 'rgba(255,120,120,0.95)' : '#fff'
+  ctx.stroke()
+  ctx.setLineDash([5 * px, 4 * px])
+  ctx.lineDashOffset = -offset * px
+  ctx.strokeStyle = '#000'
+  ctx.stroke()
+}
+

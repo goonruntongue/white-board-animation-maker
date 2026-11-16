@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   deleteSelected,
+  deselect,
+  invertSelection,
   importImageDialog,
   importImageFile,
   newProject,
@@ -92,6 +94,9 @@ export default function App(): React.JSX.Element {
       if (mod) {
         if (k === 'z' && !e.shiftKey) return void (e.preventDefault(), st.undo())
         if ((k === 'z' && e.shiftKey) || k === 'y') return void (e.preventDefault(), st.redo())
+        // 選択範囲（Photoshop と同じキー）
+        if (k === 'd' && !e.shiftKey) return void (e.preventDefault(), deselect())
+        if (k === 'i' && e.shiftKey) return void (e.preventDefault(), invertSelection())
         // デスクトップ版ではメニューのアクセラレータが処理する
         if (isDesktop) return
         if (k === 's') return void (e.preventDefault(), saveProject(e.shiftKey))
@@ -139,6 +144,8 @@ export default function App(): React.JSX.Element {
       const preset = PEN_PRESETS.find((p) => p.key === e.key)
       if (preset) return st.updateSettings({ defaultRevealWidth: preset.width })
       if (k === 'd') st.setTool('draw')
+      else if (k === 'm') st.setTool(e.shiftKey ? 'ellipse' : 'rect')
+      else if (k === 'l') st.setTool('lasso')
       else if (k === 'v') st.setTool('select')
       else if (k === 'h') st.setTool('pan')
     }
