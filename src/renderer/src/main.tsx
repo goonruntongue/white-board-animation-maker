@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { initHandPresets } from './engine/handPresets'
 import { initTheme } from './lib/theme'
+import './fonts'
 import './styles.css'
 
 // 手素材の一覧（サイズ・ペン先位置）を先に調べてから、状態とUIを作る

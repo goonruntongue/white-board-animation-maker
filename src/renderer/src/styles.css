@@ -8,7 +8,8 @@
    ========================================================================== */
 
 :root {
-  --font: 'Segoe UI Variable', 'Segoe UI', 'Yu Gothic UI', 'Hiragino Sans', 'Meiryo', system-ui, sans-serif;
+  /* 欧文は Poppins、和文は Noto Sans JP（src/renderer/src/fonts.ts で同梱） */
+  --font: 'Poppins', 'Noto Sans JP', 'Yu Gothic UI', 'Meiryo', sans-serif;
   --mono: 'Cascadia Mono', 'Consolas', ui-monospace, monospace;
   --radius: 7px;
   --radius-lg: 11px;
@@ -45,8 +46,8 @@
 
   --text-0: #1f2329;
   --text-1: #3b414a;
-  --text-2: #69707b;
-  --text-3: #959ca7;
+  --text-2: #5f6670;
+  --text-3: #6b7380;
   --engrave: 0 1px 0 rgba(255, 255, 255, 0.85);
   --line: rgba(20, 30, 45, 0.13);
   --line-strong: rgba(20, 30, 45, 0.22);
@@ -102,8 +103,8 @@
 
   --text-0: #eceef1;
   --text-1: #c3c8cf;
-  --text-2: #8a919c;
-  --text-3: #5e6570;
+  --text-2: #9ca3ae;
+  --text-3: #79808b;
   --engrave: 0 -1px 0 rgba(0, 0, 0, 0.7);
   --line: rgba(0, 0, 0, 0.55);
   --line-strong: rgba(0, 0, 0, 0.75);
@@ -146,13 +147,17 @@ body,
 body {
   background: var(--chassis);
   color: var(--text-1);
-  font: 13px/1.45 var(--font);
+  font: 13px/1.55 var(--font);
+  text-rendering: optimizeLegibility;
   overflow: hidden;
   user-select: none;
   -webkit-font-smoothing: antialiased;
 }
 
-button {
+button,
+input,
+select,
+textarea {
   font: inherit;
   color: inherit;
 }
@@ -209,7 +214,7 @@ kbd {
   box-shadow: var(--key-shadow);
   color: var(--text-0);
   text-shadow: var(--engrave);
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
   transition: filter 0.1s;
@@ -318,7 +323,7 @@ kbd {
 .brand-name {
   font-weight: 700;
   font-size: 11.5px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-1);
   text-shadow: var(--engrave);
@@ -370,7 +375,7 @@ kbd {
   cursor: pointer;
   white-space: nowrap;
   text-shadow: var(--engrave);
-  font-weight: 600;
+  font-weight: 500;
 }
 .tool-btn.icon-only {
   padding: 0 7px;
@@ -423,7 +428,7 @@ kbd {
   box-shadow: 0 0 6px var(--warn);
 }
 .env-badge {
-  font-size: 10.5px;
+  font-size: 11px;
   padding: 1px 8px;
   border-radius: 999px;
   background: var(--well);
@@ -438,9 +443,9 @@ kbd {
 }
 .tb-label {
   padding: 0 6px 0 5px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.04em;
   color: var(--text-2);
   text-shadow: var(--engrave);
   white-space: nowrap;
@@ -539,9 +544,9 @@ kbd {
   justify-content: space-between;
   height: 44px;
   padding: 0 14px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.06em;
   color: var(--text-2);
   text-shadow: var(--engrave);
   border-bottom: 1px solid var(--line);
@@ -554,7 +559,7 @@ kbd {
   background: var(--lcd-bg);
   color: var(--lcd-fg);
   text-shadow: var(--lcd-glow);
-  font: 600 12px var(--mono);
+  font: 500 12px var(--mono);
   text-align: center;
   letter-spacing: 0;
   box-shadow: var(--well-shadow);
@@ -648,7 +653,7 @@ kbd {
   border-radius: 50%;
   color: #fff;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
   box-shadow:
     inset 0 1px 1px rgba(255, 255, 255, 0.55),
@@ -663,7 +668,7 @@ kbd {
 }
 .stroke-name {
   color: var(--text-0);
-  font-weight: 600;
+  font-weight: 500;
   text-shadow: var(--engrave);
   overflow: hidden;
   white-space: nowrap;
@@ -752,9 +757,9 @@ kbd {
   align-items: center;
   gap: 8px;
   margin: 0 0 12px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.06em;
   color: var(--text-2);
   text-shadow: var(--engrave);
   overflow: hidden;
@@ -786,7 +791,7 @@ kbd {
 }
 .field-label {
   color: var(--text-1);
-  font-weight: 600;
+  font-weight: 500;
   text-shadow: var(--engrave);
 }
 .field-control {
@@ -817,7 +822,7 @@ kbd {
   background: transparent;
   color: var(--lcd-fg);
   text-shadow: var(--lcd-glow);
-  font: 600 12.5px var(--mono);
+  font: 500 12.5px var(--mono);
   padding: 0 7px;
   outline: none;
 }
@@ -906,7 +911,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   cursor: pointer;
   gap: 10px;
   color: var(--text-1);
-  font-weight: 600;
+  font-weight: 500;
   text-shadow: var(--engrave);
 }
 .toggle input {
@@ -1079,7 +1084,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 .hand-label {
   padding: 0 2px;
   font-size: 11.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-1);
   text-shadow: var(--engrave);
   overflow: hidden;
@@ -1186,7 +1191,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
     0 6px 18px rgba(0, 0, 0, 0.3);
   color: var(--warn);
   text-shadow: 0 0 6px rgba(245, 165, 36, 0.6);
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
 }
 .stage-banner.info {
@@ -1268,7 +1273,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 /* ============================== タイムライン ============================== */
 .timeline {
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: 368px 1fr;
   height: 104px;
   border-top: 1px solid var(--line-strong);
   box-shadow: inset 0 1px 0 var(--hilite);
@@ -1276,8 +1281,8 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 .transport {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 14px;
+  gap: 9px;
+  padding: 0 12px;
   border-right: 1px solid var(--line);
   box-shadow: 1px 0 0 var(--hilite);
 }
@@ -1325,8 +1330,8 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 /* 液晶 */
 .lcd {
   position: relative;
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 auto;
+  min-width: 132px;
   padding: 5px 9px 6px;
   border-radius: 8px;
   background: var(--lcd-bg);
@@ -1348,6 +1353,8 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 .lcd-top {
   display: flex;
   justify-content: space-between;
+  gap: 8px;
+  white-space: nowrap;
   font-size: 9.5px;
   letter-spacing: 0.08em;
   opacity: 0.75;
@@ -1401,14 +1408,14 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 .seg-toggle button {
   position: relative;
   height: 24px;
-  padding: 0 10px;
+  padding: 0 9px;
   border: 0;
   border-radius: 6px;
   background: linear-gradient(180deg, var(--key-top), var(--key-bot));
   box-shadow: var(--key-shadow);
   color: var(--text-1);
   cursor: pointer;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 700;
   text-shadow: var(--engrave);
   white-space: nowrap;
@@ -1432,7 +1439,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 .tick {
   position: absolute;
   top: 2px;
-  font: 600 10px var(--mono);
+  font: 500 10px var(--mono);
   color: var(--text-2);
   text-shadow: var(--engrave);
   padding-left: 4px;
@@ -1467,7 +1474,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   top: 50%;
   transform: translateY(-50%);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   color: rgba(0, 0, 0, 0.65);
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
@@ -1613,7 +1620,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 }
 .form-grid > label {
   color: var(--text-1);
-  font-weight: 600;
+  font-weight: 500;
   text-shadow: var(--engrave);
 }
 .inline-range {
@@ -1625,7 +1632,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   flex: 1;
 }
 .inline-range span {
-  font: 600 12px var(--mono);
+  font: 500 12px var(--mono);
   color: var(--text-1);
   min-width: 36px;
   text-align: right;
@@ -1640,7 +1647,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   align-items: center;
   gap: 7px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-1);
 }
 /* チェックボックス：凹んだ枠＋点灯 */
@@ -1700,7 +1707,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   inset: 0;
   display: grid;
   place-items: center;
-  font: 600 11px var(--mono);
+  font: 500 11px var(--mono);
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
@@ -1729,7 +1736,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
     0 12px 30px rgba(0, 0, 0, 0.45);
   color: var(--lcd-fg);
   text-shadow: var(--lcd-glow);
-  font-weight: 600;
+  font-weight: 500;
   animation: toast-in 0.18s ease-out;
   cursor: pointer;
 }

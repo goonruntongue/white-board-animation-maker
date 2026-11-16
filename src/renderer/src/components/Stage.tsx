@@ -4,6 +4,7 @@ import { simplifyPoints, strokeFromRecording } from '../engine/project'
 import { combine, isDegenerate, normalizeBox, type SelectionOp } from '../engine/selection'
 import type { ClipShape, Stroke, StrokePoint } from '../engine/types'
 import { buildTimeline, rasterizeClip, traceClipShape, WBRenderer } from '../engine/wb-engine'
+import { CANVAS_FONT_FAMILY } from '../fonts'
 import { useAssets } from '../lib/useAssets'
 import { SELECTION_TOOLS, useEditor } from '../store'
 import { Icon } from './Icon'
@@ -246,7 +247,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
           ctx.stroke()
         }
         ctx.fillStyle = '#fff'
-        ctx.font = `600 ${11 * px}px system-ui, sans-serif`
+        ctx.font = `700 ${11 * px}px ${CANVAS_FONT_FAMILY}`
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         ctx.fillText(String(i + 1), p0.x, p0.y + 0.5 * px)
@@ -580,7 +581,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
             <div className="empty-icon">
               <Icon name="upload" size={34} />
             </div>
-            <h2>清書画像を読み込む</h2>
+            <h2>画像を読み込む</h2>
             <p>PNG / JPEG / WebP をここにドラッグ＆ドロップ</p>
             <button className="btn primary" onClick={() => void importImageDialog()}>
               <Icon name="image" /> 画像を選択…
