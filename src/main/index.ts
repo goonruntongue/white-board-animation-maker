@@ -131,7 +131,7 @@ function buildMenu(): void {
         { label: '手・ペン素材を読み込む…', click: () => send('import-hand') },
         { type: 'separator' },
         { label: 'HTMLとして書き出す…', accelerator: 'CmdOrCtrl+E', click: () => send('export-html') },
-        { label: '動画 (WebM) として書き出す…', accelerator: 'CmdOrCtrl+Shift+E', click: () => send('export-video') },
+        { label: '動画・GIF として書き出す…', accelerator: 'CmdOrCtrl+Shift+E', click: () => send('export-video') },
         { type: 'separator' },
         { role: 'quit', label: '終了' }
       ]
@@ -175,7 +175,7 @@ function buildMenu(): void {
       label: 'ヘルプ',
       submenu: [
         { label: 'ツアーを始める', click: () => send('tour') },
-        { label: '使い方ガイド', click: () => send('guide') },
+        { label: '使い方ガイド', accelerator: 'F1', click: () => send('guide') },
         { label: 'サンプル画像を使う', click: () => send('sample') }
       ]
     },

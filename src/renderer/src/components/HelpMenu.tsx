@@ -45,7 +45,7 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
             onClose={() => setOpen(false)}
             actions={[
               { icon: 'play', label: 'ツアーを始める', note: 'ボタンのそばに順番に説明を出します', onSelect: startTour },
-              { icon: 'list', label: '使い方ガイド', note: '作り方の流れを4ステップで', onSelect: openGuide },
+              { icon: 'list', label: '使い方ガイド', note: '全機能を詳しく説明（検索できます）', onSelect: () => openGuide() },
               { icon: 'image', label: 'サンプル画像を使う', note: '練習用の画像をページに追加', onSelect: () => void importSampleImage() },
               {
                 icon: showOnStartup ? 'check' : 'x',
@@ -78,8 +78,9 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
           <button role="menuitem" onClick={() => run(startTour)}>
             <Icon name="play" /> ツアーを始める
           </button>
-          <button role="menuitem" onClick={() => run(openGuide)}>
+          <button role="menuitem" onClick={() => run(() => openGuide())}>
             <Icon name="list" /> 使い方ガイド
+            <small>全機能の説明</small>
           </button>
           <button role="menuitem" onClick={() => run(() => void importSampleImage())}>
             <Icon name="image" /> サンプル画像を使う

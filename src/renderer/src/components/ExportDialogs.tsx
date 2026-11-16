@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { buildStandaloneHtml, defaultHtmlOptions, embedSnippet, type HtmlExportOptions } from '../export/exportHtml'
 import { pageProjects } from '../export/sequence'
+import { exportGif } from '../export/exportGif'
 import { canExportMp4, exportMp4, exportWebm, pickVideoFormat, type VideoExportHandle } from '../export/exportVideo'
 import { formatTime } from '../engine/project'
 import { buildTimeline } from '../engine/wb-engine'
@@ -8,8 +9,9 @@ import { formatBytes } from '../lib/imageTools'
 import { isDesktop, revealInFolder, saveBlobFile, saveTextFile } from '../lib/platform'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
+import { GuideLink } from './UsageGuide'
 
-function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose?: () => void }): React.JSX.Element {
+function Modal({ title, children, onClose, help }: { title: string; children: ReactNode; onClose?: () => void; help?: ReactNode }): React.JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape' && onClose) onClose()
@@ -22,11 +24,14 @@ function Modal({ title, children, onClose }: { title: string; children: ReactNod
       <div className="modal" role="dialog" aria-modal aria-label={title}>
         <header>
           <h2>{title}</h2>
+          <span className="modal-head-actions">
+          {help}
           {onClose && (
             <button className="icon-btn" onClick={onClose} title="閉じる (Esc)">
               <Icon name="x" />
             </button>
           )}
+          </span>
         </header>
         {children}
       </div>
@@ -84,7 +89,11 @@ function HtmlExportDialog(): React.JSX.Element {
   }
 
   return (
-    <Modal title={pages.length > 1 ? 'HTMLスライドとして書き出す' : '単一HTMLとして書き出す'} onClose={() => openDialog(null)}>
+    <Modal
+      title={pages.length > 1 ? 'HTMLスライドとして書き出す' : '単一HTMLとして書き出す'}
+      onClose={() => openDialog(null)}
+      help={<GuideLink section="export" label="書き出し" />}
+    >
       <div className="modal-body">
         <p className="lead">
           画像・手素材・再生プログラムを1つのHTMLに内包します。ネット接続なしで、どのPCのブラウザでも再生できます。
@@ -202,38 +211,42 @@ function VideoExportDialog(): React.JSX.Element {
   const handle = useRef<VideoExportHandle | null>(null)
   const total = pageProjects(project).reduce((sum, pg) => sum + buildTimeline(pg).total, 0)
   // 'fast' = MP4 を1コマずつ圧縮（待ち時間が短い） / 'record' = 画面の再生を録画（再生時間と同じだけかかる）
-  const [method, setMethod] = useState<'fast' | 'record'>('record')
+  const [method, setMethod] = useState<'fast' | 'record' | 'gif'>('record')
+  const methodChosen = useRef(false)
+  const [gifFps, setGifFps] = useState(10)
+  const [gifWidth, setGifWidth] = useState(640)
+  const [gifRepeat, setGifRepeat] = useState(true)
   const [fastOk, setFastOk] = useState<boolean | null>(null)
 
   useEffect(() => () => handle.current?.cancel(), [])
   useEffect(() => {
     void canExportMp4().then((ok) => {
       setFastOk(ok)
-      if (ok) setMethod('fast')
+      if (ok && !methodChosen.current) setMethod('fast')
     })
   }, [])
 
   const recordExt = pickVideoFormat().ext
-  const ext = method === 'fast' ? 'mp4' : recordExt
+  const ext = method === 'gif' ? 'gif' : method === 'fast' ? 'mp4' : recordExt
 
   const run = async (): Promise<void> => {
     setProgress(0)
     const opts = { fps, maxWidth, bitrateMbps: bitrate }
-    const h = method === 'fast' ? exportMp4(project, opts, setProgress) : exportWebm(project, opts, setProgress)
+    const h = method === 'gif' ? exportGif(project, { fps: gifFps, maxWidth: gifWidth, repeat: gifRepeat }, setProgress) : method === 'fast' ? exportMp4(project, opts, setProgress) : exportWebm(project, opts, setProgress)
     handle.current = h
     try {
       const blob = await h.promise
       const saved = await saveBlobFile(blob, `${project.name || 'whiteboard'}.${ext}`, [
-        { name: ext === 'mp4' ? 'MP4 動画' : 'WebM 動画', extensions: [ext] }
+        { name: ext === 'gif' ? 'GIF アニメーション' : ext === 'mp4' ? 'MP4 動画' : 'WebM 動画', extensions: [ext] }
       ])
       if (saved) {
-        notify(isDesktop ? `書き出しました: ${saved}` : '動画をダウンロードしました')
+        notify(isDesktop ? `書き出しました: ${saved}` : `${ext.toUpperCase()} をダウンロードしました`)
         revealInFolder(saved)
         openDialog(null)
       }
     } catch (e) {
       if (!(e instanceof Error && e.message === 'cancelled')) {
-        notify('動画の書き出しに失敗しました: ' + (e instanceof Error ? e.message : String(e)), 'error')
+        notify('書き出しに失敗しました: ' + (e instanceof Error ? e.message : String(e)), 'error')
       }
     } finally {
       handle.current = null
@@ -244,22 +257,42 @@ function VideoExportDialog(): React.JSX.Element {
   const running = progress !== null
 
   return (
-    <Modal title="動画として書き出す" onClose={running ? undefined : () => openDialog(null)}>
+    <Modal title="動画・GIFとして書き出す" onClose={running ? undefined : () => openDialog(null)} help={<GuideLink section="export" label="書き出し" />}>
       <div className="modal-body">
         <p className="lead">
-          {method === 'fast'
+          {method === 'gif'
+            ? `全ページを順に GIF アニメーションにします。色数は最大256色で、長い作品や大きな画像はファイルが大きくなります。`
+            : method === 'fast'
             ? `MP4（H.264）で書き出します。1コマずつ圧縮するので、再生時間（${formatTime(total)}）を待たずに仕上がり、コマ落ちもしません。`
             : `画面の再生を録画して ${recordExt.toUpperCase()} を作ります。書き出しには再生時間（${formatTime(total)}）と同じだけかかります。`}
           {' '}音は入りません。
         </p>
         <div className="form-grid">
           <label>方式</label>
-          <select className="text-input" disabled={running} value={method} onChange={(e) => setMethod(e.target.value as 'fast' | 'record')}>
+          <select className="text-input" disabled={running} value={method} onChange={(e) => { methodChosen.current = true; setMethod(e.target.value as 'fast' | 'record' | 'gif') }}>
             <option value="fast" disabled={!fastOk}>
               MP4・高速{fastOk === false ? '（この端末は非対応）' : '（おすすめ）'}
             </option>
             <option value="record">{recordExt.toUpperCase()}・録画（再生時間と同じだけかかる）</option>
+            <option value="gif">GIF アニメーション</option>
           </select>
+          {method === 'gif' ? <>
+          <label>フレームレート</label>
+          <select className="text-input" disabled={running} value={gifFps} onChange={(e) => setGifFps(Number(e.target.value))}>
+            <option value={10}>10 fps（軽い）</option>
+            <option value={20}>20 fps</option>
+            <option value={25}>25 fps（なめらか）</option>
+          </select>
+          <label>最大幅</label>
+          <select className="text-input" disabled={running} value={gifWidth} onChange={(e) => setGifWidth(Number(e.target.value))}>
+            <option value={480}>480px（軽い）</option>
+            <option value={640}>640px（標準）</option>
+            <option value={960}>960px</option>
+            <option value={1280}>1280px</option>
+          </select>
+          <label htmlFor="gif-repeat">繰り返し</label>
+          <label><input id="gif-repeat" type="checkbox" checked={gifRepeat} disabled={running} onChange={(e) => setGifRepeat(e.target.checked)} /> ループ再生</label>
+          </> : <>
           <label>フレームレート</label>
           <select className="text-input" disabled={running} value={fps} onChange={(e) => setFps(Number(e.target.value))}>
             <option value={24}>24 fps</option>
@@ -279,6 +312,7 @@ function VideoExportDialog(): React.JSX.Element {
             <option value={8}>8 Mbps</option>
             <option value={16}>16 Mbps</option>
           </select>
+          </>}
         </div>
         {running && (
           <div className="progress">
@@ -298,7 +332,7 @@ function VideoExportDialog(): React.JSX.Element {
               キャンセル
             </button>
             <button className="btn primary" onClick={() => void run()}>
-              <Icon name="film" /> 録画を開始
+              <Icon name="film" /> 書き出す
             </button>
           </>
         )}

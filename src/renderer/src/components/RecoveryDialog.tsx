@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { beginSession, clearSnapshots, listSnapshots, loadSnapshot, relativeTime, type SnapshotMeta } from '../lib/recovery'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
+import { GuideLink } from './UsageGuide'
 
 /** 自動バックアップの一覧から、選んだ時点のプロジェクトに戻す */
 export function RecoveryDialog(): React.JSX.Element {
@@ -44,9 +45,12 @@ export function RecoveryDialog(): React.JSX.Element {
       <div className="modal" role="dialog" aria-modal aria-label="自動バックアップから復元">
         <header>
           <h2>自動バックアップから復元</h2>
-          <button className="icon-btn" onClick={close} title="閉じる (Esc)">
-            <Icon name="x" />
-          </button>
+          <span className="modal-head-actions">
+            <GuideLink section="save" label="保存と自動バックアップ" />
+            <button className="icon-btn" onClick={close} title="閉じる (Esc)">
+              <Icon name="x" />
+            </button>
+          </span>
         </header>
         <div className="modal-body">
           {crashed && (

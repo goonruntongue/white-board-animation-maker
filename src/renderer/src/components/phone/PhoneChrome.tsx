@@ -259,7 +259,7 @@ export function PhoneDock(): React.JSX.Element {
 
   const exportActions: SheetAction[] = [
     { icon: 'code', label: 'HTML として書き出す', note: '1ファイルでオフライン再生（スライドにも埋め込める）', onSelect: () => openExport('html') },
-    { icon: 'film', label: '動画として書き出す', note: '再生時間と同じだけかかります', onSelect: () => openExport('video') },
+    { icon: 'film', label: '動画・GIFとして書き出す', note: 'MP4・WebM・GIF（端末により異なります）', onSelect: () => openExport('video') },
     { icon: 'save', label: 'プロジェクトを保存', note: 'あとで続きを編集する', onSelect: () => void saveProject() }
   ]
 

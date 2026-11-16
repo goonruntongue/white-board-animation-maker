@@ -55,7 +55,7 @@ export function startTour(): void {
   window.dispatchEvent(new Event(TOUR_EVENT))
 }
 
-/** 使い方ガイド（説明カード）を開く */
-export function openGuide(): void {
-  window.dispatchEvent(new Event(GUIDE_EVENT))
+/** 使い方ガイドを開く。section を渡すと、その項目（例：'export'）を表示する */
+export function openGuide(section?: string): void {
+  window.dispatchEvent(new CustomEvent(GUIDE_EVENT, { detail: section ?? null }))
 }

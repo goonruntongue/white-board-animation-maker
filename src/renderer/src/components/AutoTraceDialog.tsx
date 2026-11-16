@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { autoTrace, MOTION_PRESETS, type AutoDetail, type AutoSpeed } from '../engine/autoTrace'
 import { SliderField } from './Field'
-import { loadImage } from '../engine/wb-engine'
+import { clipBounds, loadImage, rasterizeClip } from '../engine/wb-engine'
+import type { ClipRegion, ImageAsset } from '../engine/types'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
+import { GuideLink } from './UsageGuide'
+import { fillSelection, type FillDirection, type FillMotion } from '../engine/fillSelection'
 
 const DETAILS: { id: AutoDetail; label: string; note: string }[] = [
   { id: 'fine', label: '細かく', note: '単語・小さな図ごと' },
@@ -19,15 +22,21 @@ const SPEEDS: { id: AutoSpeed; label: string }[] = [
 // 前回選んだ設定を覚えておく（この端末の利用者ごとの好み）
 const PREF_KEY = 'wbam.autoTrace'
 interface AutoPrefs {
+  revealWidth: number
   detail: AutoDetail
+  pathMode: 'natural' | 'group' | 'ink'
   speed: AutoSpeed
   scrubV: number
   scrubH: number
+  scrubCycles: number
+  scrubTilt: number
+  motionVersion: number
 }
 function loadPrefs(): AutoPrefs {
-  const base: AutoPrefs = { detail: 'normal', speed: 'normal', scrubV: 0, scrubH: 0 }
+  const base: AutoPrefs = { revealWidth: 0, detail: 'normal', pathMode: 'natural', speed: 'normal', scrubV: 0, scrubH: 0, scrubCycles: 8, scrubTilt: 0, motionVersion: 2 }
   try {
-    return { ...base, ...(JSON.parse(localStorage.getItem(PREF_KEY) ?? '{}') as Partial<AutoPrefs>) }
+    const stored = JSON.parse(localStorage.getItem(PREF_KEY) ?? '{}') as Partial<AutoPrefs>
+    return { ...base, ...stored, ...(stored.motionVersion === 2 ? {} : { scrubV: 0, scrubH: 0, scrubCycles: 8, scrubTilt: 0, motionVersion: 2 }) }
   } catch {
     return base
   }
@@ -43,13 +52,22 @@ function savePrefs(p: AutoPrefs): void {
 /** 画像を解析して、描き順（軌跡）の下書きを自動で作る */
 export function AutoTraceDialog(): React.JSX.Element {
   const project = useEditor((s) => s.project)
+  const selection = useEditor((s) => s.selection)
   const { openDialog, notify } = useEditor.getState()
   const [prefs] = useState(loadPrefs)
+  const [revealWidth, setRevealWidth] = useState(prefs.revealWidth)
   const [detail, setDetail] = useState<AutoDetail>(prefs.detail)
+  const [pathMode, setPathMode] = useState<'natural' | 'group' | 'ink'>(prefs.pathMode === 'ink' || prefs.pathMode === 'group' ? prefs.pathMode : 'natural')
+  const [fill, setFill] = useState(!!selection)
+  const [fillDirection, setFillDirection] = useState<FillDirection>('horizontal')
+  const [fillMotion, setFillMotion] = useState<FillMotion>('smooth')
+  const [fillWidth, setFillWidth] = useState(Math.max(1, project.settings.defaultRevealWidth))
   const [speed, setSpeed] = useState<AutoSpeed>(prefs.speed)
   // 手の動き：上下・左右のごしごしの強さ（0〜1）
   const [scrubV, setScrubV] = useState(prefs.scrubV)
   const [scrubH, setScrubH] = useState(prefs.scrubH)
+  const [scrubCycles, setScrubCycles] = useState(prefs.scrubCycles)
+  const [scrubTilt, setScrubTilt] = useState(prefs.scrubTilt)
   const preset = MOTION_PRESETS.find((m) => Math.abs(m.scrubV - scrubV) < 0.005 && Math.abs(m.scrubH - scrubH) < 0.005)
   const [mode, setMode] = useState<'replace' | 'append'>('replace')
   const [busy, setBusy] = useState(false)
@@ -69,10 +87,11 @@ export function AutoTraceDialog(): React.JSX.Element {
     if (!project.image) return
     setBusy(true)
     try {
-      const img = await loadImage(project.image.dataUrl)
       const start = mode === 'append' ? existing : 0
-      savePrefs({ detail, speed, scrubV, scrubH })
-      const result = autoTrace(img, project.image, project.settings.boardColor, { detail, speed, scrubV, scrubH }, start)
+      savePrefs({ detail, pathMode, speed, scrubV, scrubH, revealWidth, scrubCycles, scrubTilt, motionVersion: 2 })
+      const result = fill
+        ? { strokes: [fillSelection(selection!, project.image, fillWidth, fillDirection, fillMotion, project.image.width * ({ slow: 0.38, normal: 0.65, fast: 1.1 }[speed]), start, scrubV, scrubH, scrubCycles, scrubTilt)], blocks: 1, fallback: false }
+        : autoTrace(await loadImage(project.image.dataUrl), project.image, project.settings.boardColor, { detail, pathMode, speed, scrubV, scrubH, scrubCycles, scrubTilt, revealWidth }, start)
       const st = useEditor.getState()
       // まとめて1回の変更にする（「元に戻す」1回で取り消せる）
       st.commit((p) => ({ ...p, strokes: mode === 'append' ? [...p.strokes, ...result.strokes] : result.strokes }))
@@ -97,15 +116,55 @@ export function AutoTraceDialog(): React.JSX.Element {
       <div className="modal" role="dialog" aria-modal aria-label="描き順を自動で作る">
         <header>
           <h2>描き順を自動で作る</h2>
-          <button className="icon-btn" onClick={close} title="閉じる (Esc)">
-            <Icon name="x" />
-          </button>
+          <span className="modal-head-actions">
+            <GuideLink section="auto" label="描き順を自動で作る" />
+            <button className="icon-btn" onClick={close} title="閉じる (Esc)">
+              <Icon name="x" />
+            </button>
+          </span>
         </header>
         <div className="modal-body">
           <p className="lead">
             画像の文字や図をかたまりごとに見つけ、上から順に手が書いていく軌跡を作ります。できた軌跡は下書きです。順番の入れ替え・録り直し・描き足し・削除で、あとから自由に直せます。
           </p>
           <div className="form-grid">
+            <label>描き方</label>
+            <div className="choice-row" role="radiogroup" aria-label="描き方">
+              <button role="radio" aria-checked={!fill && pathMode === 'natural'} className={`choice ${!fill && pathMode === 'natural' ? 'on' : ''}`} onClick={() => { setFill(false); setPathMode('natural') }}><strong>自然に書く</strong><small>近い所から・行は左→右</small></button>
+              <button role="radio" aria-checked={!fill && pathMode === 'group'} className={`choice ${!fill && pathMode === 'group' ? 'on' : ''}`} onClick={() => { setFill(false); setPathMode('group') }}><strong>かたまりを描く</strong><small>まとまりごとに描く</small></button>
+              <button role="radio" aria-checked={!fill && pathMode === 'ink'} className={`choice ${!fill && pathMode === 'ink' ? 'on' : ''}`} onClick={() => { setFill(false); setPathMode('ink') }}><strong>インクの線をたどる</strong><small>試験版・書き順は推定</small></button>
+              <button role="radio" aria-checked={fill} className={`choice ${fill ? 'on' : ''}`} onClick={() => setFill(true)}><strong>選択範囲を塗る</strong><small>選んだ範囲だけ</small></button>
+            </div>
+            {fill && <>
+              <p>先に画像上で範囲を選択してください。選択範囲の中を順に表示します。</p>
+              {!selection && <p>選択範囲がありません。ダイアログを閉じて範囲を選んでください。</p>}
+              <label>進む方向</label>
+              <div className="choice-row" role="radiogroup" aria-label="進む方向">
+                <button role="radio" aria-checked={fillDirection === 'horizontal'} className={`choice ${fillDirection === 'horizontal' ? 'on' : ''}`} onClick={() => setFillDirection('horizontal')}>左から右へ</button>
+                <button role="radio" aria-checked={fillDirection === 'vertical'} className={`choice ${fillDirection === 'vertical' ? 'on' : ''}`} onClick={() => setFillDirection('vertical')}>上から下へ</button>
+              </div>
+              <label>手の動き</label>
+              <div className="choice-row" role="radiogroup" aria-label="塗るときの手の動き">
+                {([['smooth', 'なめらか'], ['vertical', '上下にごしごし'], ['horizontal', '左右にごしごし']] as const).map(([id, label]) => <button key={id} role="radio" aria-checked={fillMotion === id} className={`choice ${fillMotion === id ? 'on' : ''}`} onClick={() => { setFillMotion(id); if (id === 'vertical' && scrubV === 0) setScrubV(0.12); if (id === 'horizontal' && scrubH === 0) setScrubH(0.12) }}>{label}</button>)}
+              </div>
+              {selection && project.image && <FillPreview image={project.image} selection={selection} width={fillWidth} direction={fillDirection} motion={fillMotion} v={scrubV} h={scrubH} cycles={scrubCycles} tilt={scrubTilt} />}
+              {fillMotion !== 'smooth' && <>
+                <SliderField label={fillMotion === 'vertical' ? '上下の振幅' : '左右の振幅'} hint={fillMotion === 'vertical' ? '100%は画像の高さです。' : '100%は画像の幅です。'} value={Math.round((fillMotion === 'vertical' ? scrubV : scrubH) * 100)} min={0} max={100} step={1} unit="%" onChange={(v) => fillMotion === 'vertical' ? setScrubV(Math.max(0, Math.min(100, v)) / 100) : setScrubH(Math.max(0, Math.min(100, v)) / 100)} />
+                {fillMotion === 'vertical' && <SliderField label="振りの傾き" hint="50%が垂直。左側・右側に傾けられます。" value={Math.round(50 + scrubTilt * 50)} min={0} max={100} step={1} unit="%" onChange={(v) => setScrubTilt((Math.max(0, Math.min(100, v)) - 50) / 50)} />}
+                <SliderField label="振動数（1区間の往復回数）" value={scrubCycles} min={1} max={100} step={1} unit="回" onChange={(v) => setScrubCycles(Math.max(1, Math.min(100, v)))} />
+                <MotionPreview v={fillMotion === 'vertical' ? scrubV : 0} h={fillMotion === 'horizontal' ? scrubH : 0} cycles={scrubCycles} />
+              </>}
+              <SliderField label="ペンの太さ" value={fillWidth} min={1} max={300} step={1} unit="px" onChange={setFillWidth} />
+            </>}
+            {!fill && pathMode === 'natural' && <p>文字の大きさから行・まとまりを見分けます。近いまとまりを書き切ってから次へ進み、行は1回で左から右へ、背の高い図は左の列から上→下へ書きます。</p>}
+            {!fill && pathMode === 'ink' && <p>背景と異なる色を検出して線の中心をたどります。塗りつぶしや細かい文字では、軌跡が不自然になったり一部が残ったりすることがあります。</p>}
+            {!fill && <>
+            <label>ペンの太さ</label>
+            <div className="choice-row">
+              <button className={`choice ${revealWidth === 0 ? 'on' : ''}`} onClick={() => setRevealWidth(0)}>自動</button>
+              <button className={`choice ${revealWidth > 0 ? 'on' : ''}`} onClick={() => setRevealWidth(revealWidth || 20)}>指定する</button>
+            </div>
+            {revealWidth > 0 && <SliderField label="表示する線の幅" hint="元画像上の幅です。細くするとインクが一部残る場合があります。" value={revealWidth} min={1} max={300} step={1} unit="px" onChange={setRevealWidth} />}
             <label>かたまりの大きさ</label>
             <div className="choice-row" role="radiogroup" aria-label="かたまりの大きさ">
               {DETAILS.map((d) => (
@@ -115,6 +174,7 @@ export function AutoTraceDialog(): React.JSX.Element {
                 </button>
               ))}
             </div>
+            {pathMode === 'group' && <>
             <label>手の動き</label>
             <div className="motion-picker">
               <div className="choice-row wrap" role="radiogroup" aria-label="手の動き">
@@ -135,28 +195,15 @@ export function AutoTraceDialog(): React.JSX.Element {
                   </button>
                 ))}
               </div>
-              <SliderField
-                label="上下のごしごし"
-                hint="0% で上下に振らない（抑える）。大きいほど、行の高さいっぱいに上下させながら進みます"
-                value={Math.round(scrubV * 100)}
-                min={0}
-                max={100}
-                step={5}
-                unit="%"
-                onChange={(v) => setScrubV(v / 100)}
-              />
-              <SliderField
-                label="左右のごしごし"
-                hint="0% で行ったり戻ったりしない（抑える）。大きいほど、手が少し戻ってはまた進む動きになります"
-                value={Math.round(scrubH * 100)}
-                min={0}
-                max={100}
-                step={5}
-                unit="%"
-                onChange={(v) => setScrubH(v / 100)}
-              />
-              <MotionPreview v={scrubV} h={scrubH} />
+              <SliderField label="上下の振幅" hint="100%は画像の高さです。" value={Math.round(scrubV * 100)} min={0} max={100} step={1} unit="%" onChange={(v) => setScrubV(Math.max(0, Math.min(100, v)) / 100)} />
+              <SliderField label="左右の振幅" hint="100%は画像の幅です。" value={Math.round(Math.abs(scrubH) * 100)} min={0} max={100} step={1} unit="%" onChange={(v) => setScrubH(Math.max(0, Math.min(100, v)) / 100)} />
+              <SliderField label="振りの傾き" hint="50%が垂直。上下に振る動きを左右へ傾けます。" value={Math.round(50 + scrubTilt * 50)} min={0} max={100} step={1} unit="%" onChange={(v) => setScrubTilt((Math.max(0, Math.min(100, v)) - 50) / 50)} />
+              <SliderField label="振動数（1区間の往復回数）" value={scrubCycles} min={1} max={100} step={1} unit="回" onChange={(v) => setScrubCycles(Math.max(1, Math.min(100, v)))} />
+              <p>振幅100%は画像全体の高さ・幅です。画像の端では動きが制限されます。</p>
+              <MotionPreview v={scrubV} h={scrubH} cycles={scrubCycles} />
             </div>
+            </>}
+            </>}
             <label>書く速さ</label>
             <div className="choice-row" role="radiogroup" aria-label="書く速さ">
               {SPEEDS.map((s) => (
@@ -184,13 +231,67 @@ export function AutoTraceDialog(): React.JSX.Element {
           <button className="btn" onClick={close}>
             キャンセル
           </button>
-          <button className="btn primary" disabled={busy || !project.image} onClick={() => void run()}>
+          <button className="btn primary" disabled={busy || !project.image || (fill && !selection)} onClick={() => void run()}>
             <Icon name="sparkle" /> {busy ? '解析中…' : '自動で作る'}
           </button>
         </footer>
       </div>
     </div>
   )
+}
+
+/** Use the same generator as the final operation, without changing the project. */
+function FillPreview({ image, selection, width, direction, motion, v, h, cycles, tilt }: { image: ImageAsset; selection: ClipRegion; width: number; direction: FillDirection; motion: FillMotion; v: number; h: number; cycles: number; tilt: number }): React.JSX.Element {
+  const canvas = useRef<HTMLCanvasElement>(null)
+  const [message, setMessage] = useState('プレビューを作成中…')
+  const [zoomSelection, setZoomSelection] = useState(true)
+  useEffect(() => {
+    let cancelled = false
+    setMessage('プレビューを作成中…')
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const stroke = fillSelection(selection, image, width, direction, motion, image.width * 0.65, 0, v, h, cycles, tilt)
+          const source = await loadImage(image.dataUrl)
+          const target = canvas.current
+          if (cancelled || !target) return
+          const bounds = clipBounds(selection, image.width, image.height)
+          const margin = Math.max(10, Math.max(bounds.w, bounds.h) * 0.12)
+          const x = zoomSelection ? Math.max(0, Math.floor(bounds.x - margin)) : 0
+          const y = zoomSelection ? Math.max(0, Math.floor(bounds.y - margin)) : 0
+          const right = zoomSelection ? Math.min(image.width, Math.ceil(bounds.x + bounds.w + margin)) : image.width
+          const bottom = zoomSelection ? Math.min(image.height, Math.ceil(bounds.y + bounds.h + margin)) : image.height
+          const viewWidth = Math.max(1, right - x), viewHeight = Math.max(1, bottom - y)
+          const scale = Math.min(1, 640 / viewWidth, 360 / viewHeight)
+          target.width = Math.max(1, Math.round(viewWidth * scale))
+          target.height = Math.max(1, Math.round(viewHeight * scale))
+          const ctx = target.getContext('2d')!
+          ctx.drawImage(source, x, y, viewWidth, viewHeight, 0, 0, target.width, target.height)
+          ctx.fillStyle = 'rgba(0,0,0,.35)'
+          ctx.fillRect(0, 0, target.width, target.height)
+          const mask = document.createElement('canvas')
+          mask.width = target.width; mask.height = target.height
+          const mc = mask.getContext('2d')!
+          mc.drawImage(rasterizeClip(selection, image.width, image.height), x, y, viewWidth, viewHeight, 0, 0, target.width, target.height)
+          mc.globalCompositeOperation = 'source-in'
+          mc.fillStyle = 'rgba(70,180,255,.3)'
+          mc.fillRect(0, 0, target.width, target.height)
+          ctx.drawImage(mask, 0, 0)
+          ctx.beginPath()
+          for (const [i, p] of stroke.points.entries()) {
+            if (i === 0 || p.b) ctx.moveTo((p.x - x) * scale, (p.y - y) * scale)
+            else ctx.lineTo((p.x - x) * scale, (p.y - y) * scale)
+          }
+          ctx.strokeStyle = '#ff8a32'; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke()
+          setMessage('青：選択範囲　オレンジ：軌跡（線の間はペンを上げます）')
+        } catch (error) {
+          if (!cancelled) setMessage('プレビューできません: ' + (error instanceof Error ? error.message : String(error)))
+        }
+      })()
+    }, 250)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [image, selection, width, direction, motion, v, h, cycles, tilt, zoomSelection])
+  return <div className="fill-preview"><div className="fill-preview-heading"><strong>作成前のプレビュー</strong><button type="button" className="btn" onClick={() => setZoomSelection(!zoomSelection)}>{zoomSelection ? '画像全体' : '範囲を拡大'}</button></div><canvas ref={canvas} aria-label="選択範囲と生成される軌跡のプレビュー" /><p aria-live="polite">{message}{zoomSelection ? '（範囲周辺を拡大中）' : ''}</p></div>
 }
 
 /** 手の動きの小さな図（プリセットのボタン用） */
@@ -203,11 +304,11 @@ function MotionIcon({ v, h }: { v: number; h: number }): React.JSX.Element {
 }
 
 /** いまの設定で、手がどう動くかの見本 */
-function MotionPreview({ v, h }: { v: number; h: number }): React.JSX.Element {
+function MotionPreview({ v, h, cycles }: { v: number; h: number; cycles: number }): React.JSX.Element {
   return (
     <div className="motion-preview" aria-label="手の動きの見本">
       <svg viewBox="0 0 240 44" preserveAspectRatio="none">
-        <path d={motionPath(v, h, 240, 44, 14)} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={motionPath(v, h, 240, 44, cycles)} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     </div>
   )
@@ -217,7 +318,7 @@ function MotionPreview({ v, h }: { v: number; h: number }): React.JSX.Element {
 function motionPath(v: number, h: number, w: number, hgt: number, cycles: number): string {
   const pad = 3
   const cy = hgt / 2
-  if (v <= 0.01 && h <= 0.01) {
+  if (v <= 0.01 && Math.abs(h) <= 0.01) {
     const pts = Array.from({ length: 13 }, (_, i) => {
       const x = pad + ((w - pad * 2) * i) / 12
       return `${x.toFixed(1)},${(cy + Math.sin(i * 0.9) * hgt * 0.08).toFixed(1)}`
@@ -230,7 +331,7 @@ function motionPath(v: number, h: number, w: number, hgt: number, cycles: number
   for (let i = 0; i <= count; i++) {
     const dir = i % 2 === 0 ? -1 : 1
     const edge = i === 0 || i === count
-    const x = pad + half * i + (edge ? 0 : dir * h * half * 0.95)
+    const x = Math.max(1, Math.min(w - 1, pad + half * i + (edge ? 0 : -dir * h * (w - pad * 2) / 2)))
     const y = cy + (edge ? 0 : dir * v * (hgt / 2 - pad))
     pts.push(`${Math.max(pad, Math.min(w - pad, x)).toFixed(1)},${y.toFixed(1)}`)
   }

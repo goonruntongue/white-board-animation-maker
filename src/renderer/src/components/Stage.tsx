@@ -570,6 +570,9 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
 
   // ---- ポインタ操作 ----
   const onPointerDown = (e: React.PointerEvent): void => {
+    // ステージ上のボタンへのタップを描画として扱うと、ポインタ捕捉によって
+    // ボタンのクリックが失われ、短い軌跡まで追加されてしまう。
+    if (e.target instanceof Element && e.target.closest('button, a, input, select, textarea, [role="button"]')) return
     if (!image) return
     if (e.pointerType === 'touch') {
       touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
@@ -916,19 +919,22 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       )}
       {image && !rerecordId && !lassoPolyActive && selection && viewMode === 'edit' && (
         <div className="stage-banner info" title="この状態で描いた軌跡に、選択範囲が記録されます">
-          選択範囲の中だけ表示されます
+          <span>{isPhone ? '範囲を選択中' : '選択範囲の中だけ表示されます'}</span>
+          <button className="btn small primary" data-tour={isPhone ? 'auto-phone' : undefined} onClick={openAutoTrace}>
+            <Icon name="sparkle" size={13} /> 自動で作る
+          </button>
           <button className="btn small" onClick={() => useEditor.getState().setSelection(null)}>
             {isPhone ? '解除' : '選択解除 (Ctrl+D)'}
           </button>
         </div>
       )}
       <canvas ref={loupeRef} className="loupe" style={{ width: LOUPE, height: LOUPE, display: 'none' }} aria-hidden />
-      {image && isPhone && !rerecordId && !selection && !lassoPolyActive && project.strokes.length === 0 && tool === 'draw' && (
+      {image && isPhone && !rerecordId && !selection && !lassoPolyActive && viewMode === 'edit' && (
         <div className="coach-chip">
           <span>
-            <Icon name="pen" size={14} /> 1本指でなぞって描き順を追加
+            <Icon name="pen" size={14} /> 描き順を作る
           </span>
-          <button className="btn small primary" onClick={openAutoTrace}>
+          <button className="btn small primary" data-tour="auto-phone" onClick={openAutoTrace}>
             <Icon name="sparkle" size={13} /> 自動で作る
           </button>
         </div>

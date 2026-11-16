@@ -2966,6 +2966,39 @@ button {
   box-shadow: var(--well-shadow);
   filter: drop-shadow(var(--lcd-glow));
 }
+
+.fill-preview {
+  grid-column: 1 / -1;
+  padding: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--panel-bot);
+}
+.fill-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.fill-preview-heading .btn { min-height: 40px; }
+.fill-preview canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 280px;
+  object-fit: contain;
+  margin-top: 6px;
+  border-radius: 6px;
+  background: #111;
+}
+.fill-preview p { margin: 5px 0 0; font-size: 11px; }
+.app.phone .fill-preview {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  box-shadow: 0 4px 12px rgba(0,0,0,.45);
+}
+.app.phone .fill-preview canvas { max-height: min(20dvh, 150px); }
 .motion-preview svg {
   display: block;
   width: 100%;
@@ -3260,4 +3293,338 @@ button {
 }
 .tour-card .tour-note {
   color: var(--text-2);
+}
+
+/* ============================================================================
+   使い方ガイド（目次・検索付きの大きなモーダル）
+   ========================================================================== */
+.ug-backdrop {
+  z-index: 70;
+}
+.ug-modal {
+  width: min(1020px, calc(100vw - 32px));
+  height: min(760px, calc(100dvh - 40px));
+  display: flex;
+  flex-direction: column;
+}
+.ug-modal header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ug-modal header h2 svg {
+  color: var(--accent-text);
+}
+.ug-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 236px 1fr;
+}
+.ug-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 14px 10px 14px 16px;
+  border-right: 1px solid var(--line);
+  box-shadow: 1px 0 0 var(--hilite);
+}
+.ug-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ug-nav li button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-1);
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.ug-nav li button svg {
+  flex: none;
+  color: var(--text-3);
+}
+.ug-nav li button:hover {
+  background: linear-gradient(180deg, var(--key-top), var(--key-bot));
+  box-shadow: var(--key-shadow);
+}
+.ug-nav li button.on {
+  background: linear-gradient(180deg, var(--key-pressed-top), var(--key-pressed-bot));
+  box-shadow: var(--key-shadow-pressed);
+  color: var(--accent-text);
+}
+.ug-nav li button.on svg {
+  color: var(--accent-text);
+}
+.ug-nav li button.on::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--accent);
+  box-shadow: var(--accent-glow);
+}
+.ug-empty {
+  padding: 10px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.ug-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 30px 40px 28px;
+  user-select: text;
+  scroll-padding-top: 8px;
+}
+.ug-section {
+  padding: 18px 0 8px;
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 1px 0 var(--hilite);
+}
+.ug-section:last-child {
+  border-bottom: 0;
+  box-shadow: none;
+}
+.ug-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 17px;
+  color: var(--text-0);
+  text-shadow: var(--engrave);
+}
+.ug-section h3 svg {
+  color: var(--accent-text);
+}
+.ug-section h4 {
+  margin: 16px 0 6px;
+  font-size: 13.5px;
+  color: var(--text-0);
+}
+.ug-section p,
+.ug-section li,
+.ug-section dd {
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--text-1);
+}
+.ug-section p {
+  margin: 0 0 8px;
+}
+.ug-section ul,
+.ug-section ol {
+  margin: 0 0 8px;
+  padding-left: 22px;
+}
+.ug-section li {
+  margin: 2px 0;
+}
+.ug-section code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--well);
+  box-shadow: var(--well-shadow);
+  font: 12px var(--mono);
+  word-break: break-all;
+}
+.ug-section a {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.ug-ui {
+  display: inline-block;
+  padding: 0 6px;
+  margin: 0 1px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, var(--key-top), var(--key-bot));
+  box-shadow: var(--key-shadow);
+  color: var(--text-0);
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.ug-steps li {
+  margin-bottom: 4px;
+}
+.ug-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ug-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 6px;
+}
+.ug-tip {
+  display: flex;
+  gap: 10px;
+  margin: 12px 0 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--well);
+  box-shadow: var(--well-shadow);
+}
+.ug-tip > span {
+  flex: none;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 5px;
+  background: var(--lcd-bg);
+  color: var(--lcd-fg);
+  text-shadow: var(--lcd-glow);
+  font: 700 11px/20px var(--font);
+}
+.ug-tip.note > span {
+  color: var(--warn);
+  text-shadow: none;
+}
+.ug-tip > div {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-1);
+}
+.ug-table-wrap {
+  overflow-x: auto;
+  margin: 6px 0 10px;
+  border-radius: 9px;
+  box-shadow: var(--well-shadow);
+}
+.ug-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: var(--well);
+}
+.ug-table th,
+.ug-table td {
+  padding: 7px 10px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+  line-height: 1.6;
+}
+.ug-table tr:last-child td {
+  border-bottom: 0;
+}
+.ug-table th {
+  font-size: 11.5px;
+  color: var(--text-2);
+  background: var(--well-deep);
+}
+.ug-table td:first-child {
+  white-space: nowrap;
+  color: var(--text-0);
+}
+.ug-faq dt {
+  margin-top: 12px;
+  font-weight: 700;
+  color: var(--text-0);
+  font-size: 13.5px;
+}
+.ug-faq dd {
+  margin: 4px 0 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--accent-soft);
+}
+.help-pop > button small {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 400;
+}
+.modal-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.guide-link {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--knob);
+  box-shadow: var(--knob-shadow);
+  color: var(--accent-text);
+  font-weight: 800;
+  font-size: 13px;
+}
+
+/* ---------- 狭い画面・スマホ：全画面、目次は上に横並び ---------- */
+@media (max-width: 760px) {
+  .ug-modal {
+    width: 100vw;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+  }
+  .ug-modal header {
+    padding-top: calc(12px + env(safe-area-inset-top));
+  }
+  .ug-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .ug-nav {
+    padding: 10px 12px 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 1px 0 var(--hilite);
+  }
+  .ug-search {
+    font-size: 16px;
+  }
+  .ug-nav ul {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 4px;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+  .ug-nav ul::-webkit-scrollbar {
+    display: none;
+  }
+  .ug-nav li button {
+    width: auto;
+    white-space: nowrap;
+    min-height: 34px;
+  }
+  .ug-nav li button.on::before {
+    left: 10px;
+    right: 10px;
+    top: auto;
+    bottom: 2px;
+    width: auto;
+    height: 2px;
+  }
+  .ug-body {
+    padding: 0 16px calc(30px + env(safe-area-inset-bottom));
+  }
+  .ug-table td:first-child {
+    white-space: normal;
+    min-width: 88px;
+  }
 }

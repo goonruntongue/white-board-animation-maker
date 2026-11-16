@@ -288,7 +288,7 @@ export function runMenuCommand(cmd: string, payload?: unknown): void {
     case 'tour':
       return startTour()
     case 'guide':
-      return openGuide()
+      return openGuide(typeof payload === 'string' ? payload : undefined)
     case 'sample':
       return void importSampleImage()
     case 'auto-trace':

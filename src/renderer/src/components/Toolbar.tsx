@@ -128,8 +128,8 @@ Shift+ドラッグで追加 / Alt+ドラッグで除外`}
       <div className="tb-group end">
         <ThemeSwitch />
         <HelpMenu />
-        <button className="btn" onClick={() => openExport('video')} title="動画 (WebM) として書き出す">
-          <Icon name="film" /> 動画
+        <button className="btn" onClick={() => openExport('video')} title="動画・GIF として書き出す">
+          <Icon name="film" /> 動画・GIF
         </button>
         <button className="btn primary" data-tour="export" onClick={() => openExport('html')} title="単一HTMLとして書き出す (Ctrl+E)">
           <Icon name="code" /> HTMLを書き出す

@@ -27,7 +27,7 @@ import { StrokeList } from './components/StrokeList'
 import { Timeline } from './components/Timeline'
 import { Toast } from './components/Toast'
 import { Toolbar } from './components/Toolbar'
-import { TourGuide } from './components/TourGuide'
+import { UsageGuide } from './components/UsageGuide'
 import { Tour } from './components/Tour'
 import { getTourPrefs, GUIDE_EVENT, TOUR_EVENT } from './lib/tour'
 import { buildTimeline } from './engine/wb-engine'
@@ -55,19 +55,20 @@ export default function App(): React.JSX.Element {
   const [dragOver, setDragOver] = useState(false)
   // tour = ボタンのそばに出すツアー / guide = 説明カードの「使い方ガイド」
   const [tourOpen, setTourOpen] = useState(false)
-  const [guideOpen, setGuideOpen] = useState(false)
+  // 使い方ガイド：開いているときは表示する項目（null は先頭）。undefined は閉じている
+  const [guideSection, setGuideSection] = useState<string | null | undefined>(undefined)
   const total = useMemo(() => buildTimeline(project).total, [project])
   const onZoomChange = useCallback((z: number) => setZoom(z), [])
 
   useEffect(() => {
     const openTour = (): void => {
-      setGuideOpen(false)
+      setGuideSection(undefined)
       useEditor.getState().setMobileSheet(null)
       setTourOpen(true)
     }
-    const openGuideCard = (): void => {
+    const openGuideCard = (e: Event): void => {
       setTourOpen(false)
-      setGuideOpen(true)
+      setGuideSection((e as CustomEvent<string | null>).detail ?? null)
     }
     window.addEventListener(TOUR_EVENT, openTour)
     window.addEventListener(GUIDE_EVENT, openGuideCard)
@@ -152,7 +153,7 @@ export default function App(): React.JSX.Element {
   // ---- キーボードショートカット ----
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (isTyping(e.target) || useEditor.getState().dialog) return
+      if (isTyping(e.target) || useEditor.getState().dialog || guideSection !== undefined) return
       const st = useEditor.getState()
       const mod = e.ctrlKey || e.metaKey
       const k = e.key.toLowerCase()
@@ -228,7 +229,7 @@ export default function App(): React.JSX.Element {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [guideSection])
 
   // ---- ドラッグ＆ドロップ ----
   const onDrop = (e: React.DragEvent): void => {
@@ -278,7 +279,7 @@ export default function App(): React.JSX.Element {
       {dialog === 'auto' && <AutoTraceDialog />}
       <Toast />
       {tourOpen && <Tour isPhone={isPhone} onClose={() => setTourOpen(false)} />}
-      {guideOpen && <TourGuide onClose={() => setGuideOpen(false)} isPhone={isPhone} />}
+      {guideSection !== undefined && <UsageGuide section={guideSection} onClose={() => setGuideSection(undefined)} />}
       {dragOver && (
         <div className="drop-overlay" onDragLeave={() => setDragOver(false)}>
           <div>画像（PNG / JPEG / WebP）または .wbanim をドロップ</div>

@@ -80,6 +80,22 @@ npm run build:web
 ```
 
 `dist/web/` を HTTPS のサーバーに置くと、スマホから開いてホーム画面に追加できます（PWA は HTTPS が必要。localhost は例外）。
+
+### 紹介サイトとアプリを一緒に公開する
+
+Cloudflare Pages のルートには `site/` の紹介サイト、`/app/` には `dist/web/` のブラウザ版を配置します。`site/` だけを公開するとアプリは準備中のページに戻るため、両方をまとめてからデプロイしてください。PowerShell での例：
+
+```powershell
+npm run build:web
+if ($LASTEXITCODE -ne 0) { throw 'Web版のビルドに失敗しました' }
+$publishDir = Join-Path $env:TEMP ('whiteboard-site-' + [guid]::NewGuid())
+New-Item -ItemType Directory -Path $publishDir | Out-Null
+Copy-Item site/* $publishDir -Recurse -Force
+Copy-Item dist/web/* (Join-Path $publishDir 'app') -Recurse -Force
+npx.cmd wrangler pages deploy $publishDir --project-name whiteboard-animation-maker --branch main
+```
+
+紹介サイトの `noindex` ヘッダーはアプリにも適用されます。現在ブラウザ版にログインは必要ありません。
 手元で確認するときは `npm run preview:web`（http://localhost:4310 ）。
 
 ## 開発
@@ -145,7 +161,7 @@ PRD の MVP（8章）はひと通り動く状態です。
 - [x] 手・ペン素材の追従。`assets/hand/` 直下の画像を選択式で使える（既定は hand-man-realistic、`omit/` は対象外）。自作の透過PNG / WebP / SVG もアップロード可。ペン先は自動検出＋クリックで調整
 - [x] 再生・一時停止・シーク、元に戻す/やり直す
 - [x] 単一HTML書き出し（WebP圧縮・解像度制限・自動再生/ループ）
-- [x] WebM 動画書き出し、`.wbanim` プロジェクト保存
+- [x] MP4 / WebM 動画・GIF アニメーション書き出し、`.wbanim` プロジェクト保存（動画形式は環境により異なります）
 - [x] 選択範囲（長方形・楕円形・投げ縄、追加／除外／反転／解除）で、軌跡ごとに表示範囲を制限
 - [ ] 実データでの検証と調整（PRD フェーズ2）
 - [ ] アプリアイコン・インストーラーの署名
