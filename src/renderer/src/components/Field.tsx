@@ -37,6 +37,7 @@ export function SliderField(props: {
           min={min}
           max={max}
           step={step}
+          style={{ '--fill': `${((Math.min(max, Math.max(min, value)) - min) / (max - min)) * 100}%` } as React.CSSProperties}
           value={Math.min(max, Math.max(min, value))}
           onChange={(e) => onChange(Number(e.target.value))}
         />

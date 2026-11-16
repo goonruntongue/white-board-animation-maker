@@ -16,6 +16,7 @@ export function StatusBar({ zoom }: { zoom: number }): React.JSX.Element {
   const project = useEditor((s) => s.project)
   const tool = useEditor((s) => s.tool)
   const selection = useEditor((s) => s.selection)
+  const dirty = useEditor((s) => s.dirty)
   const total = useMemo(() => buildTimeline(project).total, [project])
   const img = project.image
 
@@ -25,7 +26,14 @@ export function StatusBar({ zoom }: { zoom: number }): React.JSX.Element {
       <span>軌跡 {project.strokes.length}</span>
       <span>全長 {formatTime(total)}</span>
       <span>ペン先 {project.settings.defaultRevealWidth}px</span>
-      {selection && <span className="sel-badge">選択範囲あり</span>}
+      <span className="led-item" title="選択範囲">
+        <i className={`led ${selection ? 'on' : ''}`} />
+        選択範囲
+      </span>
+      <span className="led-item" title="保存状態">
+        <i className={`led ${dirty ? 'warn' : 'ok'}`} />
+        {dirty ? '未保存' : '保存済み'}
+      </span>
       <span className="hint">{img ? HINTS[tool] : '画像をドラッグ＆ドロップして始めましょう'}</span>
       <span className="right">{Math.round(zoom * 100)}%</span>
     </div>

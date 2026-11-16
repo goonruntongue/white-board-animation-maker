@@ -4,6 +4,7 @@ import { defaultHand, findPreset } from './engine/handPresets'
 import { createProject, parseProject, PROJECT_EXT, serializeProject } from './engine/project'
 import { invert } from './engine/selection'
 import { buildTimeline } from './engine/wb-engine'
+import { setThemePref, type ThemePref } from './lib/theme'
 import { importHand, importImage } from './lib/imageTools'
 import { openImageFile, openProjectFile, readFileAsDataUrl, saveTextFile } from './lib/platform'
 import { useEditor } from './store'
@@ -223,6 +224,8 @@ export function runMenuCommand(cmd: string, payload?: unknown): void {
       return togglePlay()
     case 'rewind':
       return rewind()
+    case 'theme':
+      return setThemePref(payload as ThemePref, true)
     case 'deselect':
       return deselect()
     case 'invert-selection':

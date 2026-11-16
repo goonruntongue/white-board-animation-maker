@@ -46,10 +46,7 @@ export function Timeline(): React.JSX.Element {
         <button className="icon-btn play" title="再生 / 一時停止 (Space)" onClick={togglePlay}>
           <Icon name={playing ? 'pause' : 'play'} size={18} />
         </button>
-        <div className="timecode">
-          <span>{formatTime(time)}</span>
-          <span className="dim"> / {formatTime(timeline.total)}</span>
-        </div>
+        <Lcd time={time} total={timeline.total} playing={playing} />
         <div className="seg-toggle" role="group" aria-label="表示モード">
           <button className={viewMode === 'edit' ? 'on' : ''} onClick={() => setViewMode('edit')} title="編集表示 (Tab)">
             編集
@@ -86,7 +83,7 @@ export function Timeline(): React.JSX.Element {
               <div
                 key={stroke.id}
                 className={`clip ${stroke.id === selectedId ? 'selected' : ''}`}
-                style={{ left: `${left}%`, width: `${width}%`, background: stroke.color }}
+                style={{ left: `${left}%`, width: `${width}%`, backgroundColor: stroke.color }}
                 title={`${seg.index + 1}. ${stroke.name}`}
                 onPointerDown={(e) => {
                   e.stopPropagation()
@@ -103,6 +100,30 @@ export function Timeline(): React.JSX.Element {
         <div className="playhead" style={{ left: `${(time / total) * 100}%` }} />
       </div>
     </footer>
+  )
+}
+
+const METER_SEGMENTS = 24
+
+/** 液晶風の時間表示（背景に薄く「88:88.88」を敷いて、セグメント表示らしく見せる） */
+function Lcd({ time, total, playing }: { time: number; total: number; playing: boolean }): React.JSX.Element {
+  const lit = total > 0 ? Math.round((time / total) * METER_SEGMENTS) : 0
+  return (
+    <div className="lcd" aria-label={`再生位置 ${formatTime(time)} / ${formatTime(total)}`}>
+      <div className="lcd-top">
+        <span className={`lcd-state ${playing ? 'on' : ''}`}>{playing ? '▶ PLAY' : '■ STOP'}</span>
+        <span className="lcd-total">{formatTime(total)}</span>
+      </div>
+      <div className="lcd-digits">
+        <span className="lcd-ghost">88:88.88</span>
+        <span className="lcd-value">{formatTime(time)}</span>
+      </div>
+      <div className="lcd-meter" aria-hidden>
+        {Array.from({ length: METER_SEGMENTS }, (_, i) => (
+          <i key={i} className={i < lit ? 'on' : ''} />
+        ))}
+      </div>
+    </div>
   )
 }
 

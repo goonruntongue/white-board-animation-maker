@@ -99,7 +99,13 @@ function HtmlExportDialog(): React.JSX.Element {
             <>
               <label>画質</label>
               <div className="inline-range">
-                <input type="range" min={0.5} max={1} step={0.05} value={o.quality} onChange={(e) => set({ quality: Number(e.target.value) })} />
+                <input
+                  type="range"
+                  min={0.5}
+                  max={1}
+                  step={0.05}
+                  style={{ '--fill': `${((o.quality - 0.5) / 0.5) * 100}%` } as React.CSSProperties}
+                  value={o.quality} onChange={(e) => set({ quality: Number(e.target.value) })} />
                 <span>{Math.round(o.quality * 100)}%</span>
               </div>
             </>

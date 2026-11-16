@@ -3,6 +3,7 @@ import { isDesktop } from '../lib/platform'
 import { useEditor, type Tool } from '../store'
 import { Icon, type IconName } from './Icon'
 import { PenSizePicker } from './PenSizePicker'
+import { ThemeSwitch } from './ThemeSwitch'
 
 const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
   { id: 'draw', icon: 'pen', label: '描く', key: 'D' },
@@ -101,6 +102,7 @@ Shift+ドラッグで追加 / Alt+ドラッグで除外`}
       </div>
 
       <div className="tb-group end">
+        <ThemeSwitch />
         <button className="btn" onClick={() => openExport('video')} title="動画 (WebM) として書き出す">
           <Icon name="film" /> 動画
         </button>

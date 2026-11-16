@@ -580,7 +580,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
             <div className="empty-icon">
               <Icon name="upload" size={34} />
             </div>
-            <h2>ホワイトボード清書画像を読み込む</h2>
+            <h2>清書画像を読み込む</h2>
             <p>PNG / JPEG / WebP をここにドラッグ＆ドロップ</p>
             <button className="btn primary" onClick={() => void importImageDialog()}>
               <Icon name="image" /> 画像を選択…

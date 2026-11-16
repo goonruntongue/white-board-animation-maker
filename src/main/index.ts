@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell, type MenuItemConstructorOptions } from 'electron'
 import { readFile, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 
@@ -25,7 +25,8 @@ function createWindow(): void {
     height: 980,
     minWidth: 1100,
     minHeight: 700,
-    backgroundColor: '#16181d',
+    icon: isDev ? join(app.getAppPath(), 'assets/icon/app-icon-hand.ico') : join(process.resourcesPath, 'app-icon.ico'),
+    backgroundColor: nativeTheme.shouldUseDarkColors ? WINDOW_BG.dark : WINDOW_BG.light,
     title: 'Whiteboard Animation Maker',
     show: false,
     webPreferences: {
@@ -68,8 +69,24 @@ async function sendProjectToRenderer(path: string): Promise<void> {
   }
 }
 
-function send(cmd: string): void {
-  mainWindow?.webContents.send('menu', cmd)
+function send(cmd: string, payload?: unknown): void {
+  mainWindow?.webContents.send('menu', cmd, payload)
+}
+
+type ThemePref = 'light' | 'dark' | 'system'
+const WINDOW_BG = { light: '#c9cdd3', dark: '#16171a' }
+
+/** ウィンドウ枠・メニュー・起動時の背景色をテーマに合わせる */
+function applyTheme(pref: ThemePref): void {
+  nativeTheme.themeSource = pref
+  mainWindow?.setBackgroundColor(nativeTheme.shouldUseDarkColors ? WINDOW_BG.dark : WINDOW_BG.light)
+  const item = Menu.getApplicationMenu()?.getMenuItemById(`theme-${pref}`)
+  if (item) item.checked = true
+}
+
+function chooseTheme(pref: ThemePref): void {
+  applyTheme(pref)
+  send('theme', pref)
 }
 
 function buildMenu(): void {
@@ -129,6 +146,15 @@ function buildMenu(): void {
         { role: 'resetZoom', label: 'UIの拡大率をリセット' },
         { role: 'zoomIn', label: 'UIを拡大' },
         { role: 'zoomOut', label: 'UIを縮小' },
+        { type: 'separator' },
+        {
+          label: 'テーマ',
+          submenu: [
+            { id: 'theme-light', label: 'ライト', type: 'radio', click: () => chooseTheme('light') },
+            { id: 'theme-dark', label: 'ダーク', type: 'radio', click: () => chooseTheme('dark') },
+            { id: 'theme-system', label: 'システム設定に合わせる', type: 'radio', checked: true, click: () => chooseTheme('system') }
+          ]
+        },
         { type: 'separator' },
         { role: 'togglefullscreen', label: '全画面表示' },
         ...(isDev ? ([{ role: 'toggleDevTools', label: '開発者ツール' }] as MenuItemConstructorOptions[]) : [])
@@ -194,6 +220,9 @@ ipcMain.handle(
 ipcMain.handle('shell:showItem', (_e, p: string) => shell.showItemInFolder(p))
 
 ipcMain.on('window:setTitle', (_e, title: string) => mainWindow?.setTitle(title))
+ipcMain.on('window:setTheme', (_e, pref: ThemePref) => {
+  if (pref === 'light' || pref === 'dark' || pref === 'system') applyTheme(pref)
+})
 
 // ---------- ライフサイクル ----------
 if (!app.requestSingleInstanceLock()) {

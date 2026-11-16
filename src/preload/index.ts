@@ -16,6 +16,7 @@ const api = {
     ipcRenderer.invoke('file:saveBinary', args),
   showItemInFolder: (p: string): Promise<void> => ipcRenderer.invoke('shell:showItem', p),
   setTitle: (title: string): void => ipcRenderer.send('window:setTitle', title),
+  setTheme: (pref: 'light' | 'dark' | 'system'): void => ipcRenderer.send('window:setTheme', pref),
   onMenu: (cb: (cmd: string, payload?: unknown) => void): (() => void) => {
     const listener = (_e: IpcRendererEvent, cmd: string, payload?: unknown): void => cb(cmd, payload)
     ipcRenderer.on('menu', listener)
