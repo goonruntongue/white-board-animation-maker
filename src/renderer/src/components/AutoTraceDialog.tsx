@@ -59,6 +59,8 @@ export function AutoTraceDialog(): React.JSX.Element {
   const [detail, setDetail] = useState<AutoDetail>(prefs.detail)
   const [pathMode, setPathMode] = useState<'natural' | 'group' | 'ink'>(prefs.pathMode === 'ink' || prefs.pathMode === 'group' ? prefs.pathMode : 'natural')
   const [fill, setFill] = useState(!!selection)
+  // 選択範囲：範囲全体を均一に塗る（area）か、範囲の中の文字・図を見分けて自然な順に描く（detect）
+  const [fillKind, setFillKind] = useState<'area' | 'detect'>('area')
   const [fillDirection, setFillDirection] = useState<FillDirection>('horizontal')
   const [fillMotion, setFillMotion] = useState<FillMotion>('smooth')
   const [fillWidth, setFillWidth] = useState(Math.max(1, project.settings.defaultRevealWidth))
@@ -89,7 +91,9 @@ export function AutoTraceDialog(): React.JSX.Element {
     try {
       const start = mode === 'append' ? existing : 0
       savePrefs({ detail, pathMode, speed, scrubV, scrubH, revealWidth, scrubCycles, scrubTilt, motionVersion: 2 })
-      const result = fill
+      const result = fill && fillKind === 'detect'
+        ? autoTrace(await loadImage(project.image.dataUrl), project.image, project.settings.boardColor, { detail, pathMode: 'natural', speed, revealWidth, within: selection! }, start)
+        : fill
         ? { strokes: [fillSelection(selection!, project.image, fillWidth, fillDirection, fillMotion, project.image.width * ({ slow: 0.38, normal: 0.65, fast: 1.1 }[speed]), start, scrubV, scrubH, scrubCycles, scrubTilt)], blocks: 1, fallback: false }
         : autoTrace(await loadImage(project.image.dataUrl), project.image, project.settings.boardColor, { detail, pathMode, speed, scrubV, scrubH, scrubCycles, scrubTilt, revealWidth }, start)
       const st = useEditor.getState()
@@ -138,6 +142,13 @@ export function AutoTraceDialog(): React.JSX.Element {
             {fill && <>
               <p>先に画像上で範囲を選択してください。選択範囲の中を順に表示します。</p>
               {!selection && <p>選択範囲がありません。ダイアログを閉じて範囲を選んでください。</p>}
+              <label>塗り方</label>
+              <div className="choice-row" role="radiogroup" aria-label="塗り方">
+                <button role="radio" aria-checked={fillKind === 'area'} className={`choice ${fillKind === 'area' ? 'on' : ''}`} onClick={() => setFillKind('area')}><strong>範囲全体を塗る</strong><small>端から端まで均一に</small></button>
+                <button role="radio" aria-checked={fillKind === 'detect'} className={`choice ${fillKind === 'detect' ? 'on' : ''}`} onClick={() => setFillKind('detect')}><strong>中の文字・図を見分けて描く</strong><small>自然に書くと同じ順番</small></button>
+              </div>
+              {fillKind === 'detect' && <p>範囲の中の文字や図だけを見分け、「自然に書く」と同じ順番と動きで描きます。範囲の外は表示しません。</p>}
+              {fillKind === 'area' && <>
               <label>進む方向</label>
               <div className="choice-row" role="radiogroup" aria-label="進む方向">
                 <button role="radio" aria-checked={fillDirection === 'horizontal'} className={`choice ${fillDirection === 'horizontal' ? 'on' : ''}`} onClick={() => setFillDirection('horizontal')}>左から右へ</button>
@@ -155,15 +166,17 @@ export function AutoTraceDialog(): React.JSX.Element {
                 <MotionPreview v={fillMotion === 'vertical' ? scrubV : 0} h={fillMotion === 'horizontal' ? scrubH : 0} cycles={scrubCycles} />
               </>}
               <SliderField label="ペンの太さ" value={fillWidth} min={1} max={300} step={1} unit="px" onChange={setFillWidth} />
+              </>}
             </>}
             {!fill && pathMode === 'natural' && <p>文字の大きさから行・まとまりを見分けます。近いまとまりを書き切ってから次へ進み、行は1回で左から右へ、背の高い図は左の列から上→下へ書きます。</p>}
-            {!fill && pathMode === 'ink' && <p>背景と異なる色を検出して線の中心をたどります。塗りつぶしや細かい文字では、軌跡が不自然になったり一部が残ったりすることがあります。</p>}
+            {!fill && pathMode === 'ink' && <p>「自然に書く」と同じ順番でまとまりを選び、その中で線の中心をたどります。線の太さを場所ごとに測ってペンの太さを自動で切り替え、1回なぞれば線の幅全体が見えるようにします。もう見えている線は飛ばすので、細かい線が多い画像でも短い時間で描けます。元の書き順は分からないため推定です。</p>}
             {!fill && <>
             <label>ペンの太さ</label>
             <div className="choice-row">
               <button className={`choice ${revealWidth === 0 ? 'on' : ''}`} onClick={() => setRevealWidth(0)}>自動</button>
               <button className={`choice ${revealWidth > 0 ? 'on' : ''}`} onClick={() => setRevealWidth(revealWidth || 20)}>指定する</button>
             </div>
+            {revealWidth === 0 && pathMode === 'ink' && <p>自動：線の太さを測り、にじみの分も含めて覆える太さを、場所ごとに選びます。</p>}
             {revealWidth > 0 && <SliderField label="表示する線の幅" hint="元画像上の幅です。細くするとインクが一部残る場合があります。" value={revealWidth} min={1} max={300} step={1} unit="px" onChange={setRevealWidth} />}
             <label>かたまりの大きさ</label>
             <div className="choice-row" role="radiogroup" aria-label="かたまりの大きさ">

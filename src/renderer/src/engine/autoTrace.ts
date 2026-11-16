@@ -1,14 +1,21 @@
 // 描き順の自動生成。
 // 清書画像を解析して、「手が順番に書いていく」軌跡の下書きを作る（あとから手で直せる）。
 //
-//  1. 画像を小さくして背景色を調べ、背景と違う画素を「インク」とみなす
-//  2. インクを少し太らせて、近くの文字どうしをひとかたまり（ブロック）にする
-//  3. ブロックの順番を決める：枠の中にあるものは枠ごとにまとめ、上から下・左から右へ
-//  4. ブロックごとに、インクの重心をたどる軌跡を作る（行が複数あればペンを上げて次の行へ）
-//  5. 各軌跡の表示範囲を、そのブロック自身の形（太らせたマスク）に限定する
-//     → 太いペン幅で一気に見せても、隣のブロックのインクは先に出ない
+// 役割は2つに分かれている：
+//  A. どこから描くか（共通）… 自然に書く・インクの線をたどる・選択範囲の中を見分けて描く で同じものを使う
+//     1. 画像を小さくして背景色を調べ、背景と違う画素を「インク」とみなす（選択範囲があれば、その中だけ）
+//     2. 枠（四角・雲形・丸など、ほかを囲む輪郭）を切り離し、文字の高さに合わせて残りをかたまりにする
+//     3. 近いかたまりを「領域」にまとめ、枠 → 中身、領域ごとに上から下・左から右の順に並べる
+//     4. かたまりの中は splitIntoParts で列・行の「部分」に分ける（段組みは列ごとに書き切る）
+//  B. その部分をどう描くか（描き方ごと）
+//     ・自然に書く（natural）… 行は1回で左→右、背の高い図は縦の列ごとに上→下。枠は輪郭に沿って一周
+//     ・インクの線をたどる（ink）… 部分の中で、細線化した線の中心をたどる
+//     ・かたまりを描く（group）… 従来の方式（幅に対する固定のしきい値・帯で見せる・ごしごし）
+//  各軌跡の表示範囲は、そのかたまり自身の形（＋選択範囲）に限定する
+//     → 太いペン幅で一気に見せても、隣のかたまりのインクは先に出ない
 import { newId, strokeColor } from './project'
-import type { ClipShape, Stroke, StrokePoint } from './types'
+import { rasterizeClip } from './wb-engine'
+import type { ClipRegion, ClipShape, Stroke, StrokePoint } from './types'
 
 export type AutoDetail = 'fine' | 'normal' | 'coarse'
 export type AutoSpeed = 'slow' | 'normal' | 'fast'
@@ -31,6 +38,11 @@ export interface AutoTraceOptions {
   /** 1つの区間あたりの往復回数 */
   scrubCycles?: number
   scrubTilt?: number
+  /**
+   * 選択範囲：これを渡すと、範囲の中のインクだけを見分けて描く（範囲の外は背景として扱い、表示もしない）。
+   * 「どこから描くか」は自然に書くと同じ。動きは pathMode に従う
+   */
+  within?: ClipRegion
 }
 
 /** 手の動き方のおすすめの組み合わせ */
@@ -50,6 +62,8 @@ export interface AutoTraceResult {
   /** natural で推定した文字の高さ（解析用の画素。確認用） */
   charH?: number
 }
+
+type Box = { x0: number; y0: number; x1: number; y1: number }
 
 interface Block {
   id: number
@@ -128,6 +142,173 @@ function polarContour(
     }
   }
   return { points, trace, span, coverage: spans.length / N }
+}
+
+// ================================================================
+//  共通：どこから描くか（まとまりの中を「部分」に分け、描く順に並べる）
+// ================================================================
+/**
+ * かたまりの中を、余白で「列」と「行」に分けていく（XY-cut）。描く順に並んだ部分のリストを返す。
+ *  ・となり合う行が同じ位置に縦の空きを持つ（段組み）なら、左の列を上から下まで書き切ってから右の列へ
+ *  ・ほぼ空の横の行で上下に分ける（飾りの点や線が少しかかっていても分けられる）
+ *  ・1行の中で大きく空いていれば左右に分ける（離れた語句・図）
+ * 分け目は余白の真ん中にとるので、余白に残った少しのインクもどれかの部分が受け持つ（取りこぼさない）。
+ * has(i)：画素 i が、このかたまりのまだ描いていないインクか
+ */
+function splitIntoParts(box: Box, has: (i: number) => boolean, gw: number, charH: number): Box[] {
+  const leaves: { x0: number; y0: number; x1: number; y1: number }[] = []
+  const colGapMin = Math.max(3, Math.round(charH * 1.5))
+  const minSeg = Math.max(2, charH * 0.4)
+  /** 値が gap 以下の並びが minRun 以上続く所の、真ん中の位置（両端は除く） */
+  const gapsOf = (ink: Int32Array, gap: number, minRun: number): number[] => {
+    const out: number[] = []
+    let run = 0
+    for (let i = 0; i < ink.length; i++) {
+      if (ink[i] <= gap) run++
+      else {
+        if (run >= minRun && i - run > 0) out.push(i - Math.ceil(run / 2))
+        run = 0
+      }
+    }
+    return out
+  }
+  /** 列ごとのインク量から、幅 minW 以上の「ほぼ空の列」の区間を返す（両端は除く） */
+  const emptyCols = (col: Int32Array, gap: number, minW: number): [number, number][] => {
+    const out: [number, number][] = []
+    let s0 = -1
+    for (let i = 0; i <= col.length; i++) {
+      if (i < col.length && col[i] <= gap) {
+        if (s0 < 0) s0 = i
+      } else if (s0 >= 0) {
+        if (s0 > 0 && i < col.length && i - s0 >= minW) out.push([s0, i - 1])
+        s0 = -1
+      }
+    }
+    return out
+  }
+  const cut = (x0: number, y0: number, x1: number, y1: number, depth: number): void => {
+    const rowInk = new Int32Array(y1 - y0 + 1)
+    const colInk = new Int32Array(x1 - x0 + 1)
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (has(y * gw + x)) { rowInk[y - y0]++; colInk[x - x0]++ }
+    // インクのある範囲まで縮める
+    let a = 0
+    while (a < rowInk.length && !rowInk[a]) a++
+    if (a === rowInk.length) return
+    let z = rowInk.length - 1
+    while (!rowInk[z]) z--
+    let l = 0
+    while (!colInk[l]) l++
+    let r = colInk.length - 1
+    while (!colInk[r]) r--
+    if (a > 0 || z < rowInk.length - 1 || l > 0 || r < colInk.length - 1) return cut(x0 + l, y0 + a, x0 + r, y0 + z, depth)
+    if (depth > 12) {
+      leaves.push({ x0, y0, x1, y1 })
+      return
+    }
+    // 1) ほぼ空の横の行で、上下の帯に分ける
+    let rowMax = 0
+    for (const v of rowInk) if (v > rowMax) rowMax = v
+    const rowGap = Math.floor(rowMax * 0.06)
+    const bounds = [-1, ...gapsOf(rowInk, rowGap, 1), rowInk.length - 1]
+    // 点・濁点・下線のかけらなど、インクのある行が少なすぎる帯は、となりとまとめる
+    const solid = (i0: number, i1: number): number => {
+      let c = 0
+      for (let i = i0; i <= i1; i++) if (rowInk[i] > rowGap) c++
+      return c
+    }
+    for (let i = 1; i < bounds.length - 1; ) {
+      if (solid(bounds[i - 1] + 1, bounds[i]) < minSeg || solid(bounds[i] + 1, bounds[i + 1]) < minSeg) bounds.splice(i, 1)
+      else i++
+    }
+    // 帯が1つだけ：横に大きく空いていれば左右に分ける（離れた語句・図）。でなければ、これ以上分けない
+    if (bounds.length <= 2) {
+      const vCuts = gapsOf(colInk, 0, colGapMin)
+      if (!vCuts.length) {
+        leaves.push({ x0, y0, x1, y1 })
+        return
+      }
+      let s = x0
+      for (const c of vCuts) {
+        cut(s, y0, x0 + c, y1, depth + 1)
+        s = x0 + c + 1
+      }
+      cut(s, y0, x1, y1, depth + 1)
+      return
+    }
+    // 2) 段組み：となり合う帯が「同じ位置に縦の空き」を持つなら、その帯の集まりを左右の列に分ける。
+    //    左の列を上から下まで書き切ってから、右の列へ進む（行ごとに左右を行き来しない）
+    const minW = Math.max(3, Math.round(charH * 1.0))
+    const bands = []
+    for (let i = 0; i + 1 < bounds.length; i++) {
+      const by0 = y0 + bounds[i] + 1
+      const by1 = y0 + bounds[i + 1]
+      const col = new Int32Array(x1 - x0 + 1)
+      for (let y = by0; y <= by1; y++) for (let x = x0; x <= x1; x++) if (has(y * gw + x)) col[x - x0]++
+      bands.push({ y0: by0, y1: by1, gaps: emptyCols(col, 1, minW) })
+    }
+    const intersect = (p: [number, number][], q: [number, number][]): [number, number][] => {
+      const out: [number, number][] = []
+      for (const [a0, a1] of p) for (const [b0, b1] of q) {
+        const s0 = Math.max(a0, b0)
+        const s1 = Math.min(a1, b1)
+        if (s1 - s0 + 1 >= minW) out.push([s0, s1])
+      }
+      return out
+    }
+    let gi = 0
+    while (gi < bands.length) {
+      let common = bands[gi].gaps
+      let gj = gi + 1
+      while (gj < bands.length) {
+        const next = intersect(common, bands[gj].gaps)
+        if (!next.length) break
+        common = next
+        gj++
+      }
+      const gy0 = bands[gi].y0
+      const gy1 = bands[gj - 1].y1
+      if (gj - gi >= 2 && common.length) {
+        let s = x0
+        for (const [c0, c1] of common) {
+          const c = Math.floor((c0 + c1) / 2)
+          cut(s, gy0, x0 + c, gy1, depth + 1)
+          s = x0 + c + 1
+        }
+        cut(s, gy0, x1, gy1, depth + 1)
+      } else {
+        for (let i = gi; i < gj; i++) cut(x0, bands[i].y0, x1, bands[i].y1, depth + 1)
+      }
+      gi = gj
+    }
+  }
+  cut(box.x0, box.y0, box.x1, box.y1, 0)
+  return leaves
+}
+
+/** インクの画素ごとに、いちばん近い紙（インクでない画素）までの距離（およそユークリッド距離。縁の画素は 1） */
+function distanceToPaper(ink: Uint8Array, w: number, h: number): Float32Array {
+  const INF = 1e6
+  const d = new Float32Array(w * h)
+  for (let i = 0; i < w * h; i++) d[i] = ink[i] ? INF : 0
+  const A = 1
+  const B = Math.SQRT2
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x
+    if (!d[i]) continue
+    let v = d[i]
+    v = Math.min(v, x > 0 ? d[i - 1] + A : A, y > 0 ? d[i - w] + A : A)
+    v = Math.min(v, x > 0 && y > 0 ? d[i - w - 1] + B : B, x < w - 1 && y > 0 ? d[i - w + 1] + B : B)
+    d[i] = v
+  }
+  for (let y = h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--) {
+    const i = y * w + x
+    if (!d[i]) continue
+    let v = d[i]
+    v = Math.min(v, x < w - 1 ? d[i + 1] + A : A, y < h - 1 ? d[i + w] + A : A)
+    v = Math.min(v, x < w - 1 && y < h - 1 ? d[i + w + 1] + B : B, x > 0 && y < h - 1 ? d[i + w - 1] + B : B)
+    d[i] = v
+  }
+  return d
 }
 
 /** 文字の高さの目安：小さなかたまり（文字・部首・単語）の高さの、やや大きめの中央値 */
@@ -227,8 +408,29 @@ export function autoTrace(
     }
   }
 
+  // 選択範囲があるときは、範囲の外のインクを無いものとして扱う
+  let withinArea = n
+  if (opts.within) {
+    const m = document.createElement('canvas')
+    m.width = gw
+    m.height = gh
+    const mctx = m.getContext('2d', { willReadFrequently: true })!
+    mctx.drawImage(rasterizeClip(opts.within, size.width, size.height), 0, 0, gw, gh)
+    const md = mctx.getImageData(0, 0, gw, gh).data
+    withinArea = 0
+    for (let i = 0; i < n; i++) {
+      if (md[i * 4 + 3] >= 128) withinArea++
+      else if (ink[i]) {
+        ink[i] = 0
+        inkCount--
+      }
+    }
+    if (inkCount === 0) throw new Error('選択範囲の中に文字や図が見つかりませんでした')
+  }
+
   // インクがほとんど無い／画面の大半がインク（写真など）のときは、全体を1つとして扱う
-  if (inkCount === 0 || inkCount / n > 0.55) {
+  if (inkCount === 0 || inkCount / Math.max(1, withinArea) > 0.55) {
+    if (opts.within) throw new Error('選択範囲の中で文字や図を見分けられませんでした。「範囲全体を塗る」をお試しください')
     return { strokes: [wholeImageStroke(size, opts, startIndex)], blocks: 1, fallback: true }
   }
 
@@ -240,6 +442,9 @@ export function autoTrace(
   const content = new Uint8Array(ink) // 枠線を取り除いていく
   const frameOf = new Int32Array(n) // 枠線のインクに、その枠の番号
   const natural = opts.pathMode === 'natural'
+  // 線をたどる場合も、自然に書く場合と同じ領域分け・順序を使う。
+  // 実際の軌跡は下で skeleton を使うため、線の中心に沿う動きは維持する。
+  const structured = natural || opts.pathMode === 'ink'
   /** loop：四角ではなく「ほかを囲む輪郭」として見つけた枠（natural のみ） */
   const frames: { id: number; x0: number; y0: number; x1: number; y1: number; ink: number; loop?: boolean }[] = []
   for (let pass = 0; pass < 5; pass++) {
@@ -249,7 +454,7 @@ export function autoTrace(
       const bw = b.x1 - b.x0 + 1
       const bh = b.y1 - b.y0 + 1
       // natural では、ほかのインクを囲んでいる中くらいの輪郭（雲形・丸・角丸の枠など）も枠として扱う
-      const big = natural
+      const big = structured
         ? bw > gw * 0.08 && bh > gh * 0.08
         : (bw > gw * 0.25 || bh > gh * 0.25) && Math.min(bw, bh) > gw * 0.05
       if (!(big && b.ink / (bw * bh) < 0.25)) continue
@@ -278,7 +483,7 @@ export function autoTrace(
       // 4辺とも、辺の長さの6割以上に線が乗っていれば「四角い枠」とみなす
       const isFrame = sides[0] > bw * 0.6 && sides[1] > bw * 0.6 && sides[2] > bh * 0.6 && sides[3] > bh * 0.6
       if (!isFrame) {
-        if (!natural) continue
+        if (!structured) continue
         // 四角でなくても、ほかのかたまりを内側に囲んでいれば「枠」：つながっているインクを丸ごと枠にする
         const encloses = raw.blocks.some(
           (o) => o !== b && o.ink >= 3 && o.x0 > b.x0 && o.y0 > b.y0 && o.x1 < b.x1 && o.y1 < b.y1 && o.y1 - o.y0 + 1 >= 2
@@ -303,8 +508,8 @@ export function autoTrace(
 
   // ---- 2b. 枠線以外を太らせて、かたまりに番号を付ける（横に大きめ：横書きの文字をつなげる） ----
   // natural：しきい値を画像の幅ではなく「文字の高さ」から決める（大きな見出しも小さな文字も同じ感覚で区切る）
-  const charH = natural ? estimateCharHeight(content, gw, gh) : 0
-  if (natural) {
+  const charH = structured ? estimateCharHeight(content, gw, gh) : 0
+  if (structured) {
     // 矢印などのために途中が切れている枠（上下2つに分かれた雲形など）は、1つの枠にまとめる。
     // 入れ子（枠の中の丸数字など）はまとめない：縦の重なりが小さく、上下に並んでいるものだけ
     for (let merged = true; merged; ) {
@@ -318,7 +523,8 @@ export function autoTrace(
           const minW = Math.min(a.x1 - a.x0, o.x1 - o.x0)
           const yOver = Math.min(a.y1, o.y1) - Math.max(a.y0, o.y0)
           const minH = Math.min(a.y1 - a.y0, o.y1 - o.y0)
-          if (xOver < minW * 0.6 || yOver > minH * 0.2 || yOver < -charH * 1.2) continue
+          // 切れ目の大きさは、文字の高さか、かけらの高さの3割の大きい方まで（選択範囲の中だけを見て文字が小さく測られても、雲形の切れ目をつなげる）
+          if (xOver < minW * 0.6 || yOver > minH * 0.2 || yOver < -Math.max(charH * 1.2, minH * 0.3)) continue
           // どちらも「閉じていない」（一周の一部しかない）ときだけ
           if (polarContour(frameOf, gw, a).coverage > 0.85 || polarContour(frameOf, gw, o).coverage > 0.85) continue
           for (let y = o.y0; y <= o.y1; y++) for (let x = o.x0; x <= o.x1; x++) if (frameOf[y * gw + x] === o.id) frameOf[y * gw + x] = a.id
@@ -346,11 +552,11 @@ export function autoTrace(
       frames.splice(i, 1)
     }
   }
-  const rx = natural
+  const rx = structured
     ? Math.max(1, Math.round(charH * NATURAL_MERGE[opts.detail]))
     : Math.max(1, Math.round(gw * MERGE[opts.detail]))
   // 縦は控えめに（行間が詰まった文章でも、行ごとに分かれるように）
-  const ry = natural ? Math.max(1, Math.round(charH * 0.12)) : Math.max(1, Math.round(gw * MERGE[opts.detail] * 0.22))
+  const ry = structured ? Math.max(1, Math.round(charH * 0.12)) : Math.max(1, Math.round(gw * MERGE[opts.detail] * 0.22))
   // 枠線は壁として扱う：太らせたかたまりが枠をまたいで隣のパネルとつながらないよう、線の上を切っておく
   const cutFrames = (mask: Uint8Array): void => {
     if (walls) for (let i = 0; i < n; i++) if (walls[i]) mask[i] = 0
@@ -369,7 +575,7 @@ export function autoTrace(
   }
   // natural：枠の輪郭を一周つないだ線も壁にする（矢印のための切れ目などから、中身が外とつながらないように）
   let walls: Uint8Array | null = null
-  if (natural && frames.length) {
+  if (structured && frames.length) {
     const wc = document.createElement('canvas')
     wc.width = gw
     wc.height = gh
@@ -424,7 +630,7 @@ export function autoTrace(
   // natural：もっと大きく太らせて「領域」（段落・段組みの列・図とその説明など、近いものの集まり）を作る。
   // 領域の中を書き切ってから次の領域へ進む
   const regionOf = new Int32Array(blocks.length + 1)
-  if (natural) {
+  if (structured) {
     const wide = dilate(content, gw, gh, Math.max(rx + 1, Math.round(charH * 1.8)), Math.max(ry + 1, Math.round(charH * 0.8)))
     cutFrames(wide)
     const region = labelComponents(wide, gw, gh, content).labels
@@ -483,7 +689,7 @@ export function autoTrace(
       ordered.push(b)
       visit(b.children)
     }
-    if (!natural) {
+    if (!structured) {
       for (const b of readingOrder(list)) emit(b)
       return
     }
@@ -514,28 +720,16 @@ export function autoTrace(
   const strokes: Stroke[] = []
   const done = new Uint8Array(n) // 枠の一周でなぞり終えたインク
   const skeleton = opts.pathMode === 'ink' ? skeletonize(ink, gw, gh) : null
+  // 線の太さを測るための「紙までの距離」（インクの画素ごと）。中心線の上の値 ×2 が、その場所の線の太さ
+  const inkDist = skeleton ? distanceToPaper(ink, gw, gh) : null
   const edges = skeleton ? new Uint8Array(n) : null
 
   let pen = { x: 0, y: 0 }
   const pending = [...ordered]
   while (pending.length) {
-    let nextBlock = 0
-    if (skeleton) {
-      let best = Infinity
-      for (let i = 0; i < pending.length; i++) {
-        const candidate = pending[i]
-        // 親枠を先に描き、移動距離が近いかたまりを優先する。
-        if (pending.some((parent) => parent.id === candidate.parent)) continue
-        const distance = Math.hypot(
-          Math.max(candidate.x0 - pen.x, 0, pen.x - candidate.x1),
-          Math.max(candidate.y0 - pen.y, 0, pen.y - candidate.y1)
-        )
-        const backwards = Math.max(0, pen.x - candidate.x1) + Math.max(0, pen.y - candidate.y1)
-        const score = distance + backwards * 0.15
-        if (score < best) { best = score; nextBlock = i }
-      }
-    }
-    const b = pending.splice(nextBlock, 1)[0]
+    // 領域順を崩して全体から最も近いブロックを選び直すと、
+    // 隣の段やパネルに飛んでから戻ってくるため、決定済みの順番を守る。
+    const b = pending.shift()!
     const pts: StrokePoint[] = []
     let t = 0
     let last: { x: number; y: number } | null = null
@@ -548,7 +742,7 @@ export function autoTrace(
       if (last) {
         const d = Math.hypot(gx - last.x, gy - last.y)
         // ペンを上げている間は、書くときの3倍の速さで移動する
-        t += lift ? (opts.pathMode === 'ink' ? 60 : natural ? liftMs : LIFT_MS) + (d / (speed * 3)) * 1000 : (d / (speed * pace)) * 1000
+        t += lift ? (opts.pathMode === 'ink' ? 40 : natural ? liftMs : LIFT_MS) + (d / (speed * 3)) * 1000 : (d / (speed * pace)) * 1000
       }
       const p: StrokePoint = { x: Math.round((gx / k) * 10) / 10, y: Math.round((gy / k) * 10) / 10, t: Math.round(t) }
       if (lift && pts.length > 0) {
@@ -567,7 +761,11 @@ export function autoTrace(
     if (skeleton && edges) {
       const dx = [1, 1, 0, -1, -1, -1, 0, 1]
       const dy = [0, 1, 1, 1, 0, -1, -1, -1]
-      const belongs = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < gw && y < gh && skeleton[y * gw + x] === 1 && labels[y * gw + x] === b.id
+      // 線をたどるときも「どこから描くか」は自然に書くと同じ：かたまりを部分に分け、部分ごとに描き切る。
+      // その部分の中だけで線の中心をたどる（部分の外の線は、その部分の番が来てから）
+      let part: Box = b
+      const belongs = (x: number, y: number): boolean =>
+        x >= part.x0 && y >= part.y0 && x <= part.x1 && y <= part.y1 && skeleton[y * gw + x] === 1 && labels[y * gw + x] === b.id
       // 斜めの両端が直角の線でもつながっている場合は、重複する斜め辺を作らない。
       const connected = (x: number, y: number, d: number): boolean => {
         if (!belongs(x + dx[d], y + dy[d])) return false
@@ -597,8 +795,31 @@ export function autoTrace(
         if (steps % 3 !== 0) trail.push({ x, y })
         trails.push(trail)
       }
+      const parts = structured ? splitIntoParts(b, mine, gw, charH) : [b]
+      let tip = pen
+      // ペンが通って見えた所。すでに見えている線（太い線を細線化したときに出るひげ・二重線・塗りの中の線など）はなぞらない
+      const covered = new Uint8Array(n)
+      const stamp = (cx: number, cy: number, r: number): void => {
+        const ri = Math.ceil(r)
+        for (let yy = Math.max(0, Math.floor(cy) - ri); yy <= Math.min(gh - 1, Math.ceil(cy) + ri); yy++)
+          for (let xx = Math.max(0, Math.floor(cx) - ri); xx <= Math.min(gw - 1, Math.ceil(cx) + ri); xx++)
+            if ((xx - cx) * (xx - cx) + (yy - cy) * (yy - cy) <= r * r) covered[yy * gw + xx] = 1
+      }
+      for (const pp of parts) {
+      part = pp
+      // この部分のペンの太さ：中心線の上で測った線の太さの、太め（上位1割）に合わせる。
+      // ＋2 は、にじみ（アンチエイリアスの薄い縁）の分。これで1回なぞれば線の幅全体が見える
+      const radii: number[] = []
+      for (let y = part.y0; y <= part.y1; y++) for (let x = part.x0; x <= part.x1; x++) if (belongs(x, y)) radii.push(inkDist![y * gw + x])
+      radii.sort((a, c) => a - c)
+      const r90 = radii.length ? radii[Math.floor(radii.length * 0.9)] : 1
+      const partWidth = Math.max(3, Math.min(gw * 0.15, r90 * 2 + 2))
+      if (!firstWidth) firstWidth = partWidth
+      bandWidth = partWidth
+      let partStart = true
+      let penWidth = partWidth
       // 端点を先に処理し、残る分岐や閉じた線を後から処理する。
-      for (let phase = 0; phase < 2; phase++) for (let y = b.y0; y <= b.y1; y++) for (let x = b.x0; x <= b.x1; x++) {
+      for (let phase = 0; phase < 2; phase++) for (let y = part.y0; y <= part.y1; y++) for (let x = part.x0; x <= part.x1; x++) {
         if (!belongs(x, y)) continue
         let degree = 0
         for (let d = 0; d < 8; d++) if (connected(x, y, d)) degree++
@@ -609,7 +830,6 @@ export function autoTrace(
         else if (phase === 1 && degree === 0) trails.push([{ x, y }, { x: x + 0.1, y }])
       }
       // 開始点と終了点を比べ、今のペン先から近い端で次の線を描き始める。
-      let tip = pen
       while (trails.length > 0) {
         let next = 0
         let reverse = false
@@ -635,9 +855,32 @@ export function autoTrace(
         const trail = trails[next]
         trails[next] = trails[trails.length - 1]
         trails.pop()
+        // もう見えている線は、ペンを運ばずに飛ばす（時間の大半はこうした短い線への移動だった）。
+        // 短い線（ひげ・点のかけら）は、8割見えていれば十分とみなす
+        let open = 0
+        for (const { x, y } of trail) if (!covered[Math.round(y) * gw + Math.round(x)]) open++
+        const tLen = Math.hypot(trail[trail.length - 1].x - trail[0].x, trail[trail.length - 1].y - trail[0].y)
+        if (open === 0 || (tLen <= partWidth * 3 && open <= trail.length * 0.2)) continue
         if (reverse) trail.reverse()
-        trail.forEach(({ x, y }, i) => push(x, y, i === 0 && (x !== tip.x || y !== tip.y)))
+        // 塗りつぶしや線の交わりなど、この線だけ部分の太さより太いときは、この線の間だけペンを太くする
+        let maxR = 0
+        for (const { x, y } of trail) maxR = Math.max(maxR, inkDist![Math.round(y) * gw + Math.round(x)])
+        const width = Math.max(partWidth, Math.min(gw * 0.15, maxR * 2 + 2))
+        const r = width / 2 - 0.5
+        const switchWidth = width !== penWidth
+        if (pts.length === 0) firstWidth = width // 軌跡の最初の太さは、軌跡全体の基本の太さとして持つ
+        penWidth = width
+        trail.forEach(({ x, y }, i) => {
+          // 部分の最初や、太さを変えるときは、ペンを上げた点にして太さを切り替える
+          // 次の線の書き始めがペン先のすぐそば（ペンの太さ以内）なら、ペンを上げずにそのまま続ける（間を置かない）
+          const near = Math.hypot(x - tip.x, y - tip.y) <= width
+          push(x, y, i === 0 && (partStart || switchWidth || !near), 1, width)
+          if (i > 0) stamp((x + trail[i - 1].x) / 2, (y + trail[i - 1].y) / 2, r)
+          stamp(x, y, r)
+        })
+        partStart = false
         tip = trail[trail.length - 1]
+      }
       }
     } else {
     if (b.frame && natural) {
@@ -699,132 +942,7 @@ export function autoTrace(
       //  ・なければ、インクがほぼ無い横の行で上下に分ける（飾りの点や線が少しかかっていても分けられる）
       //  ・それ以上分けられないもの（1行・1つの図）を、行なら1回で左→右、背の高い図は縦の列ごとに上→下に書く
       // 分け目は余白の真ん中にとるので、余白に残った少しのインクもどれかの部分が受け持つ（取りこぼさない）
-      const leaves: { x0: number; y0: number; x1: number; y1: number }[] = []
-      const colGapMin = Math.max(3, Math.round(charH * 1.5))
-      const minSeg = Math.max(2, charH * 0.4)
-      /** 値が gap 以下の並びが minRun 以上続く所の、真ん中の位置（両端は除く） */
-      const gapsOf = (ink: Int32Array, gap: number, minRun: number): number[] => {
-        const out: number[] = []
-        let run = 0
-        for (let i = 0; i < ink.length; i++) {
-          if (ink[i] <= gap) run++
-          else {
-            if (run >= minRun && i - run > 0) out.push(i - Math.ceil(run / 2))
-            run = 0
-          }
-        }
-        return out
-      }
-      /** 列ごとのインク量から、幅 minW 以上の「ほぼ空の列」の区間を返す（両端は除く） */
-      const emptyCols = (col: Int32Array, gap: number, minW: number): [number, number][] => {
-        const out: [number, number][] = []
-        let s0 = -1
-        for (let i = 0; i <= col.length; i++) {
-          if (i < col.length && col[i] <= gap) {
-            if (s0 < 0) s0 = i
-          } else if (s0 >= 0) {
-            if (s0 > 0 && i < col.length && i - s0 >= minW) out.push([s0, i - 1])
-            s0 = -1
-          }
-        }
-        return out
-      }
-      const cut = (x0: number, y0: number, x1: number, y1: number, depth: number): void => {
-        const rowInk = new Int32Array(y1 - y0 + 1)
-        const colInk = new Int32Array(x1 - x0 + 1)
-        for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (mine(y * gw + x)) { rowInk[y - y0]++; colInk[x - x0]++ }
-        // インクのある範囲まで縮める
-        let a = 0
-        while (a < rowInk.length && !rowInk[a]) a++
-        if (a === rowInk.length) return
-        let z = rowInk.length - 1
-        while (!rowInk[z]) z--
-        let l = 0
-        while (!colInk[l]) l++
-        let r = colInk.length - 1
-        while (!colInk[r]) r--
-        if (a > 0 || z < rowInk.length - 1 || l > 0 || r < colInk.length - 1) return cut(x0 + l, y0 + a, x0 + r, y0 + z, depth)
-        if (depth > 12) {
-          leaves.push({ x0, y0, x1, y1 })
-          return
-        }
-        // 1) ほぼ空の横の行で、上下の帯に分ける
-        let rowMax = 0
-        for (const v of rowInk) if (v > rowMax) rowMax = v
-        const rowGap = Math.floor(rowMax * 0.06)
-        const bounds = [-1, ...gapsOf(rowInk, rowGap, 1), rowInk.length - 1]
-        // 点・濁点・下線のかけらなど、インクのある行が少なすぎる帯は、となりとまとめる
-        const solid = (i0: number, i1: number): number => {
-          let c = 0
-          for (let i = i0; i <= i1; i++) if (rowInk[i] > rowGap) c++
-          return c
-        }
-        for (let i = 1; i < bounds.length - 1; ) {
-          if (solid(bounds[i - 1] + 1, bounds[i]) < minSeg || solid(bounds[i] + 1, bounds[i + 1]) < minSeg) bounds.splice(i, 1)
-          else i++
-        }
-        // 帯が1つだけ：横に大きく空いていれば左右に分ける（離れた語句・図）。でなければ、これ以上分けない
-        if (bounds.length <= 2) {
-          const vCuts = gapsOf(colInk, 0, colGapMin)
-          if (!vCuts.length) {
-            leaves.push({ x0, y0, x1, y1 })
-            return
-          }
-          let s = x0
-          for (const c of vCuts) {
-            cut(s, y0, x0 + c, y1, depth + 1)
-            s = x0 + c + 1
-          }
-          cut(s, y0, x1, y1, depth + 1)
-          return
-        }
-        // 2) 段組み：となり合う帯が「同じ位置に縦の空き」を持つなら、その帯の集まりを左右の列に分ける。
-        //    左の列を上から下まで書き切ってから、右の列へ進む（行ごとに左右を行き来しない）
-        const minW = Math.max(3, Math.round(charH * 1.0))
-        const bands = []
-        for (let i = 0; i + 1 < bounds.length; i++) {
-          const by0 = y0 + bounds[i] + 1
-          const by1 = y0 + bounds[i + 1]
-          const col = new Int32Array(x1 - x0 + 1)
-          for (let y = by0; y <= by1; y++) for (let x = x0; x <= x1; x++) if (mine(y * gw + x)) col[x - x0]++
-          bands.push({ y0: by0, y1: by1, gaps: emptyCols(col, 1, minW) })
-        }
-        const intersect = (p: [number, number][], q: [number, number][]): [number, number][] => {
-          const out: [number, number][] = []
-          for (const [a0, a1] of p) for (const [b0, b1] of q) {
-            const s0 = Math.max(a0, b0)
-            const s1 = Math.min(a1, b1)
-            if (s1 - s0 + 1 >= minW) out.push([s0, s1])
-          }
-          return out
-        }
-        let gi = 0
-        while (gi < bands.length) {
-          let common = bands[gi].gaps
-          let gj = gi + 1
-          while (gj < bands.length) {
-            const next = intersect(common, bands[gj].gaps)
-            if (!next.length) break
-            common = next
-            gj++
-          }
-          const gy0 = bands[gi].y0
-          const gy1 = bands[gj - 1].y1
-          if (gj - gi >= 2 && common.length) {
-            let s = x0
-            for (const [c0, c1] of common) {
-              const c = Math.floor((c0 + c1) / 2)
-              cut(s, gy0, x0 + c, gy1, depth + 1)
-              s = x0 + c + 1
-            }
-            cut(s, gy0, x1, gy1, depth + 1)
-          } else {
-            for (let i = gi; i < gj; i++) cut(x0, bands[i].y0, x1, bands[i].y1, depth + 1)
-          }
-          gi = gj
-        }
-      }
-      cut(b.x0, b.y0, b.x1, b.y1, 0)
+      const leaves = splitIntoParts(b, mine, gw, charH)
 
       const wordGap = Math.max(3, Math.round(charH * 0.6))
       let prevLeaf: { x0: number; y0: number; x1: number; y1: number } | null = null
@@ -1024,6 +1142,8 @@ export function autoTrace(
       }
     }
     const clip: ClipShape = { kind: 'rle', mode: 'add', gw, gh, runs: runsOut, box: [b.x0, b.y0, b.x1 + 1, b.y1 + 1] }
+    // 選択範囲があるときは、表示もその範囲の中に限る（太らせたかたまりが範囲の外へはみ出しても見せない）
+    const shapes: ClipShape[] = opts.within ? [clip, { kind: 'region', mode: 'intersect', region: structuredClone(opts.within) }] : [clip]
 
     pen = { x: pts[pts.length - 1].x * k, y: pts[pts.length - 1].y * k }
     const index = startIndex + strokes.length
@@ -1034,13 +1154,13 @@ export function autoTrace(
       // 行の高さより十分太くして、手が通った所の縦一列を一度に見せる（範囲の外は clip が守る）
       revealWidth:
         opts.revealWidth ||
-        (frameWidth ? Math.round(frameWidth / k) : natural && firstWidth ? Math.round(firstWidth / k) : Math.min(600, Math.round(bandWidth / k))),
+        (frameWidth ? Math.round(frameWidth / k) : (natural || skeleton) && firstWidth ? Math.round(firstWidth / k) : Math.min(600, Math.round(bandWidth / k))),
       duration: Math.max(300, pts[pts.length - 1].t),
       // natural：同じ領域の中は短い間、次の領域へ移るときは少し長めの間
       delayAfter: natural ? (pending.length && (regionOf[pending[0].id] || -pending[0].id) === (regionOf[b.id] || -b.id) ? 140 : 380) : 180,
       useRecordedTiming: true,
       color: strokeColor(index),
-      clip: { shapes: [clip] }
+      clip: { shapes }
     })
   }
 
