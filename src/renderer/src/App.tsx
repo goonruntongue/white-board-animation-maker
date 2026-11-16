@@ -17,7 +17,7 @@ import {
 } from './commands'
 import { ExportDialogs } from './components/ExportDialogs'
 import { Inspector } from './components/Inspector'
-import { MobileNav } from './components/MobileNav'
+import { PhoneAppBar, PhoneContextBar, PhoneDock } from './components/phone/PhoneChrome'
 import { PEN_PRESETS } from './components/PenSizePicker'
 import { Stage } from './components/Stage'
 import { StatusBar } from './components/StatusBar'
@@ -27,6 +27,7 @@ import { Toast } from './components/Toast'
 import { Toolbar } from './components/Toolbar'
 import { buildTimeline } from './engine/wb-engine'
 import { isDesktop, setWindowTitle } from './lib/platform'
+import { useIsPhone } from './lib/useMedia'
 import { SELECTION_TOOLS, useEditor } from './store'
 
 function isTyping(target: EventTarget | null): boolean {
@@ -42,6 +43,8 @@ export default function App(): React.JSX.Element {
   const dirty = useEditor((s) => s.dirty)
   const filePath = useEditor((s) => s.filePath)
   const mobileSheet = useEditor((s) => s.mobileSheet)
+  const isPhone = useIsPhone()
+  const hasImage = !!project.image
   const [zoom, setZoom] = useState(1)
   const [dragOver, setDragOver] = useState(false)
   const total = useMemo(() => buildTimeline(project).total, [project])
@@ -168,7 +171,7 @@ export default function App(): React.JSX.Element {
 
   return (
     <div
-      className="app"
+      className={`app ${isPhone ? 'phone' : ''} ${hasImage ? 'has-image' : ''}`}
       data-sheet={mobileSheet ?? undefined}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('Files')) {
@@ -181,7 +184,14 @@ export default function App(): React.JSX.Element {
       }}
       onDrop={onDrop}
     >
-      <Toolbar />
+      {isPhone ? (
+        <>
+          <PhoneAppBar />
+          <PhoneContextBar />
+        </>
+      ) : (
+        <Toolbar />
+      )}
       <div className="workspace">
         <StrokeList />
         <main className="center">
@@ -190,8 +200,7 @@ export default function App(): React.JSX.Element {
         <Inspector />
       </div>
       <Timeline />
-      <StatusBar zoom={zoom} />
-      <MobileNav />
+      {isPhone ? <PhoneDock /> : <StatusBar zoom={zoom} />}
       <ExportDialogs />
       <Toast />
       {dragOver && (

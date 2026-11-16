@@ -37,11 +37,13 @@ export function readFileAsDataUrl(file: File): Promise<string> {
   })
 }
 
-function pickFile(accept: string): Promise<File | null> {
+function pickFile(accept: string, camera = false): Promise<File | null> {
   return new Promise((resolve) => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = accept
+    // スマホでカメラを直接起動する（背面カメラ）
+    if (camera) input.setAttribute('capture', 'environment')
     input.onchange = () => resolve(input.files?.[0] ?? null)
     input.oncancel = () => resolve(null)
     input.click()
@@ -57,7 +59,11 @@ function download(blob: Blob, name: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 5000)
 }
 
-export async function openImageFile(opts?: { allowSvg?: boolean }): Promise<{ name: string; dataUrl: string } | null> {
+export async function openImageFile(opts?: { allowSvg?: boolean; camera?: boolean }): Promise<{ name: string; dataUrl: string } | null> {
+  if (opts?.camera) {
+    const f = await pickFile('image/*', true)
+    return f ? { name: f.name || 'camera.jpg', dataUrl: await readFileAsDataUrl(f) } : null
+  }
   if (window.desktop) return window.desktop.openImage(opts)
   const f = await pickFile(opts?.allowSvg ? 'image/png,image/webp,image/svg+xml,.svg' : 'image/png,image/jpeg,image/webp')
   return f ? { name: f.name, dataUrl: await readFileAsDataUrl(f) } : null

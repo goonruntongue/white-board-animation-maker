@@ -6,7 +6,7 @@ import { dataUrlBytes, formatBytes } from '../lib/imageTools'
 import { useEditor } from '../store'
 import { ColorField, Section, SliderField, ToggleField } from './Field'
 import { Icon } from './Icon'
-import { SheetBar } from './MobileNav'
+import { SheetBar } from './SheetBar'
 
 type Tab = 'stroke' | 'project' | 'assets'
 

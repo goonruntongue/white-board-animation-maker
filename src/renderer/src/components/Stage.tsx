@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { importImageDialog } from '../commands'
+import { captureImage, importImageDialog } from '../commands'
 import { simplifyPoints, strokeFromRecording } from '../engine/project'
 import { combine, flattenShapes, isDegenerate, normalizeBox, type SelectionOp } from '../engine/selection'
 import type { ClipShape, Stroke, StrokePoint } from '../engine/types'
 import { buildTimeline, rasterizeClip, traceClipShape, WBRenderer } from '../engine/wb-engine'
 import { CANVAS_FONT_FAMILY } from '../fonts'
 import { useAssets } from '../lib/useAssets'
+import { haptic, useIsPhone } from '../lib/useMedia'
 import { SELECTION_TOOLS, useEditor } from '../store'
 import { Icon } from './Icon'
 
@@ -47,6 +48,8 @@ type Draft =
 
 const PADDING = 40
 const PADDING_SMALL = 14 // スマホなど狭い画面
+const LOUPE = 128 // ルーペの直径（画面px）
+const LOUPE_ZOOM = 2.2 // ルーペの拡大率（いまの表示に対して）
 
 /** 2本指操作（ピンチでズーム・ドラッグで移動）の開始時の状態 */
 interface Pinch {
@@ -124,6 +127,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const gestureLock = useRef(false)
   const draft = useRef<Draft | null>(null)
   const cursor = useRef<Pt | null>(null)
+  const loupeRef = useRef<HTMLCanvasElement>(null)
+  const isPhone = useIsPhone()
   const antsOffset = useRef(0)
   const scratch = useRef<HTMLCanvasElement | null>(null)
   const [hasDraft, setHasDraft] = useState(false)
@@ -366,6 +371,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       return
     }
     st.setSelection(combine(st.selection, shape, d.op))
+    haptic()
   }, [drawOverlay])
 
   // 多角形投げ縄の Enter（確定）/ Esc（取り消し）/ Backspace（1つ戻る）
@@ -437,7 +443,66 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     return { x: pt.x - rect.left, y: pt.y - rect.top }
   }
 
+  // ---- ルーペ：指でなぞると指先が隠れるので、指の上に拡大表示する ----
+  const showLoupe = (clientX: number, clientY: number): void => {
+    const lc = loupeRef.current
+    const container = containerRef.current
+    if (!lc || !container || !image) return
+    const rect = container.getBoundingClientRect()
+    const dpr = window.devicePixelRatio || 1
+    const size = Math.round(LOUPE * dpr)
+    if (lc.width !== size) lc.width = lc.height = size
+    const ctx = lc.getContext('2d')!
+    const p = toImage(clientX, clientY)
+    const half = LOUPE / 2 / (scale * LOUPE_ZOOM) // 画像上で見せる範囲（半径）
+    const sx = p.x - half
+    const sy = p.y - half
+    const sw = half * 2
+    ctx.save()
+    ctx.clearRect(0, 0, size, size)
+    ctx.beginPath()
+    ctx.arc(size / 2, size / 2, size / 2 - dpr, 0, Math.PI * 2)
+    ctx.clip()
+    ctx.fillStyle = project.settings.boardColor
+    ctx.fillRect(0, 0, size, size)
+    const layer = (src: CanvasImageSource | null | undefined, alpha = 1): void => {
+      if (!src) return
+      ctx.globalAlpha = alpha
+      ctx.drawImage(src, sx, sy, sw, sw, 0, 0, size, size)
+    }
+    if (viewMode === 'edit') layer(assets.image, 0.22)
+    layer(renderCanvasRef.current)
+    layer(dimRef.current)
+    layer(overlayRef.current)
+    ctx.globalAlpha = 1
+    // 中心の十字（ペン先の位置）
+    ctx.strokeStyle = 'rgba(255,90,31,0.95)'
+    ctx.lineWidth = 1.5 * dpr
+    const c = size / 2
+    const r = 7 * dpr
+    ctx.beginPath()
+    ctx.moveTo(c - r, c)
+    ctx.lineTo(c + r, c)
+    ctx.moveTo(c, c - r)
+    ctx.lineTo(c, c + r)
+    ctx.stroke()
+    ctx.restore()
+    // 指の左上に出す（上が足りなければ下へ）。画面からはみ出さないように寄せる
+    const fx = clientX - rect.left
+    const fy = clientY - rect.top
+    let x = fx - LOUPE * 0.75
+    let y = fy - LOUPE - 36
+    if (y < 6) y = fy + 40
+    x = Math.max(6, Math.min(rect.width - LOUPE - 6, x))
+    lc.style.transform = `translate(${x}px, ${y}px)`
+    lc.style.display = 'block'
+  }
+  const hideLoupe = (): void => {
+    if (loupeRef.current) loupeRef.current.style.display = 'none'
+  }
+
   const startPinch = (): void => {
+    hideLoupe()
     const [a, b] = [...touches.current.values()]
     // 1本目の指で始めていた線や選択は取り消す（ピンチのつもりの誤描画を防ぐ）
     recording.current = null
@@ -536,6 +601,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       if (st.playing) st.setPlaying(false)
       if (st.viewMode !== 'edit') st.setViewMode('edit')
       recording.current = { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }] }
+      if (e.pointerType === 'touch') requestAnimationFrame(() => showLoupe(e.clientX, e.clientY))
       capture(e)
       drawOverlay()
     } else if (tool === 'select') {
@@ -587,9 +653,12 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     }
     cursor.current = e.pointerType === 'touch' ? null : p
     drawOverlay()
+    const held = (recording.current?.pointerId === e.pointerId) || (draft.current?.pointerId === e.pointerId)
+    if (e.pointerType === 'touch' && held) showLoupe(e.clientX, e.clientY)
   }
 
   const onPointerUp = (e: React.PointerEvent): void => {
+    hideLoupe()
     if (e.pointerType === 'touch') {
       touches.current.delete(e.pointerId)
       if (touches.current.size < 2) pinch.current = null
@@ -634,8 +703,25 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         st.notify('軌跡を録り直しました')
       } else {
         st.addStroke(strokeFromRecording(st.project, rec.points, st.project.strokes.length, st.selection))
+        haptic()
       }
     }
+    drawOverlay()
+  }
+
+  const popVertex = (): void => {
+    const d = draft.current
+    if (!d || d.kind !== 'lasso') return
+    d.points.pop()
+    if (d.points.length === 0) {
+      draft.current = null
+      setHasDraft(false)
+    }
+    drawOverlay()
+  }
+  const cancelDraft = (): void => {
+    draft.current = null
+    setHasDraft(false)
     drawOverlay()
   }
 
@@ -685,10 +771,17 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
               <Icon name="upload" size={34} />
             </div>
             <h2>画像を読み込む</h2>
-            <p>PNG / JPEG / WebP をここにドラッグ＆ドロップ</p>
-            <button className="btn primary" onClick={() => void importImageDialog()}>
-              <Icon name="image" /> 画像を選択…
-            </button>
+            <p>{isPhone ? 'PNG / JPEG / WebP、またはカメラで撮影' : 'PNG / JPEG / WebP をここにドラッグ＆ドロップ'}</p>
+            <div className="empty-actions">
+              <button className="btn primary" onClick={() => void importImageDialog()}>
+                <Icon name="image" /> 画像を選ぶ
+              </button>
+              {isPhone && (
+                <button className="btn" onClick={() => void captureImage()}>
+                  <Icon name="camera" /> 写真を撮る
+                </button>
+              )}
+            </div>
             <ol className="steps">
               <li>画像を読み込む</li>
               <li>「描く」ツールで描き順をなぞる</li>
@@ -717,16 +810,35 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         </div>
       )}
       {image && !rerecordId && lassoPolyActive && (
-        <div className="stage-banner info">
-          クリックで頂点を追加 ・ 始点クリック / ダブルクリック / Enter で確定 ・ Backspace で1つ戻る ・ Esc で取り消し
+        <div className="stage-banner info lasso-banner">
+          <span>
+            {isPhone ? 'タップで頂点を追加 ・ 始点をタップで確定' : 'クリックで頂点を追加 ・ 始点クリック / ダブルクリック / Enter で確定'}
+          </span>
+          <span className="banner-actions">
+            <button className="btn small" onClick={popVertex}>
+              1つ戻る
+            </button>
+            <button className="btn small" onClick={cancelDraft}>
+              取消
+            </button>
+            <button className="btn small primary" onClick={finishDraft}>
+              確定
+            </button>
+          </span>
         </div>
       )}
       {image && !rerecordId && !lassoPolyActive && selection && viewMode === 'edit' && (
         <div className="stage-banner info" title="この状態で描いた軌跡に、選択範囲が記録されます">
           選択範囲の中だけ表示されます
           <button className="btn small" onClick={() => useEditor.getState().setSelection(null)}>
-            選択解除 (Ctrl+D)
+            {isPhone ? '解除' : '選択解除 (Ctrl+D)'}
           </button>
+        </div>
+      )}
+      <canvas ref={loupeRef} className="loupe" style={{ width: LOUPE, height: LOUPE, display: 'none' }} aria-hidden />
+      {image && isPhone && !rerecordId && !selection && !lassoPolyActive && project.strokes.length === 0 && tool === 'draw' && (
+        <div className="coach-chip">
+          <Icon name="pen" size={14} /> 1本指でなぞると描き順に追加 ・ 2本指で拡大・移動
         </div>
       )}
       {image && (

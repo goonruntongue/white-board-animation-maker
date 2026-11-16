@@ -91,6 +91,12 @@ export async function importImageDialog(): Promise<void> {
   if (res) await setImageFromDataUrl(res.name, res.dataUrl)
 }
 
+/** スマホのカメラで撮影して読み込む */
+export async function captureImage(): Promise<void> {
+  const res = await openImageFile({ camera: true })
+  if (res) await setImageFromDataUrl(res.name, res.dataUrl)
+}
+
 export async function importImageFile(file: File): Promise<void> {
   if (file.name.toLowerCase().endsWith('.' + PROJECT_EXT)) {
     if (confirmDiscard()) loadProjectText(await file.text(), null)

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
-import { SheetBar } from './MobileNav'
+import { SheetBar } from './SheetBar'
 
 export function StrokeList(): React.JSX.Element {
   const strokes = useEditor((s) => s.project.strokes)

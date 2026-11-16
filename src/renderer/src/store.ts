@@ -29,6 +29,8 @@ interface EditorState {
   selectionMode: SelectionOp
 
   tool: Tool
+  /** 最後に使った選択ツール（スマホのドックの「範囲」ボタン用） */
+  lastSelTool: 'rect' | 'ellipse' | 'lasso'
   selectedId: string | null
   /** 再生ヘッド (ms) */
   time: number
@@ -78,6 +80,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   selection: null,
   selectionMode: 'new',
   tool: 'draw',
+  lastSelTool: 'rect',
   selectedId: null,
   time: 0,
   playing: false,
@@ -199,7 +202,8 @@ export const useEditor = create<EditorState>((set, get) => ({
       rerecordId: null
     }),
   markSaved: (filePath) => set({ filePath, dirty: false }),
-  setTool: (tool) => set({ tool }),
+  setTool: (tool) =>
+    set(tool === 'rect' || tool === 'ellipse' || tool === 'lasso' ? { tool, lastSelTool: tool } : { tool }),
   select: (selectedId) => set({ selectedId }),
   setTime: (time) => set({ time }),
   setPlaying: (playing) => set(playing ? { playing, viewMode: 'preview' } : { playing }),

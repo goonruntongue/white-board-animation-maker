@@ -1852,10 +1852,36 @@ button {
   touch-action: manipulation;
 }
 
-/* シートのつまみ・下部ナビはスマホ表示のときだけ */
-.sheet-bar,
-.mobile-nav {
+/* シートのつまみはスマホ表示のときだけ */
+.sheet-bar {
   display: none;
+}
+/* ルーペ（指でなぞるときの拡大表示） */
+.loupe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 20;
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow:
+    0 0 0 3px var(--panel-flat),
+    0 0 0 4px rgba(0, 0, 0, 0.35),
+    0 10px 26px rgba(0, 0, 0, 0.45);
+}
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.lasso-banner {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.banner-actions {
+  display: flex;
+  gap: 6px;
 }
 
 /* ---------- 指で操作する端末：押しやすい大きさ、ホバーに頼らない ---------- */
@@ -1916,248 +1942,691 @@ button {
   }
 }
 
-/* ---------- スマホ ---------- */
-@media (max-width: 820px) {
-  :root {
-    --nav-h: 60px;
-  }
-  .app {
-    grid-template-rows: auto 1fr auto auto;
-    height: 100%;
-  }
-  .statusbar {
-    display: none;
-  }
 
-  /* ツールバー：1行で横にスクロール */
-  .toolbar {
-    height: auto;
-    min-height: 54px;
-    padding: calc(6px + env(safe-area-inset-top)) 10px 6px;
-    gap: 6px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-  }
-  .toolbar::-webkit-scrollbar {
-    display: none;
-  }
-  .toolbar > * {
-    flex: none;
-  }
-  .brand-name,
-  .doc-title,
-  .tb-label,
-  .tool-btn span,
-  .tb-group.end .btn {
-    display: none;
-  }
-  .tb-group.end {
-    margin-left: 0;
-  }
+/* ============================================================================
+   スマホ用レイアウト（.app.phone：App が画面サイズを見て切り替える）
+   縦向き：上部バー / オプションバー / キャンバス / タイムライン / ドック
+   横向き：左にドック（縦並び）、右にキャンバスとタイムライン
+   ========================================================================== */
+.app.phone {
+  --dock-h: 64px;
+  /* minmax(0, 1fr)：中身（横スクロールするオプションバーなど）に押し広げられないように */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto 1fr auto auto;
+  grid-template-areas: 'appbar' 'context' 'main' 'timeline' 'dock';
+}
+.app.phone .phone-appbar {
+  grid-area: appbar;
+}
+.app.phone .phone-context {
+  grid-area: context;
+}
+.app.phone .workspace {
+  grid-area: main;
+  grid-template-columns: minmax(0, 1fr);
+}
+.app.phone > * {
+  min-width: 0;
+}
+.app.phone .timeline {
+  grid-area: timeline;
+}
+.app.phone .phone-dock {
+  grid-area: dock;
+}
 
-  /* 左右のパネルは下から出るシートに */
-  .workspace {
-    grid-template-columns: 1fr;
-  }
-  .panel.left,
-  .panel.right {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
-    height: min(62dvh, 560px);
-    z-index: 40;
-    border: 0;
-    border-radius: 18px 18px 0 0;
-    box-shadow:
-      0 -14px 40px rgba(0, 0, 0, 0.45),
-      inset 0 1px 0 var(--hilite);
-    transform: translateY(105%);
-    visibility: hidden;
-    transition:
-      transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1),
-      visibility 0s 0.26s;
-  }
-  .app[data-sheet='strokes'] .panel.left,
-  .app[data-sheet='inspector'] .panel.right {
-    transform: none;
-    visibility: visible;
-    transition:
-      transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1),
-      visibility 0s;
-  }
-  .panel.left .panel-header {
-    display: none;
-  }
-  .sheet-bar {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 10px 6px 18px;
-  }
-  .sheet-grip {
-    position: absolute;
-    top: 6px;
-    left: 50%;
-    width: 40px;
-    height: 5px;
-    margin-left: -20px;
-    border-radius: 5px;
-    background: var(--well-deep);
-    box-shadow: var(--well-shadow);
-  }
-  .sheet-title {
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--text-1);
-    text-shadow: var(--engrave);
-  }
-  .tabs {
-    margin-top: 2px;
-  }
+/* 上部バー */
+.phone-appbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 50px;
+  padding: calc(4px + env(safe-area-inset-top)) 8px 4px;
+  background-image: var(--noise), var(--hairline), linear-gradient(180deg, var(--panel-top), var(--panel-bot));
+  border-bottom: 1px solid var(--line-strong);
+  box-shadow: inset 0 1px 0 var(--hilite);
+  position: relative;
+  z-index: 3;
+}
+.pa-btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--key-top), var(--key-bot));
+  box-shadow: var(--key-shadow);
+  color: var(--text-1);
+}
+.pa-btn:active:not(:disabled) {
+  background: linear-gradient(180deg, var(--key-pressed-top), var(--key-pressed-bot));
+  box-shadow: var(--key-shadow-pressed);
+}
+.pa-btn:disabled {
+  opacity: 0.35;
+}
+.pa-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-0);
+  text-shadow: var(--engrave);
+}
+.pa-title span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 
-  /* タイムライン：操作部と時間軸を縦に積む */
-  .timeline {
-    grid-template-columns: 1fr;
-    height: auto;
+/* オプションバー（道具ごとの設定）：横にスクロールできる1行 */
+.phone-context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 54px;
+  padding: 5px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--well);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid var(--line-strong);
+  position: relative;
+  z-index: 2;
+}
+.phone-context::-webkit-scrollbar {
+  display: none;
+}
+.phone-context > * {
+  flex: none;
+}
+.pc-label {
+  padding: 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+  text-shadow: var(--engrave);
+}
+.pc-key {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--key-top), var(--key-bot));
+  box-shadow: var(--key-shadow);
+  color: var(--text-1);
+  text-shadow: var(--engrave);
+}
+.pc-key small {
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+}
+.pc-key.text {
+  font-size: 12.5px;
+  font-weight: 700;
+  min-width: 46px;
+}
+.pc-key.on {
+  background: linear-gradient(180deg, var(--key-pressed-top), var(--key-pressed-bot));
+  box-shadow: var(--key-shadow-pressed);
+  color: var(--accent-text);
+}
+.pc-key.on .pen-dot,
+.pc-key.on svg {
+  filter: drop-shadow(var(--accent-glow));
+}
+.pc-key.danger {
+  color: var(--danger);
+}
+.pc-key:disabled {
+  opacity: 0.4;
+}
+.pc-seg {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--well-deep);
+  box-shadow: var(--well-shadow);
+}
+.pc-seg .pc-key {
+  height: 40px;
+}
+.pc-range {
+  width: 110px;
+}
+.pc-value {
+  min-width: 34px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: var(--lcd-bg);
+  color: var(--lcd-fg);
+  text-shadow: var(--lcd-glow);
+  font: 700 13px var(--mono);
+  text-align: center;
+  box-shadow: var(--well-shadow);
+}
+.pc-hint {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+/* ドック（画面下・親指で届く位置） */
+.phone-dock {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  height: calc(var(--dock-h) + env(safe-area-inset-bottom));
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  background-image: var(--noise), var(--hairline), linear-gradient(180deg, var(--panel-top), var(--panel-bot));
+  border-top: 1px solid var(--line-strong);
+  box-shadow: inset 0 1px 0 var(--hilite);
+  position: relative;
+  z-index: 41;
+}
+.dock-key {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-1);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-shadow: var(--engrave);
+}
+.dock-key:active:not(:disabled) {
+  background: linear-gradient(180deg, var(--key-pressed-top), var(--key-pressed-bot));
+  box-shadow: var(--key-shadow-pressed);
+}
+.dock-key.on {
+  background: linear-gradient(180deg, var(--key-pressed-top), var(--key-pressed-bot));
+  box-shadow: var(--key-shadow-pressed);
+  color: var(--accent-text);
+}
+.dock-key.on svg {
+  filter: drop-shadow(var(--accent-glow));
+}
+.dock-key:disabled {
+  opacity: 0.35;
+}
+.dock-icon {
+  position: relative;
+  display: grid;
+}
+/* 「範囲」は押し直すと形を選べる印（右下の小さな三角） */
+.dock-more {
+  position: absolute;
+  right: -6px;
+  bottom: -2px;
+  border: 4px solid transparent;
+  border-right-color: currentColor;
+  border-bottom-color: currentColor;
+  opacity: 0.7;
+}
+.dock-sep {
+  flex: none;
+  width: 2px;
+  margin: 8px 2px;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--hilite);
+}
+.dock-label {
+  white-space: nowrap;
+}
+.nav-badge {
+  position: absolute;
+  top: -6px;
+  right: -12px;
+  min-width: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--accent);
+  box-shadow: var(--accent-glow);
+  color: #fff;
+  font: 700 10px/16px var(--font);
+  text-align: center;
+  text-shadow: none;
+}
+
+/* アクションシート */
+.action-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
+  animation: fade-in 0.15s ease-out;
+}
+.action-sheet {
+  width: min(520px, 100%);
+  max-height: 86dvh;
+  overflow-y: auto;
+  padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+  border-radius: 20px 20px 0 0;
+  background-image: var(--noise), var(--hairline), linear-gradient(180deg, var(--panel-top), var(--panel-bot));
+  box-shadow:
+    inset 0 1px 0 var(--hilite),
+    0 -14px 40px rgba(0, 0, 0, 0.45);
+  animation: sheet-up 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(40%);
+    opacity: 0;
   }
-  .transport {
-    padding: 8px 10px 4px;
-    border-right: 0;
-    box-shadow: none;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
   }
-  .transport .seg-toggle {
-    flex-direction: column;
+}
+.action-title {
+  margin: 10px 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-2);
+  text-shadow: var(--engrave);
+}
+.action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.action-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 54px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--plate-top), var(--plate-bot));
+  box-shadow: var(--key-shadow);
+  color: var(--text-0);
+  text-align: left;
+}
+.action-item:active:not(:disabled) {
+  background: linear-gradient(180deg, var(--key-pressed-top), var(--key-pressed-bot));
+  box-shadow: var(--key-shadow-pressed);
+}
+.action-item.on {
+  box-shadow:
+    var(--key-shadow-pressed),
+    0 0 0 1.5px var(--accent);
+}
+.action-item.danger {
+  color: var(--danger);
+}
+.action-item:disabled {
+  opacity: 0.4;
+}
+.action-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--knob);
+  box-shadow: var(--knob-shadow);
+  color: var(--accent-text);
+}
+.action-text {
+  display: flex;
+  flex-direction: column;
+  font-weight: 700;
+  font-size: 14px;
+  text-shadow: var(--engrave);
+}
+.action-text small {
+  font-weight: 400;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.action-cancel {
+  width: 100%;
+  height: 48px;
+  margin-top: 10px;
+  justify-content: center;
+  font-size: 14px;
+  border-radius: 12px;
+}
+.sheet-grip.static {
+  position: static;
+  display: block;
+  margin: 0 auto;
+  width: 40px;
+  height: 5px;
+  border-radius: 5px;
+  background: var(--well-deep);
+  box-shadow: var(--well-shadow);
+}
+
+/* 最初の案内 */
+.coach-chip {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: var(--lcd-bg);
+  box-shadow:
+    var(--well-shadow),
+    0 6px 16px rgba(0, 0, 0, 0.3);
+  color: var(--lcd-fg);
+  text-shadow: var(--lcd-glow);
+  font-size: 12px;
+  font-weight: 500;
+  pointer-events: none;
+}
+
+/* キャンバスまわり */
+.app.phone .stage-banner {
+  max-width: calc(100% - 20px);
+  white-space: normal;
+  font-size: 12px;
+  border-radius: 14px;
+  top: 10px;
+}
+.app.phone .stage-tools {
+  right: 10px;
+  bottom: 10px;
+}
+.app.phone .stage-tools .icon-btn {
+  width: 42px;
+  height: 42px;
+}
+.app.phone .empty-card {
+  padding: 26px 18px 18px;
+}
+.app.phone .empty-card h2 {
+  font-size: 16px;
+}
+.app.phone .empty-actions .btn {
+  height: 46px;
+  padding: 0 18px;
+  font-size: 14px;
+}
+.app.phone .steps {
+  display: none;
+}
+
+/* 描き順・設定のシート（下から） */
+.app.phone .panel.left,
+.app.phone .panel.right {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--dock-h) + env(safe-area-inset-bottom));
+  height: min(62dvh, 560px);
+  z-index: 40;
+  border: 0;
+  border-radius: 18px 18px 0 0;
+  box-shadow:
+    0 -14px 40px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 var(--hilite);
+  transform: translateY(105%);
+  visibility: hidden;
+  transition:
+    transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1),
+    visibility 0s 0.26s;
+}
+.app.phone[data-sheet='strokes'] .panel.left,
+.app.phone[data-sheet='inspector'] .panel.right {
+  transform: none;
+  visibility: visible;
+  transition:
+    transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1),
+    visibility 0s;
+}
+.app.phone .panel.left .panel-header {
+  display: none;
+}
+.app.phone .sheet-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 14px 8px 4px 18px;
+  touch-action: none;
+  cursor: grab;
+}
+.app.phone .sheet-bar .icon-btn {
+  width: 40px;
+  height: 40px;
+}
+.sheet-grip {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 40px;
+  height: 5px;
+  margin-left: -20px;
+  border-radius: 5px;
+  background: var(--well-deep);
+  box-shadow: var(--well-shadow);
+}
+.sheet-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+  text-shadow: var(--engrave);
+}
+
+/* 描き順の行：指で押しやすく。操作ボタンは選んだ行にだけ大きく出す（並べ替えは ↑↓） */
+.app.phone .stroke-row {
+  min-height: 56px;
+  padding: 8px 8px 8px 10px;
+}
+.app.phone .grip {
+  display: none;
+}
+.app.phone .stroke-row:not(.selected) .row-actions {
+  display: none;
+}
+.app.phone .row-actions {
+  gap: 2px;
+}
+.app.phone .row-actions .icon-btn.tiny {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(180deg, var(--key-top), var(--key-bot));
+  box-shadow: var(--key-shadow);
+}
+.app.phone .stroke-num {
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+}
+
+/* タイムライン：操作部と時間軸を縦に積む */
+.app.phone .timeline {
+  grid-template-columns: 1fr;
+  height: auto;
+}
+.app.phone .transport {
+  padding: 8px 10px 2px;
+  border-right: 0;
+  box-shadow: none;
+  gap: 8px;
+}
+.app.phone .transport > .icon-btn:first-child {
+  width: 40px;
+  height: 40px;
+}
+.app.phone .icon-btn.play {
+  width: 46px;
+  height: 46px;
+}
+.app.phone .lcd {
+  min-width: 0;
+}
+.app.phone .lcd-digits {
+  font-size: 19px;
+}
+.app.phone .seg-toggle button {
+  height: 26px;
+}
+.app.phone .track-area {
+  margin: 2px 12px 8px;
+}
+.app.phone .ruler {
+  height: 16px;
+}
+.app.phone .tick {
+  height: 14px;
+}
+.app.phone .track {
+  height: 36px;
+  margin-top: 2px;
+}
+
+/* ダイアログ：画面いっぱい・1列 */
+.app.phone .modal {
+  width: calc(100vw - 20px);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+}
+.app.phone .modal-body {
+  padding: 14px 18px;
+}
+.app.phone .modal-footer {
+  padding: 12px 18px calc(14px + env(safe-area-inset-bottom));
+}
+.app.phone .modal-footer .btn {
+  height: 44px;
+  padding: 0 18px;
+}
+.app.phone .form-grid {
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+.app.phone .form-grid > label {
+  margin-top: 6px;
+}
+.app.phone .toast {
+  bottom: calc(var(--dock-h) + 140px + env(safe-area-inset-bottom));
+}
+
+/* ---------- 横向きのスマホ：ドックを左の縦レールに ---------- */
+@media (orientation: landscape) {
+  .app.phone {
+    --rail-w: calc(76px + env(safe-area-inset-left));
+    grid-template-columns: var(--rail-w) minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr auto;
+    grid-template-areas:
+      'dock appbar'
+      'dock context'
+      'dock main'
+      'dock timeline';
   }
-  .icon-btn.play {
-    width: 46px;
-    height: 46px;
+  .app.phone .phone-appbar {
+    min-height: 44px;
+    padding-top: 3px;
+    padding-bottom: 3px;
   }
-  .lcd {
-    min-width: 0;
-  }
-  .lcd-digits {
-    font-size: 19px;
-  }
-  .track-area {
-    margin: 2px 12px 10px;
-  }
-  .ruler {
-    height: 18px;
-  }
-  .tick {
-    height: 16px;
-  }
-  .track {
+  .app.phone .phone-appbar .pa-btn {
+    width: 38px;
     height: 38px;
-    margin-top: 2px;
   }
-
-  /* 下部ナビ */
-  .mobile-nav {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 6px;
-    height: calc(var(--nav-h) + env(safe-area-inset-bottom));
-    padding: 6px 10px calc(6px + env(safe-area-inset-bottom));
-    background-image: var(--noise), var(--hairline), linear-gradient(180deg, var(--panel-top), var(--panel-bot));
-    border-top: 1px solid var(--line-strong);
-    box-shadow: inset 0 1px 0 var(--hilite);
-    position: relative;
-    z-index: 41;
+  .app.phone .phone-context {
+    min-height: 48px;
+    padding-top: 2px;
+    padding-bottom: 2px;
   }
-  .nav-btn {
-    display: flex;
+  .app.phone .phone-dock {
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 1px;
-    border: 0;
-    border-radius: 10px;
-    background: linear-gradient(180deg, var(--key-top), var(--key-bot));
-    box-shadow: var(--key-shadow);
-    color: var(--text-1);
-    font-size: 11px;
-    font-weight: 700;
-    text-shadow: var(--engrave);
-    cursor: pointer;
-  }
-  .nav-btn.on {
-    background: linear-gradient(180deg, var(--key-pressed-top), var(--key-pressed-bot));
-    box-shadow: var(--key-shadow-pressed);
-    color: var(--accent-text);
-  }
-  .nav-btn.on svg {
-    filter: drop-shadow(var(--accent-glow));
-  }
-  .nav-btn.primary {
-    background: linear-gradient(180deg, var(--accent-top), var(--accent-bot));
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.4),
-      0 1px 3px rgba(0, 0, 0, 0.35),
-      0 0 0 1px rgba(120, 30, 0, 0.55);
-    color: #fff;
-    text-shadow: 0 -1px 0 rgba(120, 30, 0, 0.55);
-  }
-  .nav-icon {
-    position: relative;
-    display: grid;
-  }
-  .nav-badge {
-    position: absolute;
-    top: -6px;
-    right: -12px;
-    min-width: 17px;
-    padding: 0 4px;
-    border-radius: 9px;
-    background: var(--accent);
-    box-shadow: var(--accent-glow);
-    color: #fff;
-    font: 700 10px/16px var(--font);
-    text-align: center;
-    text-shadow: none;
-  }
-
-  /* ステージ上の表示 */
-  .stage-banner {
-    max-width: calc(100% - 24px);
-    white-space: normal;
-    font-size: 11.5px;
-    border-radius: 14px;
-  }
-  .stage-tools {
-    right: 10px;
-    bottom: 10px;
-  }
-  .empty-card {
-    padding: 26px 18px 18px;
-  }
-  .empty-card h2 {
-    font-size: 16px;
-  }
-
-  /* ダイアログ：画面いっぱい・1列 */
-  .modal {
-    width: calc(100vw - 20px);
-    max-height: calc(100dvh - 40px);
+    height: auto;
+    padding: calc(6px + env(safe-area-inset-top)) 6px 6px calc(6px + env(safe-area-inset-left));
+    border-top: 0;
+    border-right: 1px solid var(--line-strong);
     overflow-y: auto;
   }
-  .modal-body {
-    padding: 14px 18px;
+  .app.phone .dock-sep {
+    width: auto;
+    height: 2px;
+    margin: 2px 10px;
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--hilite);
   }
-  .modal-footer {
-    padding: 12px 18px calc(14px + env(safe-area-inset-bottom));
+  .app.phone .dock-key {
+    min-height: 50px;
   }
-  .form-grid {
-    grid-template-columns: 1fr;
-    gap: 6px;
+  /* 時間軸は操作部の横に並べて、キャンバスを広く */
+  .app.phone .timeline {
+    grid-template-columns: auto 1fr;
   }
-  .form-grid > label {
-    margin-top: 6px;
+  .app.phone .transport {
+    padding: 4px 8px;
   }
-  .toast {
-    bottom: calc(var(--nav-h) + 150px + env(safe-area-inset-bottom));
+  .app.phone .transport .seg-toggle {
+    display: none;
   }
+  .app.phone .lcd {
+    width: 132px;
+  }
+  .app.phone .track-area {
+    margin: 2px 12px 6px 4px;
+  }
+  /* シートは右から */
+  .app.phone .panel.left,
+  .app.phone .panel.right {
+    left: auto;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: min(380px, 60vw);
+    height: auto;
+    border-radius: 18px 0 0 18px;
+    padding-right: env(safe-area-inset-right);
+    transform: translateX(105%);
+  }
+  .app.phone[data-sheet='strokes'] .panel.left,
+  .app.phone[data-sheet='inspector'] .panel.right {
+    transform: none;
+  }
+  .app.phone .sheet-grip {
+    display: none;
+  }
+  .app.phone .sheet-bar {
+    padding-top: 8px;
+    cursor: default;
+  }
+}
+
+/* 画像を読み込むまでは、スマホでは時間軸を出さない（画面をすっきり） */
+.app.phone:not(.has-image) .timeline {
+  display: none;
 }
