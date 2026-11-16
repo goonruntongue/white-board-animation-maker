@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { captureImage, importImageDialog } from '../commands'
+import { captureImage, importImageDialog, openAutoTrace } from '../commands'
 import { appendToStroke, simplifyPoints, strokeFromRecording } from '../engine/project'
 import { addEraserMark, combine, flattenShapes, isDegenerate, normalizeBox, type SelectionOp } from '../engine/selection'
 import type { ClipShape, Stroke, StrokePoint } from '../engine/types'
@@ -922,7 +922,12 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       <canvas ref={loupeRef} className="loupe" style={{ width: LOUPE, height: LOUPE, display: 'none' }} aria-hidden />
       {image && isPhone && !rerecordId && !selection && !lassoPolyActive && project.strokes.length === 0 && tool === 'draw' && (
         <div className="coach-chip">
-          <Icon name="pen" size={14} /> 1本指でなぞると描き順に追加 ・ 2本指で拡大・移動
+          <span>
+            <Icon name="pen" size={14} /> 1本指でなぞって描き順を追加
+          </span>
+          <button className="btn small primary" onClick={openAutoTrace}>
+            <Icon name="sparkle" size={13} /> 自動で作る
+          </button>
         </div>
       )}
       {image && (
@@ -962,7 +967,7 @@ function polyline(ctx: CanvasRenderingContext2D, pts: (Pt & { b?: 1; w?: number 
 
 /** 白黒の動く点線で図形の輪郭を描く */
 function drawAnts(ctx: CanvasRenderingContext2D, shape: ClipShape, w: number, h: number, px: number, offset: number): void {
-  if (shape.kind === 'region' || shape.kind === 'stroke') return
+  if (shape.kind === 'region' || shape.kind === 'stroke' || shape.kind === 'rle') return
   ctx.save()
   if (shape.kind === 'all') {
     // 画像の縁の内側に描いて、点線が見えるようにする

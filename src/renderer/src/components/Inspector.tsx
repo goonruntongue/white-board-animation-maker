@@ -203,6 +203,14 @@ function ProjectInspector(): React.JSX.Element {
           onChange={(v) => updateSettings({ endHold: v })}
         />
       </Section>
+      <Section title="仕上げ">
+        <ToggleField
+          label="描き終わったら画像全体を表示"
+          hint="薄い影や、なぞり残した部分があっても、最後は必ず元の絵になります"
+          checked={st.finishFull}
+          onChange={(v) => updateSettings({ finishFull: v })}
+        />
+      </Section>
       <Section title="新しい軌跡の既定値">
         <SliderField
           label="見せる幅"

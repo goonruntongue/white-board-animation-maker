@@ -168,6 +168,7 @@ function makeCanvas(w, h) {
 //     mode   : 'add'（追加） | 'subtract'（除外） | 'intersect'（交差：重なった部分だけ残す）
 //     kind   : 'rect' | 'ellipse'（外接矩形 {x, y, w, h}） | 'poly'（points） | 'all'（画像全体）
 //              | 'stroke'（太さ width でなぞった線 points。消しゴムの跡）
+//              | 'rle'（画素単位の形。gw×gh の格子上の連続区間 runs = [y, x, 長さ, …]。自動生成で使う）
 //              | 'region'（入れ子の選択範囲 { region }。反転などで使う）
 // ----------------------------------------------------------------------------
 
@@ -198,6 +199,18 @@ export function rasterizeClip(clip, width, height) {
     ctx.globalCompositeOperation = CLIP_OP[shape.mode] || 'source-over'
     if (shape.kind === 'region') {
       ctx.drawImage(rasterizeClip(shape.region, width, height), 0, 0)
+    } else if (shape.kind === 'rle') {
+      // 格子上の連続区間を、画像の大きさに引き伸ばして塗る（すき間が出ないよう外側へ丸める）
+      const sx = width / shape.gw
+      const sy = height / shape.gh
+      const d = shape.runs
+      ctx.beginPath()
+      for (let i = 0; i < d.length; i += 3) {
+        const x0 = Math.floor(d[i + 1] * sx)
+        const y0 = Math.floor(d[i] * sy)
+        ctx.rect(x0, y0, Math.ceil((d[i + 1] + d[i + 2]) * sx) - x0, Math.ceil((d[i] + 1) * sy) - y0)
+      }
+      ctx.fill()
     } else if (shape.kind === 'stroke') {
       // 線（消しゴムの跡）は塗りではなく太さのある線として描く
       ctx.lineCap = 'round'
@@ -224,6 +237,11 @@ export function rasterizeClip(clip, width, height) {
 function shapeBox(s, width, height) {
   if (s.kind === 'all') return { x0: 0, y0: 0, x1: width, y1: height }
   if (s.kind === 'region') return boxOf(s.region, width, height)
+  if (s.kind === 'rle') {
+    const sx = width / s.gw
+    const sy = height / s.gh
+    return { x0: s.box[0] * sx, y0: s.box[1] * sy, x1: s.box[2] * sx, y1: s.box[3] * sy }
+  }
   if (s.kind === 'poly' || s.kind === 'stroke') {
     const r = s.kind === 'stroke' ? s.width / 2 : 0
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
@@ -283,7 +301,7 @@ export class WBRenderer {
       this.mask = makeCanvas(w, h)
       this.reveal = makeCanvas(w, h)
       this.scratch = makeCanvas(w, h)
-      this.clipCache = new Map()
+      this.clipCache = new WeakMap()
     }
     this.mctx = this.mask.getContext('2d')
     this.rctx = this.reveal.getContext('2d')
@@ -342,12 +360,11 @@ export class WBRenderer {
   clipFor(stroke) {
     const clip = stroke.clip
     if (!clip || !clip.shapes || clip.shapes.length === 0) return null
-    const key = JSON.stringify(clip)
-    let hit = this.clipCache.get(key)
+    // 同じ範囲オブジェクトなら作り直さない（範囲は書き換えずに作り直す決まりなので、同一性で判定できる）
+    let hit = this.clipCache.get(clip)
     if (!hit) {
-      if (this.clipCache.size > 64) this.clipCache.clear()
       hit = { canvas: rasterizeClip(clip, this.width, this.height), bounds: clipBounds(clip, this.width, this.height) }
-      this.clipCache.set(key, hit)
+      this.clipCache.set(clip, hit)
     }
     return hit
   }
@@ -438,6 +455,12 @@ export class WBRenderer {
       ctx.clearRect(0, 0, this.width, this.height)
     }
     ctx.drawImage(this.reveal, 0, 0)
+    // 描き終わったら、画像全体をふわっと出す（薄い影やなぞり残しがあっても、最後は必ず元の絵になる）
+    if (s.finishFull && this.assets.image && t > this.timeline.drawEnd && this.timeline.segments.length > 0) {
+      ctx.globalAlpha = clamp((t - this.timeline.drawEnd) / 350, 0, 1)
+      ctx.drawImage(this.assets.image, 0, 0, this.width, this.height)
+      ctx.globalAlpha = 1
+    }
 
     if (o.hand !== false && s.showHand && this.assets.hand && this.project.hand) {
       const st = handStateAt(this.timeline, t, this.width, this.height, s.handFollowDirection)

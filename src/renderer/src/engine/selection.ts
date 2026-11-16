@@ -28,7 +28,7 @@ export function invert(current: ClipRegion | null): ClipRegion {
 export function scaleClip(clip: ClipRegion, k: number): ClipRegion {
   return {
     shapes: clip.shapes.map((s): ClipShape => {
-      if (s.kind === 'all') return s
+      if (s.kind === 'all' || s.kind === 'rle') return s // rle は描くときに引き伸ばすので、そのままでよい
       if (s.kind === 'region') return { ...s, region: scaleClip(s.region, k) }
       if (s.kind === 'poly') return { ...s, points: s.points.map((p) => ({ x: p.x * k, y: p.y * k })) }
       if (s.kind === 'stroke') return { ...s, width: s.width * k, points: s.points.map((p) => ({ x: p.x * k, y: p.y * k })) }
@@ -69,7 +69,7 @@ export function clearEraserMarks(clip: ClipRegion | undefined): ClipRegion | und
 
 /** 幅か高さがほぼ 0 の図形（クリックしただけ等）は無視する */
 export function isDegenerate(shape: ClipShape): boolean {
-  if (shape.kind === 'all' || shape.kind === 'region' || shape.kind === 'stroke') return false
+  if (shape.kind === 'all' || shape.kind === 'region' || shape.kind === 'stroke' || shape.kind === 'rle') return false
   if (shape.kind === 'poly') {
     if (shape.points.length < 3) return true
     const xs = shape.points.map((p) => p.x)

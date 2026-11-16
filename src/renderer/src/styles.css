@@ -2724,3 +2724,61 @@ button {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* ---------- 選択肢ボタン（自動生成ダイアログなど） ---------- */
+.choice-row {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--well);
+  box-shadow: var(--well-shadow);
+}
+.choice {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-height: 36px;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 7px;
+  background: linear-gradient(180deg, var(--key-top), var(--key-bot));
+  box-shadow: var(--key-shadow);
+  color: var(--text-1);
+  cursor: pointer;
+  text-shadow: var(--engrave);
+}
+.choice strong {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.choice small {
+  font-size: 10.5px;
+  color: var(--text-2);
+}
+.choice.on {
+  background: linear-gradient(180deg, var(--key-pressed-top), var(--key-pressed-bot));
+  box-shadow: var(--key-shadow-pressed);
+  color: var(--accent-text);
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.header-actions .icon-btn {
+  color: var(--accent-text);
+}
+.coach-chip {
+  pointer-events: auto;
+  gap: 10px;
+  padding: 5px 6px 5px 12px;
+}
+.coach-chip > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

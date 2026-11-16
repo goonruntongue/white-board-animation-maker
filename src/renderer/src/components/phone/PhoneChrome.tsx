@@ -10,6 +10,7 @@ import {
   importImageDialog,
   invertSelection,
   newProject,
+  openAutoTrace,
   openExport,
   openProject,
   saveProject,
@@ -50,6 +51,7 @@ export function PhoneAppBar(): React.JSX.Element {
   const appActions: SheetAction[] = [
     { icon: 'image', label: '画像を選ぶ', note: 'カメラロール・ファイルから', onSelect: () => void importImageDialog() },
     { icon: 'camera', label: '写真を撮る', note: 'カメラで撮影して読み込む', onSelect: () => void captureImage() },
+    { icon: 'sparkle', label: '描き順を自動で作る', note: '画像を解析して軌跡の下書きを作る', onSelect: openAutoTrace, disabled: !hasImage },
     { icon: 'save', label: 'プロジェクトを保存', note: '.wbanim（あとで続きを編集できる）', onSelect: () => void saveProject() },
     { icon: 'folder', label: 'プロジェクトを開く', onSelect: () => void openProject() },
     { icon: 'history', label: '自動バックアップから復元', note: '数分前の状態に戻す', onSelect: () => useEditor.getState().openDialog('recovery') },

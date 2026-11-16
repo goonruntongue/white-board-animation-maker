@@ -143,6 +143,8 @@ function buildMenu(): void {
         { label: '元に戻す', accelerator: 'CmdOrCtrl+Z', click: () => send('undo'), registerAccelerator: false },
         { label: 'やり直す', accelerator: 'CmdOrCtrl+Y', click: () => send('redo'), registerAccelerator: false },
         { type: 'separator' },
+        { label: '描き順を自動で作る…', click: () => send('auto-trace') },
+        { type: 'separator' },
         { label: '選択中の軌跡を削除', accelerator: 'Delete', click: () => send('delete-stroke'), registerAccelerator: false },
         { type: 'separator' },
         { role: 'copy', label: 'コピー' },

@@ -16,7 +16,7 @@ function readPref(): ThemePref {
   } catch {
     /* 保存領域が使えない環境では既定値 */
   }
-  return 'system'
+  return 'dark'
 }
 
 let pref: ThemePref = readPref()

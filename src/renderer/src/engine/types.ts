@@ -23,6 +23,12 @@ export type ClipShape =
   | { kind: 'all'; mode: ClipMode }
   /** ブラシでなぞった線（太さ width）。消しゴムの跡に使う */
   | { kind: 'stroke'; mode: ClipMode; points: { x: number; y: number }[]; width: number }
+  /**
+   * 画素単位の形（描き順の自動生成で使う）。gw×gh の格子上で、行ごとの連続区間を
+   * [y, x, 長さ, y, x, 長さ, …] と並べたもの。box は格子上の外接矩形 [x0, y0, x1, y1]。
+   * 描くときに画像の大きさへ引き伸ばすので、書き出しの解像度が変わっても作り直さなくてよい。
+   */
+  | { kind: 'rle'; mode: ClipMode; gw: number; gh: number; runs: number[]; box: [number, number, number, number] }
   /** 別の選択範囲をまるごと1つの図形として扱う（反転などで使う） */
   | { kind: 'region'; mode: ClipMode; region: ClipRegion }
 
@@ -92,6 +98,8 @@ export interface ProjectSettings {
   defaultDelayAfter: number
   /** 消しゴムの太さ (px) */
   eraserWidth: number
+  /** 描き終わったら画像全体を表示する（薄い部分やなぞり残しを最後に補う） */
+  finishFull: boolean
 }
 
 export interface Project {

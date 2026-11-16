@@ -1,4 +1,4 @@
-import { importImageDialog, newProject, openExport, openProject, saveProject } from '../commands'
+import { importImageDialog, openAutoTrace, newProject, openExport, openProject, saveProject } from '../commands'
 import { isDesktop } from '../lib/platform'
 import { SELECTION_TOOLS, useEditor, type Tool } from '../store'
 import { Icon, type IconName } from './Icon'
@@ -77,6 +77,18 @@ export function Toolbar(): React.JSX.Element {
             <span>{t.label}</span>
           </button>
         ))}
+      </div>
+
+      <div className="tb-group">
+        <button
+          className="tool-btn"
+          title="描き順を自動で作る：画像を解析して、手が順番に書いていく軌跡の下書きを作ります"
+          disabled={!hasImage}
+          onClick={openAutoTrace}
+        >
+          <Icon name="sparkle" />
+          <span>自動</span>
+        </button>
       </div>
 
       <div className="tb-group" title="選択範囲：範囲の外はマスクが外れません（Shift で追加・Alt で除外）">

@@ -174,6 +174,16 @@ export function openExport(kind: 'html' | 'video'): void {
   s.openDialog(kind)
 }
 
+/** 描き順の自動生成ダイアログを開く */
+export function openAutoTrace(): void {
+  const s = get()
+  if (!s.project.image) {
+    s.notify('先に画像を読み込んでください', 'error')
+    return
+  }
+  s.openDialog('auto')
+}
+
 export function selectRelative(delta: number): void {
   const { project, selectedId, select } = get()
   if (project.strokes.length === 0) return
@@ -242,6 +252,8 @@ export function runMenuCommand(cmd: string, payload?: unknown): void {
       return setThemePref(payload as ThemePref, true)
     case 'deselect':
       return deselect()
+    case 'auto-trace':
+      return openAutoTrace()
     case 'recovery':
       return get().openDialog('recovery')
     case 'select-all':

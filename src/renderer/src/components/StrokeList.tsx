@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { openAutoTrace } from '../commands'
 import { useLongPress } from '../lib/useLongPress'
 import { StrokeActions } from './phone/StrokeActions'
 import { useEditor } from '../store'
@@ -16,6 +17,7 @@ export function StrokeList(): React.JSX.Element {
   const strokes = useEditor((s) => s.project.strokes)
   const selectedId = useEditor((s) => s.selectedId)
   const rerecordId = useEditor((s) => s.rerecordId)
+  const hasImage = useEditor((s) => !!s.project.image)
   const { select, updateStroke, removeStroke, moveStroke, setRerecord } = useEditor.getState()
   const [dragId, setDragId] = useState<string | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
@@ -34,7 +36,12 @@ export function StrokeList(): React.JSX.Element {
       <SheetBar title="描き順" />
       <header className="panel-header">
         <span>描き順</span>
-        <span className="badge">{strokes.length}</span>
+        <span className="header-actions">
+          <button className="icon-btn tiny" title="描き順を自動で作る" disabled={!hasImage} onClick={openAutoTrace}>
+            <Icon name="sparkle" size={14} />
+          </button>
+          <span className="badge">{strokes.length}</span>
+        </span>
       </header>
       {strokes.length === 0 ? (
         <div className="panel-empty">
@@ -46,6 +53,9 @@ export function StrokeList(): React.JSX.Element {
             <br />
             描き順として追加されます。
           </p>
+          <button className="btn primary" disabled={!hasImage} onClick={openAutoTrace}>
+            <Icon name="sparkle" /> 自動で作る
+          </button>
         </div>
       ) : (
         <ul

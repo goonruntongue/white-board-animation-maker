@@ -17,6 +17,7 @@ import {
 } from './commands'
 import { ExportDialogs } from './components/ExportDialogs'
 import { RecoveryDialog } from './components/RecoveryDialog'
+import { AutoTraceDialog } from './components/AutoTraceDialog'
 import { Inspector } from './components/Inspector'
 import { PhoneAppBar, PhoneContextBar, PhoneDock } from './components/phone/PhoneChrome'
 import { ERASER_PRESETS, PEN_MAX, PEN_MIN, PEN_PRESETS } from './components/PenSizePicker'
@@ -221,6 +222,7 @@ export default function App(): React.JSX.Element {
       {isPhone ? <PhoneDock /> : <StatusBar zoom={zoom} />}
       <ExportDialogs />
       {dialog === 'recovery' && <RecoveryDialog />}
+      {dialog === 'auto' && <AutoTraceDialog />}
       <Toast />
       {dragOver && (
         <div className="drop-overlay" onDragLeave={() => setDragOver(false)}>

@@ -24,7 +24,8 @@ export function createProject(): Project {
       penColor,
       defaultRevealWidth: 28,
       defaultDelayAfter: 250,
-      eraserWidth: 40
+      eraserWidth: 40,
+      finishFull: true
     },
     strokes: []
   }
