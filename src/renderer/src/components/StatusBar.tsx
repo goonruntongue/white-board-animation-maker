@@ -24,6 +24,11 @@ export function StatusBar({ zoom }: { zoom: number }): React.JSX.Element {
   return (
     <div className="statusbar">
       <span>{img ? `${img.width} × ${img.height}px` : '画像なし'}</span>
+      {project.pages.length > 1 && (
+        <span>
+          ページ {project.pageIndex + 1}/{project.pages.length}
+        </span>
+      )}
       <span>軌跡 {project.strokes.length}</span>
       <span>全長 {formatTime(total)}</span>
       <span>ペン先 {project.settings.defaultRevealWidth}px</span>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { buildStandaloneHtml, defaultHtmlOptions, type HtmlExportOptions } from '../export/exportHtml'
+import { buildStandaloneHtml, defaultHtmlOptions, embedSnippet, type HtmlExportOptions } from '../export/exportHtml'
+import { pageProjects } from '../export/sequence'
 import { exportWebm, pickVideoFormat, type VideoExportHandle } from '../export/exportVideo'
 import { formatTime } from '../engine/project'
 import { buildTimeline } from '../engine/wb-engine'
@@ -47,6 +48,8 @@ function HtmlExportDialog(): React.JSX.Element {
   const [size, setSize] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const set = (patch: Partial<HtmlExportOptions>): void => setO((prev) => ({ ...prev, ...patch }))
+  const pages = pageProjects(project)
+  const totalMs = pages.reduce((sum, pg) => sum + buildTimeline(pg).total, 0)
 
   // 設定が変わるたびに出力サイズを見積もる
   useEffect(() => {
@@ -81,9 +84,12 @@ function HtmlExportDialog(): React.JSX.Element {
   }
 
   return (
-    <Modal title="単一HTMLとして書き出す" onClose={() => openDialog(null)}>
+    <Modal title={pages.length > 1 ? 'HTMLスライドとして書き出す' : '単一HTMLとして書き出す'} onClose={() => openDialog(null)}>
       <div className="modal-body">
-        <p className="lead">画像・手素材・再生プログラムを1つのHTMLに内包します。ネット接続なしで、どのPCのブラウザでも再生できます。</p>
+        <p className="lead">
+          画像・手素材・再生プログラムを1つのHTMLに内包します。ネット接続なしで、どのPCのブラウザでも再生できます。
+          {pages.length > 1 ? `全 ${pages.length} ページを、ページ送りできるスライドにします。` : ''}
+        </p>
         <div className="form-grid">
           <label>タイトル</label>
           <input className="text-input" value={o.title} onChange={(e) => set({ title: e.target.value })} />
@@ -120,23 +126,59 @@ function HtmlExportDialog(): React.JSX.Element {
             <option value={960}>960px</option>
           </select>
 
-          <label>再生</label>
+          <label>再生の始め方</label>
+          <select className="text-input" value={o.start} onChange={(e) => set({ start: e.target.value as HtmlExportOptions['start'] })}>
+            <option value="auto">開いたらすぐ再生</option>
+            <option value="click">クリックしたら再生</option>
+            <option value="visible">画面に見えたら再生（スライドへの埋め込み向け）</option>
+          </select>
+
+          {pages.length > 1 && (
+            <>
+              <label>ページの進め方</label>
+              <select className="text-input" value={o.advance} onChange={(e) => set({ advance: e.target.value as HtmlExportOptions['advance'] })}>
+                <option value="click">クリック・矢印キーで次へ（スライド）</option>
+                <option value="auto">描き終わったら自動で次へ</option>
+              </select>
+            </>
+          )}
+
+          <label>まわりの背景</label>
+          <select className="text-input" value={o.background} onChange={(e) => set({ background: e.target.value as HtmlExportOptions['background'] })}>
+            <option value="dark">暗い</option>
+            <option value="white">白</option>
+            <option value="transparent">透過（ほかのスライドに重ねる）</option>
+          </select>
+
+          <label>その他</label>
           <div className="checks">
             <label>
-              <input type="checkbox" checked={o.autoplay} onChange={(e) => set({ autoplay: e.target.checked })} /> 自動再生
-            </label>
-            <label>
-              <input type="checkbox" checked={o.loop} onChange={(e) => set({ loop: e.target.checked })} /> ループ
-            </label>
-            <label>
               <input type="checkbox" checked={o.showControls} onChange={(e) => set({ showControls: e.target.checked })} /> 操作バーを表示
+            </label>
+            <label>
+              <input type="checkbox" checked={o.loop} onChange={(e) => set({ loop: e.target.checked })} /> 終わったら最初から
+            </label>
+            <label title="ブラウザの決まりで、音は画面を一度クリックしたあとから鳴ります">
+              <input type="checkbox" checked={o.sound} onChange={(e) => set({ sound: e.target.checked })} /> マーカーの書く音
             </label>
           </div>
         </div>
         <div className="estimate">
           推定ファイルサイズ: <strong>{size === null ? '計算中…' : size < 0 ? '—' : formatBytes(size)}</strong>
-          <span className="dim"> ・ 再生時間 {formatTime(buildTimeline(project).total)}</span>
+          <span className="dim">
+            {' '}
+            ・ {pages.length > 1 ? `${pages.length} ページ ・ ` : ''}再生時間 {formatTime(totalMs)}
+          </span>
         </div>
+        <details className="embed-help">
+          <summary>スライドに埋め込むには</summary>
+          <p>保存した HTML を、スライドと同じフォルダに置いて次のように読み込みます（「画面に見えたら再生」がおすすめ）。</p>
+          <code>{embedSnippet(`${o.title || 'whiteboard'}.html`, pages[0]?.image ? pages[0].image.width / pages[0].image.height : 1.5)}</code>
+          <p>
+            外から操作するとき：<code>frame.contentWindow.postMessage({'{'} source: 'wb', cmd: 'play' {'}'}, '*')</code>
+            （cmd は play / pause / toggle / next / prev / goto / rewind）
+          </p>
+        </details>
       </div>
       <footer className="modal-footer">
         <button className="btn" onClick={() => openDialog(null)}>
@@ -158,7 +200,7 @@ function VideoExportDialog(): React.JSX.Element {
   const [bitrate, setBitrate] = useState(8)
   const [progress, setProgress] = useState<number | null>(null)
   const handle = useRef<VideoExportHandle | null>(null)
-  const total = buildTimeline(project).total
+  const total = pageProjects(project).reduce((sum, pg) => sum + buildTimeline(pg).total, 0)
 
   useEffect(() => () => handle.current?.cancel(), [])
 

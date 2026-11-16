@@ -1,10 +1,13 @@
 // 単一HTMLの書き出し（PRD 7.1）。
-// 画像・手素材・軌跡データ・再生エンジンを1ファイルに内包し、オフラインで再生できる。
+// 画像・手素材・軌跡データ・再生エンジン・プレーヤーを1ファイルに内包し、オフラインで再生できる。
+// ページが複数あれば、ページ送りできるスライドになる。
 import engineSource from '../engine/wb-engine.js?raw'
+import playerSource from './player-runtime.js?raw'
 import { loadImage } from '../engine/wb-engine'
-import type { Project } from '../engine/types'
+import type { HandAsset, ImageAsset, Project, ProjectSettings, Stroke } from '../engine/types'
 import { reencode } from '../lib/imageTools'
 import { scaleClip } from '../engine/selection'
+import { pageProjects } from './sequence'
 
 export interface HtmlExportOptions {
   title: string
@@ -12,9 +15,16 @@ export interface HtmlExportOptions {
   quality: number
   /** 出力画像の最大幅 (px)。0 で制限なし */
   maxWidth: number
-  autoplay: boolean
+  /** 再生の始め方：開いたらすぐ／クリックしたら／画面に見えたら（スライドへの埋め込み向け） */
+  start: 'auto' | 'click' | 'visible'
+  /** ページの進め方：描き終わったら自動で次へ／クリック・矢印キーで次へ */
+  advance: 'auto' | 'click'
   loop: boolean
   showControls: boolean
+  /** まわりの背景：暗い／白／透過（スライドに重ねるとき） */
+  background: 'dark' | 'white' | 'transparent'
+  /** マーカーの書く音 */
+  sound: boolean
 }
 
 export const defaultHtmlOptions = (project: Project): HtmlExportOptions => ({
@@ -22,27 +32,36 @@ export const defaultHtmlOptions = (project: Project): HtmlExportOptions => ({
   imageFormat: 'webp',
   quality: 0.9,
   maxWidth: 1920,
-  autoplay: true,
+  start: 'auto',
+  advance: 'click',
   loop: false,
-  showControls: true
+  showControls: true,
+  background: 'dark',
+  sound: false
 })
 
-/** 出力用に画像を縮小・再圧縮し、座標も合わせて縮める */
-async function prepareProjectForExport(project: Project, o: HtmlExportOptions): Promise<Project> {
-  if (!project.image) throw new Error('画像が読み込まれていません')
-  const img = await loadImage(project.image.dataUrl)
-  const srcW = project.image.width
-  const scale = o.maxWidth > 0 ? Math.min(1, o.maxWidth / srcW) : 1
-  const w = Math.round(srcW * scale)
-  const h = Math.round(project.image.height * scale)
+/** 書き出したHTMLに埋め込むデータ */
+interface ExportData {
+  settings: ProjectSettings
+  hand: HandAsset
+  pages: { image: ImageAsset; strokes: Stroke[] }[]
+}
 
-  let dataUrl = project.image.dataUrl
+/** 1ページぶん：画像を縮小・再圧縮し、座標も合わせて縮める */
+async function preparePage(page: Project, o: HtmlExportOptions): Promise<{ image: ImageAsset; strokes: Stroke[] }> {
+  const src = page.image!
+  const img = await loadImage(src.dataUrl)
+  const scale = o.maxWidth > 0 ? Math.min(1, o.maxWidth / src.width) : 1
+  const w = Math.round(src.width * scale)
+  const h = Math.round(src.height * scale)
+
+  let dataUrl = src.dataUrl
   if (o.imageFormat !== 'original' || scale < 1) {
     const mime = o.imageFormat === 'jpeg' ? 'image/jpeg' : o.imageFormat === 'webp' ? 'image/webp' : 'image/png'
     dataUrl = reencode(img, w, h, mime, o.quality)
   }
 
-  const strokes = project.strokes
+  const strokes = page.strokes
     .filter((s) => !s.hidden)
     .map((s) => ({
       ...s,
@@ -56,14 +75,14 @@ async function prepareProjectForExport(project: Project, o: HtmlExportOptions): 
       }))
     }))
 
-  return { ...project, image: { ...project.image, dataUrl, width: w, height: h }, strokes, hand: await prepareHand(project, h) }
+  return { image: { ...src, dataUrl, width: w, height: h }, strokes }
 }
 
 /**
  * 手素材を、実際に表示される大きさ（＋高解像度ディスプレイ向けの余裕）まで縮小し、
  * 透過WebPのデータURLにして埋め込む。元画像が大きくてもHTMLが重くならない。
  */
-async function prepareHand(project: Project, exportHeight: number): Promise<Project['hand']> {
+async function prepareHand(project: Project, exportHeight: number): Promise<HandAsset> {
   const hand = project.hand
   const img = await loadImage(hand.dataUrl)
   const shown = project.settings.handSize * exportHeight
@@ -72,6 +91,15 @@ async function prepareHand(project: Project, exportHeight: number): Promise<Proj
   const h = Math.max(1, Math.round(hand.height * k))
   const dataUrl = reencode(img, w, h, 'image/webp', 0.9)
   return { ...hand, dataUrl, width: w, height: h, tipX: hand.tipX * k, tipY: hand.tipY * k }
+}
+
+async function prepareExportData(project: Project, o: HtmlExportOptions): Promise<ExportData> {
+  const sources = pageProjects(project)
+  if (sources.length === 0) throw new Error('画像が読み込まれていません')
+  const pages = []
+  for (const src of sources) pages.push(await preparePage(src, o))
+  const tallest = Math.max(...pages.map((p) => p.image.height))
+  return { settings: project.settings, hand: await prepareHand(project, tallest), pages }
 }
 
 function escapeHtml(s: string): string {
@@ -87,10 +115,13 @@ function safeJson(v: unknown): string {
     .replace(new RegExp(String.fromCharCode(0x2029), 'g'), BS + 'u2029')
 }
 
+const PAGE_BG = { dark: '#1b1d22', white: '#ffffff', transparent: 'transparent' }
+
 export async function buildStandaloneHtml(project: Project, o: HtmlExportOptions): Promise<string> {
-  const p = await prepareProjectForExport(project, o)
+  const data = await prepareExportData(project, o)
   const engine = engineSource.replace(/^export\s+/gm, '')
-  const config = { autoplay: o.autoplay, loop: o.loop, showControls: o.showControls }
+  const config = { start: o.start, advance: o.advance, loop: o.loop, showControls: o.showControls, sound: o.sound }
+  const shadow = o.background === 'dark' ? '0 6px 30px rgba(0,0,0,.35)' : o.background === 'white' ? '0 2px 18px rgba(0,0,0,.12)' : 'none'
 
   return `<!doctype html>
 <html lang="ja">
@@ -100,87 +131,53 @@ export async function buildStandaloneHtml(project: Project, o: HtmlExportOptions
 <meta name="generator" content="Whiteboard Animation Maker">
 <title>${escapeHtml(o.title)}</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #1b1d22; overflow: hidden; }
-  body { display: flex; align-items: center; justify-content: center; font-family: system-ui, sans-serif; }
-  #stage { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
-  canvas { max-width: 100%; max-height: 100%; display: block; box-shadow: 0 6px 30px rgba(0,0,0,.35); }
-  #bar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 10px; align-items: center;
-    background: rgba(20,22,27,.82); color: #eee; padding: 8px 14px; border-radius: 999px; backdrop-filter: blur(6px);
-    opacity: 0; transition: opacity .25s; width: min(640px, calc(100vw - 32px)); box-sizing: border-box; }
-  #stage:hover #bar, #bar.show { opacity: 1; }
-  #bar button { background: none; border: 0; color: inherit; font-size: 18px; cursor: pointer; width: 32px; height: 32px; border-radius: 50%; }
-  #bar button:hover { background: rgba(255,255,255,.12); }
-  #seek { flex: 1; accent-color: #4dabf7; }
-  #time { font-variant-numeric: tabular-nums; font-size: 12px; opacity: .8; min-width: 92px; text-align: right; }
+  html, body { margin: 0; height: 100%; background: ${PAGE_BG[o.background]}; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; font-family: system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+  #stage { position: relative; width: 100vw; height: 100vh; height: 100dvh; display: flex; align-items: center; justify-content: center; }
+  canvas { max-width: 100%; max-height: 100%; display: block; box-shadow: ${shadow}; cursor: pointer; }
+  #poster { position: absolute; inset: 0; display: none; place-items: center; cursor: pointer; }
+  #poster span { width: 84px; height: 84px; border-radius: 50%; background: rgba(20,22,27,.78); display: grid; place-items: center;
+    color: #fff; font-size: 34px; padding-left: 6px; box-sizing: border-box; box-shadow: 0 8px 30px rgba(0,0,0,.35); }
+  #bar { position: absolute; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; gap: 6px; align-items: center;
+    background: rgba(20,22,27,.84); color: #eee; padding: 7px 12px; border-radius: 999px; backdrop-filter: blur(6px);
+    opacity: 0; transition: opacity .25s; width: min(680px, calc(100vw - 24px)); box-sizing: border-box; }
+  #stage:hover #bar, #bar.show, #bar:focus-within { opacity: 1; }
+  #bar button { flex: none; background: none; border: 0; color: inherit; font-size: 17px; cursor: pointer; width: 34px; height: 34px; border-radius: 50%; }
+  #bar button:hover:not(:disabled) { background: rgba(255,255,255,.14); }
+  #bar button:disabled { opacity: .35; cursor: default; }
+  #seek { flex: 1; min-width: 40px; accent-color: #ff7a2e; }
+  #time, #page { font-variant-numeric: tabular-nums; font-size: 12px; opacity: .85; white-space: nowrap; }
+  #page { padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.14); }
 </style>
 </head>
 <body>
 <div id="stage">
   <canvas id="wb"></canvas>
+  <div id="poster"><span>&#x25B6;</span></div>
   <div id="bar">
-    <button id="rew" title="最初へ (Home)">&#x23EE;</button>
+    <button id="prev" title="前へ (←)">&#x23EE;</button>
     <button id="play" title="再生 / 一時停止 (Space)">&#x25B6;</button>
-    <input id="seek" type="range" min="0" max="1000" value="0">
+    <button id="next" title="次へ (→)">&#x23ED;</button>
+    <input id="seek" type="range" min="0" max="1000" value="0" aria-label="再生位置">
     <span id="time">0.0 / 0.0</span>
+    <span id="page">1 / 1</span>
   </div>
 </div>
-<script type="application/json" id="wb-data">${safeJson(p)}</script>
+<script type="application/json" id="wb-data">${safeJson(data)}</script>
 <script type="application/json" id="wb-config">${safeJson(config)}</script>
 <script>
 (function () {
 ${engine}
 
-  var project = JSON.parse(document.getElementById('wb-data').textContent);
-  var config = JSON.parse(document.getElementById('wb-config').textContent);
-  var canvas = document.getElementById('wb');
-  var bar = document.getElementById('bar');
-  var playBtn = document.getElementById('play');
-  var seek = document.getElementById('seek');
-  var timeEl = document.getElementById('time');
-  if (!config.showControls) bar.style.display = 'none';
-
-  Promise.all([loadImage(project.image.dataUrl), loadImage(project.hand.dataUrl)]).then(function (a) {
-    var r = new WBRenderer(canvas, project, { image: a[0], hand: a[1] });
-    var t = 0, playing = false, last = 0;
-    function fmt(ms) { return (ms / 1000).toFixed(1); }
-    function draw() {
-      r.renderAt(t);
-      seek.value = String(Math.round((t / r.duration) * 1000));
-      timeEl.textContent = fmt(t) + ' / ' + fmt(r.duration);
-      playBtn.innerHTML = playing ? '&#x23F8;' : '&#x25B6;';
-    }
-    function frame(now) {
-      if (!playing) return;
-      t += now - last; last = now;
-      if (t >= r.duration) {
-        if (config.loop) { t = 0; } else { t = r.duration; playing = false; }
-      }
-      draw();
-      if (playing) requestAnimationFrame(frame);
-    }
-    function play() {
-      if (t >= r.duration) t = 0;
-      playing = true; last = performance.now(); requestAnimationFrame(frame);
-    }
-    function pause() { playing = false; draw(); }
-    function toggle() { playing ? pause() : play(); }
-    function rewind() { t = 0; draw(); }
-    playBtn.onclick = toggle;
-    document.getElementById('rew').onclick = rewind;
-    seek.oninput = function () { t = (Number(seek.value) / 1000) * r.duration; draw(); };
-    canvas.onclick = toggle;
-    window.addEventListener('keydown', function (e) {
-      if (e.code === 'Space') { e.preventDefault(); toggle(); }
-      if (e.code === 'Home') { e.preventDefault(); rewind(); }
-    });
-    // 外部（HyperFrames などのスライド）から制御できるようにする
-    window.wbPlayer = { play: play, pause: pause, rewind: rewind, seek: function (ms) { t = ms; draw(); }, get duration() { return r.duration; } };
-    draw();
-    if (config.autoplay) play();
-  });
+${playerSource}
 })();
 </script>
 </body>
 </html>
 `
+}
+
+/** スライドなどに埋め込むときの <iframe> の書き方（ファイル名は保存した名前に合わせる） */
+export function embedSnippet(fileName: string, aspect: number): string {
+  return `<iframe src="${fileName}" style="width:100%;aspect-ratio:${aspect.toFixed(4)};border:0" allow="autoplay"></iframe>`
 }

@@ -4,7 +4,7 @@
 //   ・画像（数MB）は中身のハッシュで1回だけ保存し、各版はプロジェクトの JSON だけを持つ
 //   ・起動時に「前回きちんと終了したか」を記録し、異常終了（フリーズ・強制終了・クラッシュ）なら復元を案内する
 // Electron 版・PWA 版の両方で同じ仕組みが動く（データは各アプリの保存領域に入る）。
-import { parseProject, serializeProject } from '../engine/project'
+import { parseProject, serializeProject, syncPages } from '../engine/project'
 import type { Project } from '../engine/types'
 import { useEditor } from '../store'
 
@@ -27,7 +27,8 @@ interface SnapshotRecord extends SnapshotMeta {
   /** この版（枠）を作った時刻。枠ができてから2分間は同じ枠を上書きする */
   createdAt: number
   json: string
-  imageKey: string | null
+  /** ページごとの画像の保存キー（画像のないページは null） */
+  imageKeys: (string | null)[]
   handKey: string | null
 }
 
@@ -93,14 +94,20 @@ async function contentKey(text: string): Promise<string> {
 // ---------------------------------------------------------------------------
 async function saveSnapshot(project: Project, filePath: string | null): Promise<void> {
   const db = await openDb()
-  const imageData = project.image?.dataUrl ?? null
+  project = syncPages(project)
   const handData = !project.hand.presetId && !project.hand.builtin ? project.hand.dataUrl : null
-  const imageKey = imageData ? await contentKey(imageData) : null
   const handKey = handData ? await contentKey(handData) : null
-  // 画像本体は別に持つので、JSON からは外す
+  // 画像本体は別に持つので、JSON からは外す（同じ画像は1回だけ保存される）
+  const images = new Map<string, string>()
+  const imageKeys: (string | null)[] = []
+  for (const pg of project.pages) {
+    const key = pg.image ? await contentKey(pg.image.dataUrl) : null
+    if (key && pg.image) images.set(key, pg.image.dataUrl)
+    imageKeys.push(key)
+  }
   const slim: Project = {
     ...project,
-    image: project.image ? { ...project.image, dataUrl: '' } : null,
+    pages: project.pages.map((pg) => ({ ...pg, image: pg.image ? { ...pg.image, dataUrl: '' } : null })),
     hand: handData ? { ...project.hand, dataUrl: '' } : project.hand
   }
   const now = Date.now()
@@ -108,17 +115,17 @@ async function saveSnapshot(project: Project, filePath: string | null): Promise<
     at: now,
     createdAt: now,
     name: project.name,
-    strokes: project.strokes.length,
+    strokes: project.pages.reduce((sum, pg) => sum + pg.strokes.length, 0),
     filePath,
     json: serializeProject(slim),
-    imageKey,
+    imageKeys,
     handKey
   }
 
   const tx = db.transaction(['snapshots', 'blobs'], 'readwrite')
   const snaps = tx.objectStore('snapshots')
   const blobs = tx.objectStore('blobs')
-  if (imageKey && imageData) blobs.put(imageData, imageKey)
+  for (const [key, data] of images) blobs.put(data, key)
   if (handKey && handData) blobs.put(handData, handKey)
 
   const all = (await reqP(snaps.getAll())) as SnapshotRecord[]
@@ -144,7 +151,7 @@ async function collectGarbage(): Promise<void> {
   const db = await openDb()
   const tx = db.transaction(['snapshots', 'blobs'], 'readwrite')
   const all = (await reqP(tx.objectStore('snapshots').getAll())) as SnapshotRecord[]
-  const used = new Set(all.flatMap((s) => [s.imageKey, s.handKey]).filter(Boolean) as string[])
+  const used = new Set(all.flatMap((s) => [...(s.imageKeys ?? []), s.handKey]).filter(Boolean) as string[])
   const keys = (await reqP(tx.objectStore('blobs').getAllKeys())) as string[]
   for (const k of keys) if (!used.has(k)) tx.objectStore('blobs').delete(k)
   await txDone(tx)
@@ -168,9 +175,14 @@ export async function loadSnapshot(id: number): Promise<{ project: Project; file
   const rec = (await reqP(tx.objectStore('snapshots').get(id))) as SnapshotRecord | undefined
   if (!rec) throw new Error('バックアップが見つかりません')
   const project = parseProject(rec.json)
-  if (rec.imageKey && project.image) {
-    project.image = { ...project.image, dataUrl: (await reqP(tx.objectStore('blobs').get(rec.imageKey))) as string }
+  const blobs = tx.objectStore('blobs')
+  for (let i = 0; i < project.pages.length; i++) {
+    const key = rec.imageKeys?.[i]
+    const pg = project.pages[i]
+    if (key && pg.image) project.pages[i] = { ...pg, image: { ...pg.image, dataUrl: (await reqP(blobs.get(key))) as string } }
   }
+  project.image = project.pages[project.pageIndex].image
+  project.strokes = project.pages[project.pageIndex].strokes
   if (rec.handKey) {
     project.hand = { ...project.hand, dataUrl: (await reqP(tx.objectStore('blobs').get(rec.handKey))) as string }
   }
@@ -219,7 +231,8 @@ let saving = false
 /** 未保存の変更があれば、すぐにバックアップする */
 export async function backupNow(): Promise<boolean> {
   const { project, dirty, filePath } = useEditor.getState()
-  if (saving || !dirty || !project.image || project === lastSaved) return false
+  const hasContent = !!project.image || project.pages.some((pg) => pg.image)
+  if (saving || !dirty || !hasContent || project === lastSaved) return false
   saving = true
   try {
     await saveSnapshot(project, filePath)

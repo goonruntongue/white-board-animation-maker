@@ -138,6 +138,12 @@ export default function App(): React.JSX.Element {
         case 'Home':
           e.preventDefault()
           return rewind()
+        case 'PageUp':
+          e.preventDefault()
+          return st.gotoPage(st.project.pageIndex - 1)
+        case 'PageDown':
+          e.preventDefault()
+          return st.gotoPage(st.project.pageIndex + 1)
         case 'Delete':
         case 'Backspace':
           e.preventDefault()
@@ -184,8 +190,11 @@ export default function App(): React.JSX.Element {
   const onDrop = (e: React.DragEvent): void => {
     e.preventDefault()
     setDragOver(false)
-    const file = e.dataTransfer.files[0]
-    if (file) void importImageFile(file)
+    // 複数の画像を落としたら、順番にページとして追加する
+    const files = Array.from(e.dataTransfer.files)
+    void (async () => {
+      for (const file of files) await importImageFile(file)
+    })()
   }
 
   return (

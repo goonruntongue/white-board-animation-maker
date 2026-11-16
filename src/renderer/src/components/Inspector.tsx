@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { importHandDialog, importImageDialog, selectHandPreset } from '../commands'
+import { importHandDialog, importImageDialog, replaceImageDialog, selectHandPreset } from '../commands'
 import { builtinHand } from '../engine/handAsset'
 import { clearEraserMarks, countEraserMarks } from '../engine/selection'
 import { countParts } from '../engine/project'
@@ -293,7 +293,7 @@ function AssetInspector(): React.JSX.Element {
           <p className="muted-text">画像が読み込まれていません</p>
         )}
         <div className="btn-row">
-          <button className="btn" onClick={() => void importImageDialog()}>
+          <button className="btn" onClick={() => void (project.image ? replaceImageDialog() : importImageDialog())}>
             <Icon name="image" /> {project.image ? '差し替える…' : '読み込む…'}
           </button>
         </div>

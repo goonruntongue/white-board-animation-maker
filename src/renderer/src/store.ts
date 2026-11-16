@@ -1,8 +1,8 @@
 import { create } from 'zustand'
 import { builtinHand } from './engine/handAsset'
-import { createProject, newId } from './engine/project'
+import { addPage, createProject, duplicatePage, movePage, newId, removePage, switchPage } from './engine/project'
 import type { SelectionOp } from './engine/selection'
-import type { ClipRegion, Project, ProjectSettings, Stroke } from './engine/types'
+import type { ClipRegion, ImageAsset, Project, ProjectSettings, Stroke } from './engine/types'
 
 export type Tool = 'draw' | 'erase' | 'select' | 'pan' | 'rect' | 'ellipse' | 'lasso'
 export const SELECTION_TOOLS: Tool[] = ['rect', 'ellipse', 'lasso']
@@ -14,6 +14,8 @@ interface Snapshot {
 }
 
 const HISTORY_LIMIT = 100
+/** ページが変わったら、前のページ用の選択・再生位置などは持ち越さない */
+const PAGE_RESET = { selectedId: null, selection: null, time: 0, playing: false, rerecordId: null, viewMode: 'edit' as const }
 let lastMerge: { key?: string; at: number } = { at: 0 }
 
 interface EditorState {
@@ -57,6 +59,13 @@ interface EditorState {
   /** すぐ後ろに複製を作り、それを選ぶ */
   duplicateStroke: (id: string) => void
   setSelection: (sel: ClipRegion | null) => void
+  // --- ページ（スライド） ---
+  /** ページを切り替える（履歴には残さない・未保存扱いにもしない） */
+  gotoPage: (index: number) => void
+  addPage: (image: ImageAsset | null) => void
+  deletePage: (index: number) => void
+  movePage: (from: number, to: number) => void
+  duplicatePage: (index: number) => void
   setSelectionMode: (m: SelectionOp) => void
   setAppendMode: (v: boolean) => void
   undo: () => void
@@ -182,6 +191,25 @@ export const useEditor = create<EditorState>((set, get) => ({
     set({ selectedId: copy.id })
   },
 
+  gotoPage: (index) => {
+    const p = get().project
+    if (index === p.pageIndex || index < 0 || index >= p.pages.length) return
+    set({ project: switchPage(p, index), ...PAGE_RESET })
+  },
+  addPage: (image) => {
+    get().commit((p) => addPage(p, image))
+    set(PAGE_RESET)
+  },
+  deletePage: (index) => {
+    get().commit((p) => removePage(p, index))
+    set(PAGE_RESET)
+  },
+  movePage: (from, to) => get().commit((p) => movePage(p, from, to)),
+  duplicatePage: (index) => {
+    get().commit((p) => duplicatePage(p, index))
+    set(PAGE_RESET)
+  },
+
   undo: () => {
     const { past, project, selection, future } = get()
     if (past.length === 0) return
@@ -191,7 +219,8 @@ export const useEditor = create<EditorState>((set, get) => ({
       selection: snap.selection,
       past: past.slice(0, -1),
       future: [{ project, selection }, ...future],
-      dirty: snap.project !== project || get().dirty
+      dirty: snap.project !== project || get().dirty,
+      ...(snap.project.pageIndex !== project.pageIndex ? { selectedId: null, time: 0, playing: false } : {})
     })
   },
 
@@ -204,7 +233,8 @@ export const useEditor = create<EditorState>((set, get) => ({
       selection: snap.selection,
       past: [...past, { project, selection }],
       future: future.slice(1),
-      dirty: snap.project !== project || get().dirty
+      dirty: snap.project !== project || get().dirty,
+      ...(snap.project.pageIndex !== project.pageIndex ? { selectedId: null, time: 0, playing: false } : {})
     })
   },
 

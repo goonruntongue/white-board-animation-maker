@@ -1,7 +1,7 @@
 // メニュー・ツールバー・ショートカットから共通で呼ぶ操作。
 import { builtinHand } from './engine/handAsset'
 import { defaultHand, findPreset } from './engine/handPresets'
-import { createProject, parseProject, PROJECT_EXT, serializeProject } from './engine/project'
+import { allPages, createProject, parseProject, PROJECT_EXT, serializeProject } from './engine/project'
 import { invert } from './engine/selection'
 import { buildTimeline } from './engine/wb-engine'
 import { setThemePref, type ThemePref } from './lib/theme'
@@ -63,23 +63,33 @@ export async function saveProject(saveAs = false): Promise<void> {
   }
 }
 
-export async function setImageFromDataUrl(name: string, dataUrl: string): Promise<void> {
+/**
+ * 画像を読み込む。
+ * いまのページが空ならそこへ入れ、すでに画像があるなら新しいページとして後ろに足す。
+ * replace = true のときは、いまのページの画像を差し替える（描き順は残す）。
+ */
+export async function setImageFromDataUrl(name: string, dataUrl: string, replace = false): Promise<void> {
   try {
     const { asset, resized } = await importImage(name, dataUrl)
-    const hadStrokes = get().project.strokes.length > 0
-    get().commit((p) => ({
-      ...p,
-      image: asset,
-      name: p.image ? p.name : name.replace(/\.[^.]+$/, '')
-    }))
-    get().setViewMode('edit')
-    get().setTime(0)
+    const st = get()
+    const asNewPage = !replace && !!st.project.image
+    if (asNewPage) {
+      st.addPage(asset)
+    } else {
+      const firstImage = !st.project.image && st.project.pages.length === 1
+      st.commit((p) => ({ ...p, image: asset, name: firstImage ? name.replace(/\.[^.]+$/, '') : p.name }))
+      st.setViewMode('edit')
+      st.setTime(0)
+    }
+    const page = get().project.pageIndex + 1
     get().notify(
-      resized
-        ? `画像を読み込みました（大きいため ${asset.width}×${asset.height} に縮小）`
-        : hadStrokes
-          ? '画像を差し替えました（軌跡はそのまま残っています）'
-          : '画像を読み込みました。「描く」ツールで描き順をなぞってください'
+      asNewPage
+        ? `ページ ${page} として追加しました`
+        : resized
+          ? `画像を読み込みました（大きいため ${asset.width}×${asset.height} に縮小）`
+          : replace
+            ? '画像を差し替えました（軌跡はそのまま残っています）'
+            : '画像を読み込みました。「自動」で描き順を作るか、「描く」ツールでなぞってください'
     )
   } catch (e) {
     get().notify('画像を読み込めませんでした: ' + errorText(e), 'error')
@@ -89,6 +99,12 @@ export async function setImageFromDataUrl(name: string, dataUrl: string): Promis
 export async function importImageDialog(): Promise<void> {
   const res = await openImageFile()
   if (res) await setImageFromDataUrl(res.name, res.dataUrl)
+}
+
+/** いまのページの画像を差し替える（描き順はそのまま） */
+export async function replaceImageDialog(): Promise<void> {
+  const res = await openImageFile()
+  if (res) await setImageFromDataUrl(res.name, res.dataUrl, true)
 }
 
 /** スマホのカメラで撮影して読み込む */
@@ -163,12 +179,13 @@ export function deleteSelected(): void {
 
 export function openExport(kind: 'html' | 'video'): void {
   const s = get()
-  if (!s.project.image) {
+  const pages = allPages(s.project)
+  if (!pages.some((pg) => pg.image)) {
     s.notify('先に画像を読み込んでください', 'error')
     return
   }
-  if (s.project.strokes.length === 0) {
-    s.notify('軌跡がありません。「描く」ツールで描き順をなぞってください', 'error')
+  if (!pages.some((pg) => pg.image && pg.strokes.length > 0)) {
+    s.notify('軌跡がありません。「自動」で作るか、「描く」ツールで描き順をなぞってください', 'error')
     return
   }
   s.openDialog(kind)

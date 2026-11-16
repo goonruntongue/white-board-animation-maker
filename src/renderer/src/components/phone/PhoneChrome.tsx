@@ -44,6 +44,8 @@ export function PhoneAppBar(): React.JSX.Element {
   const canUndo = useEditor((s) => s.past.length > 0)
   const canRedo = useEditor((s) => s.future.length > 0)
   const hasImage = useEditor((s) => !!s.project.image)
+  const pageCount = useEditor((s) => s.project.pages.length)
+  const pageIndex = useEditor((s) => s.project.pageIndex)
   const { undo, redo } = useEditor.getState()
   const { theme } = useTheme()
   const [menu, setMenu] = useState<Menu>(null)
@@ -70,9 +72,14 @@ export function PhoneAppBar(): React.JSX.Element {
         <Icon name="menu" size={20} />
       </button>
       <div className="pa-title">
-        <span>{hasImage ? name : 'Whiteboard Animation'}</span>
+        <span>{hasImage || pageCount > 1 ? name : 'Whiteboard Animation'}</span>
         {dirty && <i className="dirty-dot" title="未保存" />}
       </div>
+      {pageCount > 1 && (
+        <button className="pa-page" aria-label="ページ一覧を開く" onClick={() => useEditor.getState().setMobileSheet('strokes')}>
+          {pageIndex + 1}/{pageCount}
+        </button>
+      )}
       <button className="pa-btn" aria-label="元に戻す" disabled={!canUndo} onClick={undo}>
         <Icon name="undo" size={20} />
       </button>

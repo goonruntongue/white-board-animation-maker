@@ -102,11 +102,26 @@ export interface ProjectSettings {
   finishFull: boolean
 }
 
+/** スライドの1ページ（画像1枚と、その描き順） */
+export interface Page {
+  id: string
+  image: ImageAsset | null
+  strokes: Stroke[]
+}
+
 export interface Project {
   version: 1
   name: string
+  /** いま編集しているページの画像（pages[pageIndex] の作業用の写し） */
   image: ImageAsset | null
   hand: HandAsset
   settings: ProjectSettings
+  /** いま編集しているページの描き順（pages[pageIndex] の作業用の写し） */
   strokes: Stroke[]
+  /**
+   * 全ページ。編集中のページの最新の内容は image / strokes にあり、
+   * ページの切り替え・保存・書き出しのときに syncPages() でここへ書き戻す。
+   */
+  pages: Page[]
+  pageIndex: number
 }

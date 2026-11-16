@@ -1,6 +1,6 @@
 // 動画書き出し（PRD 7.2）。Canvas の captureStream() + MediaRecorder で WebM（使えない端末では MP4）を作る。
 // MediaRecorder は実時間で記録するため、書き出しには再生時間と同じだけかかる。
-import { loadImage, WBRenderer } from '../engine/wb-engine'
+import { createSequence } from './sequence'
 import type { Project } from '../engine/types'
 
 export interface VideoExportOptions {
@@ -37,17 +37,9 @@ export function exportWebm(
   let stopFn: (() => void) | null = null
 
   const promise = (async () => {
-    if (!project.image) throw new Error('画像が読み込まれていません')
-    const [image, hand] = await Promise.all([loadImage(project.image.dataUrl), loadImage(project.hand.dataUrl)])
-
-    // 描画は元解像度で行い、出力キャンバスへ縮小コピーする（偶数サイズにそろえる）
-    const src = document.createElement('canvas')
-    const renderer = new WBRenderer(src, project, { image, hand })
-    const scale = Math.min(1, o.maxWidth / renderer.width)
-    const out = document.createElement('canvas')
-    out.width = Math.round((renderer.width * scale) / 2) * 2
-    out.height = Math.round((renderer.height * scale) / 2) * 2
-    const octx = out.getContext('2d')!
+    // 全ページを順番につなげて描く
+    const seq = await createSequence(project, o.maxWidth)
+    const out = seq.canvas
 
     const stream = out.captureStream(o.fps)
     const format = pickVideoFormat()
@@ -63,11 +55,8 @@ export function exportWebm(
       recorder.onerror = () => reject(new Error('録画に失敗しました'))
     })
 
-    const total = renderer.duration
-    const draw = (t: number): void => {
-      renderer.renderAt(t)
-      octx.drawImage(src, 0, 0, out.width, out.height)
-    }
+    const total = seq.total
+    const draw = seq.render
     draw(0)
     recorder.start(250)
     const t0 = performance.now()

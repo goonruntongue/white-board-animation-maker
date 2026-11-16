@@ -4,6 +4,7 @@ import { useLongPress } from '../lib/useLongPress'
 import { StrokeActions } from './phone/StrokeActions'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
+import { PageStrip } from './PageStrip'
 import { SheetBar } from './SheetBar'
 
 function rowId(e: React.SyntheticEvent): string | null {
@@ -33,7 +34,8 @@ export function StrokeList(): React.JSX.Element {
 
   return (
     <aside className="panel left">
-      <SheetBar title="描き順" />
+      <SheetBar title="ページと描き順" />
+      <PageStrip />
       <header className="panel-header">
         <span>描き順</span>
         <span className="header-actions">

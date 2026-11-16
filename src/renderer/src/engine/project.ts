@@ -1,5 +1,5 @@
 import { defaultHand, findPreset } from './handPresets'
-import type { ClipRegion, Project, Stroke, StrokePoint } from './types'
+import type { ClipRegion, ImageAsset, Page, Project, Stroke, StrokePoint } from './types'
 
 export const PROJECT_EXT = 'wbanim'
 
@@ -27,7 +27,9 @@ export function createProject(): Project {
       eraserWidth: 40,
       finishFull: true
     },
-    strokes: []
+    strokes: [],
+    pages: [{ id: newId('page'), image: null, strokes: [] }],
+    pageIndex: 0
   }
 }
 
@@ -35,6 +37,71 @@ let idCounter = 0
 export function newId(prefix = 'stroke'): string {
   idCounter += 1
   return `${prefix}-${Date.now().toString(36)}-${idCounter}`
+}
+
+// ---------------------------------------------------------------------------
+// ページ（スライド）
+// 編集中のページの内容は project.image / project.strokes にある。ほかの処理はそれだけを見ればよい。
+// ---------------------------------------------------------------------------
+
+/** 編集中のページの内容を pages に書き戻したプロジェクトを返す */
+export function syncPages(p: Project): Project {
+  const cur = p.pages[p.pageIndex]
+  if (cur && cur.image === p.image && cur.strokes === p.strokes) return p
+  const pages = p.pages.map((pg, i) => (i === p.pageIndex ? { ...pg, image: p.image, strokes: p.strokes } : pg))
+  return { ...p, pages }
+}
+
+/** 最新の内容を反映した全ページ */
+export function allPages(p: Project): Page[] {
+  return syncPages(p).pages
+}
+
+export function switchPage(p: Project, index: number): Project {
+  const s = syncPages(p)
+  const i = Math.max(0, Math.min(s.pages.length - 1, index))
+  return { ...s, pageIndex: i, image: s.pages[i].image, strokes: s.pages[i].strokes }
+}
+
+/** いまのページの後ろに新しいページを足して、そのページへ移る */
+export function addPage(p: Project, image: ImageAsset | null, strokes: Stroke[] = []): Project {
+  const s = syncPages(p)
+  const pages = [...s.pages]
+  const at = s.pageIndex + 1
+  pages.splice(at, 0, { id: newId('page'), image, strokes })
+  return { ...s, pages, pageIndex: at, image, strokes }
+}
+
+export function removePage(p: Project, index: number): Project {
+  const s = syncPages(p)
+  if (s.pages.length <= 1) {
+    // 最後の1ページは消さずに空にする
+    const pages = [{ ...s.pages[0], image: null, strokes: [] }]
+    return { ...s, pages, pageIndex: 0, image: null, strokes: [] }
+  }
+  const pages = s.pages.filter((_, i) => i !== index)
+  const next = Math.min(pages.length - 1, index < s.pageIndex ? s.pageIndex - 1 : s.pageIndex === index ? Math.min(index, pages.length - 1) : s.pageIndex)
+  return { ...s, pages, pageIndex: next, image: pages[next].image, strokes: pages[next].strokes }
+}
+
+export function movePage(p: Project, from: number, to: number): Project {
+  const s = syncPages(p)
+  const dest = Math.max(0, Math.min(s.pages.length - 1, to))
+  if (from === dest) return p
+  const pages = [...s.pages]
+  const [item] = pages.splice(from, 1)
+  pages.splice(dest, 0, item)
+  const curId = s.pages[s.pageIndex].id
+  return { ...s, pages, pageIndex: pages.findIndex((pg) => pg.id === curId) }
+}
+
+export function duplicatePage(p: Project, index: number): Project {
+  const s = syncPages(p)
+  const src = s.pages[index]
+  const copy: Page = { id: newId('page'), image: src.image, strokes: src.strokes.map((st) => ({ ...st, id: newId() })) }
+  const pages = [...s.pages]
+  pages.splice(index + 1, 0, copy)
+  return { ...s, pages, pageIndex: index + 1, image: copy.image, strokes: copy.strokes }
 }
 
 export function strokeColor(index: number): string {
@@ -114,9 +181,11 @@ export function countParts(stroke: Stroke): number {
 }
 
 export function serializeProject(project: Project): string {
+  const p = syncPages(project)
   // 内蔵の手素材は名前だけ保存する（画像本体はアプリに入っている）
-  const hand = project.hand.presetId ? { ...project.hand, dataUrl: '' } : project.hand
-  return JSON.stringify({ app: 'whiteboard-animation-maker', ...project, hand })
+  const hand = p.hand.presetId ? { ...p.hand, dataUrl: '' } : p.hand
+  // 画像と描き順は pages にだけ持つ（同じ画像を二重に保存しない）
+  return JSON.stringify({ app: 'whiteboard-animation-maker', ...p, hand, image: null, strokes: [] })
 }
 
 function resolveHand(hand: Project['hand'] | undefined, fallback: Project['hand']): Project['hand'] {
@@ -135,13 +204,21 @@ export function parseProject(text: string): Project {
     throw new Error('対応していないプロジェクトファイルです')
   }
   const base = createProject()
+  // ページ対応より前のファイルは、画像1枚＝1ページとして読む
+  const pages: Page[] =
+    Array.isArray(data.pages) && data.pages.length > 0
+      ? data.pages.map((pg: Partial<Page>) => ({ id: pg.id ?? newId('page'), image: pg.image ?? null, strokes: pg.strokes ?? [] }))
+      : [{ id: newId('page'), image: data.image ?? null, strokes: data.strokes }]
+  const pageIndex = Math.max(0, Math.min(pages.length - 1, Number(data.pageIndex) || 0))
   return {
     version: 1,
     name: data.name ?? base.name,
-    image: data.image ?? null,
+    image: pages[pageIndex].image,
     hand: resolveHand(data.hand, base.hand),
     settings: { ...base.settings, ...data.settings },
-    strokes: data.strokes
+    strokes: pages[pageIndex].strokes,
+    pages,
+    pageIndex
   }
 }
 
