@@ -2,6 +2,7 @@ import { importImageDialog, newProject, openExport, openProject, saveProject } f
 import { isDesktop } from '../lib/platform'
 import { useEditor, type Tool } from '../store'
 import { Icon, type IconName } from './Icon'
+import { PenSizePicker } from './PenSizePicker'
 
 const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
   { id: 'draw', icon: 'pen', label: '描く', key: 'D' },
@@ -65,6 +66,8 @@ export function Toolbar(): React.JSX.Element {
           </button>
         ))}
       </div>
+
+      <PenSizePicker disabled={!hasImage} />
 
       <div className="doc-title">
         {name}

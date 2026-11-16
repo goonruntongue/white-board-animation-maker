@@ -14,6 +14,7 @@ import {
 } from './commands'
 import { ExportDialogs } from './components/ExportDialogs'
 import { Inspector } from './components/Inspector'
+import { PEN_PRESETS } from './components/PenSizePicker'
 import { Stage } from './components/Stage'
 import { StatusBar } from './components/StatusBar'
 import { StrokeList } from './components/StrokeList'
@@ -131,6 +132,8 @@ export default function App(): React.JSX.Element {
           return st.updateSettings({ defaultRevealWidth: next })
         }
       }
+      const preset = PEN_PRESETS.find((p) => p.key === e.key)
+      if (preset) return st.updateSettings({ defaultRevealWidth: preset.width })
       if (k === 'd') st.setTool('draw')
       else if (k === 'v') st.setTool('select')
       else if (k === 'h') st.setTool('pan')
