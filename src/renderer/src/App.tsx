@@ -125,12 +125,16 @@ export default function App(): React.JSX.Element {
         case 'Escape':
           if (st.rerecordId) return st.setRerecord(null)
           return st.select(null)
-        case 'BracketLeft':
-        case 'BracketRight': {
-          const w = st.project.settings.defaultRevealWidth
-          const next = Math.max(4, Math.min(200, Math.round(w * (e.code === 'BracketLeft' ? 0.85 : 1.18))))
-          return st.updateSettings({ defaultRevealWidth: next })
-        }
+      }
+      // ペン先サイズ: [ で小さく / ] で大きく。
+      // e.code は物理キー位置（US配列基準）なので、JIS配列では [ が「@」キーになってしまう。
+      // 入力される文字（e.key）で判定し、念のため keyCode（[ = 219, ] = 221）も見る。
+      const bracket = e.key === '[' || e.keyCode === 219 ? -1 : e.key === ']' || e.keyCode === 221 ? 1 : 0
+      if (bracket !== 0) {
+        e.preventDefault()
+        const w = st.project.settings.defaultRevealWidth
+        const next = Math.max(4, Math.min(200, Math.round(w * (bracket < 0 ? 0.85 : 1.18))))
+        return st.updateSettings({ defaultRevealWidth: next })
       }
       const preset = PEN_PRESETS.find((p) => p.key === e.key)
       if (preset) return st.updateSettings({ defaultRevealWidth: preset.width })
