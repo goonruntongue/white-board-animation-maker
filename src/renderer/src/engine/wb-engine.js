@@ -352,26 +352,56 @@ export class WBRenderer {
     return hit
   }
 
+  /**
+   * 軌跡の u0〜u1 の部分を太い線で描く。
+   * 点に b（ペンを上げる）が付いていたら、そこで線を切る：直前の点からその点までは手が移動するだけで描かない。
+   * b の点に w があれば、そこから先はその太さで描く（描き足した部分だけ太さを変えられる）。
+   */
   strokePortion(m, prep, u0, u1) {
-    const w = prep.stroke.revealWidth
+    const pts = prep.pts
+    const base = prep.stroke.revealWidth
     m.lineCap = 'round'
     m.lineJoin = 'round'
     m.strokeStyle = '#000'
     m.fillStyle = '#000'
-    m.lineWidth = w
     const a = pointAt(prep, u0)
     const b = pointAt(prep, u1)
-    if (prep.pts.length === 1 || (a.i === b.i && Math.hypot(b.x - a.x, b.y - a.y) < 0.01)) {
+    const widthAt = (i) => {
+      for (let k = i; k >= 0; k--) if (pts[k].b) return pts[k].w || base
+      return base
+    }
+    // i → i+1 の区間が「ペンを上げて移動」か
+    const liftedAfter = (i) => !!(pts[i + 1] && pts[i + 1].b)
+
+    if (pts.length === 1 || (a.i === b.i && Math.hypot(b.x - a.x, b.y - a.y) < 0.01)) {
+      if (liftedAfter(a.i) && !(a.x === pts[a.i].x && a.y === pts[a.i].y)) return
+      const w = widthAt(a.i)
       m.beginPath()
       m.arc(b.x, b.y, w / 2, 0, Math.PI * 2)
       m.fill()
       return
     }
+
+    let drawing = !liftedAfter(a.i)
+    m.lineWidth = widthAt(a.i)
     m.beginPath()
-    m.moveTo(a.x, a.y)
-    for (let i = a.i + 1; i <= b.i; i++) m.lineTo(prep.pts[i].x, prep.pts[i].y)
-    m.lineTo(b.x, b.y)
-    m.stroke()
+    if (drawing) m.moveTo(a.x, a.y)
+    for (let i = a.i + 1; i <= b.i; i++) {
+      const p = pts[i]
+      if (p.b) {
+        // ここで線を区切り、新しい線を始める（つなぎ目は描かない）
+        if (drawing) m.stroke()
+        m.lineWidth = p.w || base
+        m.beginPath()
+        m.moveTo(p.x, p.y)
+        m.lineTo(p.x + 0.01, p.y) // 書き始めの点（丸い端）
+        drawing = true
+        continue
+      }
+      if (drawing) m.lineTo(p.x, p.y)
+    }
+    if (drawing && !liftedAfter(b.i)) m.lineTo(b.x, b.y)
+    if (drawing) m.stroke()
   }
 
   composeReveal() {

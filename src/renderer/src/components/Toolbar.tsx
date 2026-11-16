@@ -2,7 +2,7 @@ import { importImageDialog, newProject, openExport, openProject, saveProject } f
 import { isDesktop } from '../lib/platform'
 import { SELECTION_TOOLS, useEditor, type Tool } from '../store'
 import { Icon, type IconName } from './Icon'
-import { PenSizePicker } from './PenSizePicker'
+import { AppendToggle, PenSizePicker } from './PenSizePicker'
 import { SelectionModeBar } from './SelectionModeBar'
 import { ThemeSwitch } from './ThemeSwitch'
 
@@ -98,7 +98,10 @@ Shift+ドラッグで追加 / Alt+ドラッグで除外`}
       {SELECTION_TOOLS.includes(tool) ? (
         <SelectionModeBar />
       ) : (
-        <PenSizePicker disabled={!hasImage} kind={tool === 'erase' ? 'eraser' : 'pen'} />
+        <>
+          <PenSizePicker disabled={!hasImage} kind={tool === 'erase' ? 'eraser' : 'pen'} />
+          {tool === 'draw' && <AppendToggle disabled={!hasImage} />}
+        </>
       )}
 
       <div className="doc-title">

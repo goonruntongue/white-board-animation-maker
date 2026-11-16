@@ -7,6 +7,10 @@ export interface StrokePoint {
   y: number
   /** なぞり始めからの経過時間 (ms) */
   t: number
+  /** 1 なら、この点の手前でペンを上げる（描き足した部分の書き始め）。ここまでの移動は描かない */
+  b?: 1
+  /** b の点だけ：ここから先の見せる幅 (px)。省略時は軌跡の revealWidth */
+  w?: number
 }
 
 /** add: 追加 / subtract: 除外 / intersect: 交差（重なった部分だけ残す） */

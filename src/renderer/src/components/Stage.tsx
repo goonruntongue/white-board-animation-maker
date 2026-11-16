@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { captureImage, importImageDialog } from '../commands'
-import { simplifyPoints, strokeFromRecording } from '../engine/project'
+import { appendToStroke, simplifyPoints, strokeFromRecording } from '../engine/project'
 import { addEraserMark, combine, flattenShapes, isDegenerate, normalizeBox, type SelectionOp } from '../engine/selection'
 import type { ClipShape, Stroke, StrokePoint } from '../engine/types'
 import { buildTimeline, rasterizeClip, traceClipShape, WBRenderer } from '../engine/wb-engine'
@@ -20,6 +20,8 @@ interface Recording {
   pointerId: number
   start: number
   points: StrokePoint[]
+  /** 描き足し先の軌跡（なければ新しい軌跡になる） */
+  appendTo?: string
 }
 
 interface PanDrag {
@@ -76,7 +78,10 @@ function hitStroke(strokes: Stroke[], x: number, y: number, tolerance: number): 
     const r = Math.max(s.revealWidth / 2, tolerance)
     const pts = s.points
     if (pts.length === 1 && Math.hypot(pts[0].x - x, pts[0].y - y) <= r) return s
-    for (let k = 1; k < pts.length; k++) if (distToSegment(x, y, pts[k - 1], pts[k]) <= r) return s
+    for (let k = 1; k < pts.length; k++) {
+      if (pts[k].b) continue // ペンを上げて移動しただけの区間は線ではない
+      if (distToSegment(x, y, pts[k - 1], pts[k]) <= r) return s
+    }
   }
   return null
 }
@@ -218,11 +223,11 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
 
   /** 範囲で切り抜いた帯を描く（録画中の線・選択中の軌跡の幅表示） */
   const drawClippedBand = useCallback(
-    (ctx: CanvasRenderingContext2D, pts: StrokePoint[], width: number, color: string, mask: CanvasImageSource | null) => {
+    (ctx: CanvasRenderingContext2D, pts: StrokePoint[], width: number, color: string, mask: CanvasImageSource | null, partWidths = false) => {
       if (!mask) {
         ctx.strokeStyle = color
         ctx.lineWidth = width
-        polyline(ctx, pts)
+        polyline(ctx, pts, partWidths ? width : undefined)
         return
       }
       let sc = scratch.current
@@ -235,7 +240,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       s.lineJoin = 'round'
       s.strokeStyle = color
       s.lineWidth = width
-      polyline(s, pts)
+      polyline(s, pts, partWidths ? width : undefined)
       s.globalCompositeOperation = 'destination-in'
       s.drawImage(mask, 0, 0)
       s.globalCompositeOperation = 'source-over'
@@ -261,7 +266,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         if (s.points.length === 0) return
         const selected = s.id === selectedId
         const replacing = s.id === rerecordId
-        if (selected) drawClippedBand(ctx, s.points, s.revealWidth, s.color + '40', selectedClipMask)
+        if (selected) drawClippedBand(ctx, s.points, s.revealWidth, s.color + '40', selectedClipMask, true)
         ctx.setLineDash(s.hidden || replacing ? [6 * px, 5 * px] : [])
         ctx.strokeStyle = s.hidden ? '#8a8f98' : s.color
         ctx.globalAlpha = s.hidden ? 0.6 : 1
@@ -298,8 +303,10 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     const rec = recording.current
     if (rec && rec.points.length) {
       const w = useEditor.getState().project.settings.defaultRevealWidth
-      drawClippedBand(ctx, rec.points, w, 'rgba(31,111,235,0.32)', selMask)
-      ctx.strokeStyle = '#1f6feb'
+      const target = rec.appendTo ? project.strokes.find((s) => s.id === rec.appendTo) : undefined
+      // 描き足しは、描き足し先の軌跡の色で見せる（範囲の制限も、その軌跡のものを使う）
+      drawClippedBand(ctx, rec.points, w, target ? target.color + '55' : 'rgba(31,111,235,0.32)', target ? selectedClipMask : selMask)
+      ctx.strokeStyle = target ? target.color : '#1f6feb'
       ctx.lineWidth = 2 * px
       polyline(ctx, rec.points)
     }
@@ -627,7 +634,14 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     if (tool === 'draw') {
       if (st.playing) st.setPlaying(false)
       if (st.viewMode !== 'edit') st.setViewMode('edit')
-      recording.current = { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }] }
+      // Shift＋ドラッグ、または「描き足す」がオンのときは、選んでいる軌跡に描き足す
+      const wantAppend = !st.rerecordId && (e.shiftKey || st.appendMode)
+      const appendTo = wantAppend ? st.project.strokes.find((s) => s.id === st.selectedId)?.id : undefined
+      if (st.appendMode && !e.shiftKey && !appendTo && !st.rerecordId) {
+        st.notify('描き足す軌跡を選んでください（描き順・タイムライン・「選ぶ」ツールから）', 'error')
+        return
+      }
+      recording.current = { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }], appendTo }
       if (e.pointerType === 'touch') requestAnimationFrame(() => showLoupe(e.clientX, e.clientY))
       capture(e)
       drawOverlay()
@@ -743,6 +757,13 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         st.select(st.rerecordId)
         st.setRerecord(null)
         st.notify('軌跡を録り直しました')
+      } else if (rec.appendTo) {
+        const target = st.project.strokes.find((s) => s.id === rec.appendTo)
+        if (target) {
+          st.updateStroke(target.id, appendToStroke(target, rec.points, st.project.settings.defaultRevealWidth))
+          st.select(target.id)
+          haptic()
+        }
       } else {
         st.addStroke(strokeFromRecording(st.project, rec.points, st.project.strokes.length, st.selection))
         haptic()
@@ -915,12 +936,27 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   )
 }
 
-function polyline(ctx: CanvasRenderingContext2D, pts: Pt[]): void {
+/**
+ * 点列を線で描く。b（ペンを上げる）の点で線を切り、つなぎ目は描かない。
+ * baseWidth を渡すと、描き足した部分の太さ（w）も反映する。
+ */
+function polyline(ctx: CanvasRenderingContext2D, pts: (Pt & { b?: 1; w?: number })[], baseWidth?: number): void {
   if (pts.length === 0) return
   ctx.beginPath()
   ctx.moveTo(pts[0].x, pts[0].y)
-  if (pts.length === 1) ctx.lineTo(pts[0].x + 0.01, pts[0].y)
-  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y)
+  ctx.lineTo(pts[0].x + 0.01, pts[0].y)
+  for (let i = 1; i < pts.length; i++) {
+    const p = pts[i]
+    if (p.b) {
+      ctx.stroke()
+      if (baseWidth !== undefined) ctx.lineWidth = p.w ?? baseWidth
+      ctx.beginPath()
+      ctx.moveTo(p.x, p.y)
+      ctx.lineTo(p.x + 0.01, p.y)
+      continue
+    }
+    ctx.lineTo(p.x, p.y)
+  }
   ctx.stroke()
 }
 

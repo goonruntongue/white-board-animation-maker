@@ -1,4 +1,5 @@
 import { useEditor } from '../store'
+import { Icon } from './Icon'
 
 /** ペン先サイズのプリセット（新しく描く軌跡の「見せる幅」） */
 export const PEN_PRESETS = [
@@ -26,6 +27,26 @@ export function penDotSize(width: number, max = 18): number {
 }
 
 /** ペン先（描く）／消しゴムの大きさを選ぶ。kind で対象を切り替える */
+/** 「描き足す」切り替え（描くツールのとき）。選んでいる軌跡に追加で描く */
+export function AppendToggle({ disabled }: { disabled: boolean }): React.JSX.Element {
+  const on = useEditor((s) => s.appendMode)
+  const idx = useEditor((s) => s.project.strokes.findIndex((x) => x.id === s.selectedId))
+  return (
+    <div className="tb-group">
+      <button
+        className={`tool-btn ${on ? 'on' : ''}`}
+        disabled={disabled}
+        aria-pressed={on}
+        title={'描き足す：オンのあいだ、選んでいる軌跡に線を追加します（新しい軌跡は作りません）。\nShift＋ドラッグでも一時的に描き足せます'}
+        onClick={() => useEditor.getState().setAppendMode(!on)}
+      >
+        <Icon name="plusPen" />
+        <span>{on ? (idx >= 0 ? `#${idx + 1} に描き足す` : '描き足す（軌跡を選択）') : '描き足す'}</span>
+      </button>
+    </div>
+  )
+}
+
 export function PenSizePicker({ disabled, kind = 'pen' }: { disabled: boolean; kind?: 'pen' | 'eraser' }): React.JSX.Element {
   const key = kind === 'eraser' ? 'eraserWidth' : 'defaultRevealWidth'
   const width = useEditor((s) => s.project.settings[key])

@@ -48,7 +48,12 @@ async function prepareProjectForExport(project: Project, o: HtmlExportOptions): 
       ...s,
       revealWidth: s.revealWidth * scale,
       ...(s.clip ? { clip: scaleClip(s.clip, scale) } : {}),
-      points: s.points.map((p) => ({ x: Math.round(p.x * scale * 10) / 10, y: Math.round(p.y * scale * 10) / 10, t: p.t }))
+      points: s.points.map((p) => ({
+        ...p,
+        x: Math.round(p.x * scale * 10) / 10,
+        y: Math.round(p.y * scale * 10) / 10,
+        ...(p.w ? { w: p.w * scale } : {})
+      }))
     }))
 
   return { ...project, image: { ...project.image, dataUrl, width: w, height: h }, strokes, hand: await prepareHand(project, h) }

@@ -78,6 +78,40 @@ export function strokeFromRecording(
   }
 }
 
+/** 描き足すとき、前の線の終わりから次の書き始めまで手が移動する時間 (ms) */
+export const LIFT_GAP_MS = 350
+
+/**
+ * 既存の軌跡に、なぞった線を描き足す（新しい軌跡は作らない）。
+ * 書き始めの点に b（ペンを上げる）を付けるので、再生では前の線とつながらない。
+ * 太さが軌跡の見せる幅と違えば、その部分だけ w で太さを持つ。
+ * 再生時間は、軌跡の今の速さ（なぞった時間に対する倍率）を保って延ばす。
+ */
+export function appendToStroke(stroke: Stroke, raw: StrokePoint[], width: number): Pick<Stroke, 'points' | 'duration'> {
+  const pts = simplifyPoints(raw)
+  const prev = stroke.points
+  const last = prev[prev.length - 1]
+  const span = prev.length > 1 ? prev[prev.length - 1].t - prev[0].t : 0
+  const ratio = span > 0 ? stroke.duration / span : 1
+  const t0 = (last?.t ?? 0) + LIFT_GAP_MS
+  const added: StrokePoint[] = pts.map((p, i) => ({
+    x: p.x,
+    y: p.y,
+    t: Math.round(t0 + (p.t - pts[0].t)),
+    ...(i === 0 ? { b: 1 as const, ...(Math.round(width) !== Math.round(stroke.revealWidth) ? { w: Math.round(width) } : {}) } : {})
+  }))
+  const recorded = pts.length > 1 ? pts[pts.length - 1].t - pts[0].t : 0
+  return {
+    points: [...prev, ...added],
+    duration: Math.round(stroke.duration + (LIFT_GAP_MS + Math.max(150, recorded)) * ratio)
+  }
+}
+
+/** 線の本数（描き足すたびに1本増える） */
+export function countParts(stroke: Stroke): number {
+  return 1 + stroke.points.filter((p) => p.b).length
+}
+
 export function serializeProject(project: Project): string {
   // 内蔵の手素材は名前だけ保存する（画像本体はアプリに入っている）
   const hand = project.hand.presetId ? { ...project.hand, dataUrl: '' } : project.hand

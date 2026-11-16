@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { importHandDialog, importImageDialog, selectHandPreset } from '../commands'
 import { builtinHand } from '../engine/handAsset'
 import { clearEraserMarks, countEraserMarks } from '../engine/selection'
+import { countParts } from '../engine/project'
 import { getHandPresets } from '../engine/handPresets'
 import { dataUrlBytes, formatBytes } from '../lib/imageTools'
 import { useEditor } from '../store'
@@ -136,6 +137,8 @@ function StrokeInspector(): React.JSX.Element | null {
         <dl className="info">
           <dt>点の数</dt>
           <dd>{stroke.points.length}</dd>
+          <dt>線の本数</dt>
+          <dd>{countParts(stroke)}{countParts(stroke) > 1 ? '（描き足しあり）' : ''}</dd>
           <dt>なぞった時間</dt>
           <dd>{(recorded / 1000).toFixed(2)} 秒</dd>
         </dl>

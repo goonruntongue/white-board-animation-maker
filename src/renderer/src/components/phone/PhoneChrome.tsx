@@ -119,6 +119,7 @@ function PenOptions({ kind = 'pen' }: { kind?: 'pen' | 'eraser' }): React.JSX.El
       {kind === 'eraser' && (
         <span className={`pc-target ${target < 0 ? 'none' : ''}`}>{target < 0 ? '軌跡を選択' : `#${target + 1} を消す`}</span>
       )}
+      {kind === 'pen' && <AppendKey />}
       <span className="pc-label">{kind === 'eraser' ? '大きさ' : 'ペン先'}</span>
       {presets.map((p) => (
         <button key={p.width} className={`pc-key ${width === p.width ? 'on' : ''}`} aria-label={`${p.label} ${p.width}px`} onClick={() => set(p.width)}>
@@ -139,6 +140,23 @@ function PenOptions({ kind = 'pen' }: { kind?: 'pen' | 'eraser' }): React.JSX.El
       />
       <span className="pc-value">{width}</span>
     </>
+  )
+}
+
+/** スマホ：選んでいる軌跡に描き足すかどうか */
+function AppendKey(): React.JSX.Element {
+  const on = useEditor((s) => s.appendMode)
+  const idx = useEditor((s) => s.project.strokes.findIndex((x) => x.id === s.selectedId))
+  return (
+    <button
+      className={`pc-key ${on ? 'on' : ''}`}
+      aria-pressed={on}
+      aria-label="選んでいる軌跡に描き足す"
+      onClick={() => useEditor.getState().setAppendMode(!on)}
+    >
+      <Icon name="plusPen" size={18} />
+      <small>{on ? (idx >= 0 ? `#${idx + 1}に足す` : '軌跡を選択') : '描き足す'}</small>
+    </button>
   )
 }
 

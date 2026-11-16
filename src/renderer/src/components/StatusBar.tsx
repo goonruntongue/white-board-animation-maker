@@ -4,7 +4,7 @@ import { buildTimeline } from '../engine/wb-engine'
 import { useEditor } from '../store'
 
 const HINTS: Record<string, string> = {
-  draw: 'ドラッグで描き順をなぞる ・ 1〜5 / [ ] でペン先サイズ（最大 600px） ・ ホイールでズーム ・ Alt+ドラッグで移動',
+  draw: 'ドラッグで描き順をなぞる ・ Shift＋ドラッグで選んでいる軌跡に描き足す ・ 1〜5 / [ ] でペン先サイズ（最大 600px） ・ ホイールでズーム ・ Alt+ドラッグで移動',
   erase: 'ドラッグで、選んでいる軌跡の表示を消す（道筋と時間はそのまま） ・ 1〜4 / [ ] で大きさ ・ 元に戻すで取り消し',
   select: 'クリックで軌跡を選択 ・ ↑↓ で前後の軌跡 ・ Delete で削除',
   pan: 'ドラッグで表示位置を移動 ・ ホイールでズーム',
