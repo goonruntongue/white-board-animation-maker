@@ -16,6 +16,7 @@ import {
   togglePlay
 } from './commands'
 import { ExportDialogs } from './components/ExportDialogs'
+import { RecoveryDialog } from './components/RecoveryDialog'
 import { Inspector } from './components/Inspector'
 import { PhoneAppBar, PhoneContextBar, PhoneDock } from './components/phone/PhoneChrome'
 import { ERASER_PRESETS, PEN_MAX, PEN_MIN, PEN_PRESETS } from './components/PenSizePicker'
@@ -28,6 +29,7 @@ import { Toolbar } from './components/Toolbar'
 import { buildTimeline } from './engine/wb-engine'
 import { isDesktop, setWindowTitle } from './lib/platform'
 import { useIsPhone } from './lib/useMedia'
+import { beginSession, listSnapshots, startAutosave } from './lib/recovery'
 import { SELECTION_TOOLS, useEditor } from './store'
 
 function isTyping(target: EventTarget | null): boolean {
@@ -49,6 +51,19 @@ export default function App(): React.JSX.Element {
   const [dragOver, setDragOver] = useState(false)
   const total = useMemo(() => buildTimeline(project).total, [project])
   const onZoomChange = useCallback((z: number) => setZoom(z), [])
+
+  // ---- 自動バックアップ（異常終了していたら、起動時に復元を案内） ----
+  useEffect(() => {
+    const { crashed } = beginSession()
+    const stop = startAutosave()
+    if (crashed) {
+      void listSnapshots().then((list) => {
+        if (list.length > 0) useEditor.getState().openDialog('recovery')
+      })
+    }
+    return stop
+  }, [])
+  const dialog = useEditor((s) => s.dialog)
 
   // ---- 再生ループ ----
   useEffect(() => {
@@ -205,6 +220,7 @@ export default function App(): React.JSX.Element {
       <Timeline />
       {isPhone ? <PhoneDock /> : <StatusBar zoom={zoom} />}
       <ExportDialogs />
+      {dialog === 'recovery' && <RecoveryDialog />}
       <Toast />
       {dragOver && (
         <div className="drop-overlay" onDragLeave={() => setDragOver(false)}>

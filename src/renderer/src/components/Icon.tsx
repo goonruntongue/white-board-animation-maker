@@ -40,6 +40,7 @@ const PATHS: Record<string, string> = {
   selectAll: 'M4 4h16v16H4Z M8 8h8v8H8Z',
   invert: 'M4 4h16v16H4Z M4 20L20 4',
   eraser: 'M7 21h10 M5.6 14.4l7.1-7.1a2 2 0 0 1 2.8 0l3.2 3.2a2 2 0 0 1 0 2.8L13 19H8.6l-3-3a1.1 1.1 0 0 1 0-1.6Z M9 11l5 5',
+  history: 'M3 12a9 9 0 1 0 2.6-6.4L3 8 M3 3v5h5 M12 7v5l3.5 2',
   sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z'
 }
 

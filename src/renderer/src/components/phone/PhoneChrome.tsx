@@ -52,6 +52,7 @@ export function PhoneAppBar(): React.JSX.Element {
     { icon: 'camera', label: '写真を撮る', note: 'カメラで撮影して読み込む', onSelect: () => void captureImage() },
     { icon: 'save', label: 'プロジェクトを保存', note: '.wbanim（あとで続きを編集できる）', onSelect: () => void saveProject() },
     { icon: 'folder', label: 'プロジェクトを開く', onSelect: () => void openProject() },
+    { icon: 'history', label: '自動バックアップから復元', note: '数分前の状態に戻す', onSelect: () => useEditor.getState().openDialog('recovery') },
     { icon: 'upload', label: '手・ペン素材を読み込む', note: '透過 PNG / WebP / SVG', onSelect: () => void importHandDialog() },
     {
       icon: theme === 'dark' ? 'sun' : 'moon',

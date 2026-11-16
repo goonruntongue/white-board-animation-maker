@@ -40,7 +40,7 @@ interface EditorState {
   toast: { id: number; text: string; kind: 'info' | 'error' } | null
   /** 次の録画で置き換える軌跡 */
   rerecordId: string | null
-  dialog: 'html' | 'video' | null
+  dialog: 'html' | 'video' | 'recovery' | null
   /** スマホ表示で開いている下部シート */
   mobileSheet: 'strokes' | 'inspector' | null
 
@@ -69,7 +69,7 @@ interface EditorState {
   setViewMode: (v: 'edit' | 'preview') => void
   notify: (text: string, kind?: 'info' | 'error') => void
   setRerecord: (id: string | null) => void
-  openDialog: (d: 'html' | 'video' | null) => void
+  openDialog: (d: 'html' | 'video' | 'recovery' | null) => void
   setMobileSheet: (s: 'strokes' | 'inspector' | null) => void
 }
 

@@ -52,6 +52,33 @@ function createWindow(): void {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
+  // 画面の処理が落ちた・固まったときは、再読み込みして自動バックアップから復元できるようにする
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    if (details.reason === 'clean-exit') return
+    const choice = dialog.showMessageBoxSync(mainWindow!, {
+      type: 'error',
+      title: '問題が発生しました',
+      message: '画面の処理が停止しました。',
+      detail: '再読み込みすると、自動バックアップから直前の状態に戻せます。',
+      buttons: ['再読み込みして復元', '閉じる'],
+      defaultId: 0
+    })
+    if (choice === 0) mainWindow?.webContents.reload()
+    else mainWindow?.close()
+  })
+  mainWindow.webContents.on('unresponsive', () => {
+    const choice = dialog.showMessageBoxSync(mainWindow!, {
+      type: 'warning',
+      title: '応答していません',
+      message: 'アプリが応答していません。',
+      detail: 'しばらく待つか、再読み込みしてください。再読み込みすると、自動バックアップから直前の状態に戻せます。',
+      buttons: ['待つ', '再読み込みして復元'],
+      defaultId: 0,
+      cancelId: 0
+    })
+    if (choice === 1) mainWindow?.webContents.forcefullyCrashRenderer()
+  })
+
   mainWindow.webContents.on('did-finish-load', () => {
     if (pendingOpenPath) {
       void sendProjectToRenderer(pendingOpenPath)
@@ -98,6 +125,7 @@ function buildMenu(): void {
         { label: 'プロジェクトを開く…', accelerator: 'CmdOrCtrl+O', click: () => send('open') },
         { label: '保存', accelerator: 'CmdOrCtrl+S', click: () => send('save') },
         { label: '名前を付けて保存…', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('save-as') },
+        { label: '自動バックアップから復元…', click: () => send('recovery') },
         { type: 'separator' },
         { label: '画像を読み込む…', accelerator: 'CmdOrCtrl+I', click: () => send('import-image') },
         { label: '手・ペン素材を読み込む…', click: () => send('import-hand') },

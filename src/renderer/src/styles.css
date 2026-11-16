@@ -2658,3 +2658,69 @@ button {
   color: var(--warn);
   text-shadow: none;
 }
+
+/* ---------- 自動バックアップから復元 ---------- */
+.recovery-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: var(--lcd-bg);
+  color: var(--warn);
+  font-weight: 500;
+  box-shadow: var(--well-shadow);
+}
+.recovery-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: min(46vh, 380px);
+  overflow-y: auto;
+}
+.recovery-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: linear-gradient(180deg, var(--plate-top), var(--plate-bot));
+  box-shadow: var(--key-shadow);
+}
+.rec-when {
+  display: flex;
+  flex-direction: column;
+  min-width: 76px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--lcd-bg);
+  color: var(--lcd-fg);
+  text-shadow: var(--lcd-glow);
+  font-family: var(--mono);
+  box-shadow: var(--well-shadow);
+}
+.rec-when strong {
+  font-family: var(--font);
+  font-size: 12.5px;
+}
+.rec-when span {
+  font-size: 11px;
+  opacity: 0.75;
+}
+.rec-what {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rec-name {
+  font-weight: 700;
+  color: var(--text-0);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

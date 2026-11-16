@@ -47,6 +47,9 @@ export function Toolbar(): React.JSX.Element {
         <button className="icon-btn" title="保存 (Ctrl+S)" onClick={() => void saveProject()}>
           <Icon name="save" />
         </button>
+        <button className="icon-btn" title="自動バックアップから復元" onClick={() => useEditor.getState().openDialog('recovery')}>
+          <Icon name="history" />
+        </button>
         <button className="icon-btn" title="画像を読み込む (Ctrl+I)" onClick={() => void importImageDialog()}>
           <Icon name="image" />
         </button>

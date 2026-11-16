@@ -242,6 +242,8 @@ export function runMenuCommand(cmd: string, payload?: unknown): void {
       return setThemePref(payload as ThemePref, true)
     case 'deselect':
       return deselect()
+    case 'recovery':
+      return get().openDialog('recovery')
     case 'select-all':
       return selectAll()
     case 'invert-selection':
