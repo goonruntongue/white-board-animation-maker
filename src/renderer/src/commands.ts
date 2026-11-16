@@ -183,6 +183,14 @@ export function deselect(): void {
   st.notify('選択を解除しました')
 }
 
+/** キャンバス全体を選択する（Ctrl+A） */
+export function selectAll(): void {
+  const st = get()
+  if (!st.project.image) return
+  st.setSelection({ shapes: [{ kind: 'all', mode: 'add' }] })
+  if (st.viewMode !== 'edit') st.setViewMode('edit')
+}
+
 export function invertSelection(): void {
   const st = get()
   if (!st.project.image) return
@@ -228,6 +236,8 @@ export function runMenuCommand(cmd: string, payload?: unknown): void {
       return setThemePref(payload as ThemePref, true)
     case 'deselect':
       return deselect()
+    case 'select-all':
+      return selectAll()
     case 'invert-selection':
       return invertSelection()
     case 'tool-rect':

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { importImageDialog } from '../commands'
 import { simplifyPoints, strokeFromRecording } from '../engine/project'
-import { combine, isDegenerate, normalizeBox, type SelectionOp } from '../engine/selection'
+import { combine, flattenShapes, isDegenerate, normalizeBox, type SelectionOp } from '../engine/selection'
 import type { ClipShape, Stroke, StrokePoint } from '../engine/types'
 import { buildTimeline, rasterizeClip, traceClipShape, WBRenderer } from '../engine/wb-engine'
 import { CANVAS_FONT_FAMILY } from '../fonts'
@@ -68,8 +68,12 @@ function hitStroke(strokes: Stroke[], x: number, y: number, tolerance: number): 
   return null
 }
 
-function opFromEvent(e: { shiftKey: boolean; altKey: boolean }): SelectionOp {
-  return e.altKey ? 'subtract' : e.shiftKey ? 'add' : 'new'
+/** Shift=追加 / Alt=除外 / Shift+Alt=交差（Photoshop と同じ）。修飾キーがなければオプションバーのモード */
+function opFromEvent(e: { shiftKey: boolean; altKey: boolean }, mode: SelectionOp): SelectionOp {
+  if (e.shiftKey && e.altKey) return 'intersect'
+  if (e.altKey) return 'subtract'
+  if (e.shiftKey) return 'add'
+  return mode
 }
 
 function draftShape(d: Draft): ClipShape | null {
@@ -271,7 +275,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
 
     // 選択範囲の点線（動く点線）
     if (viewMode === 'edit') {
-      if (selection) for (const shape of selection.shapes) drawAnts(ctx, shape, imgW, imgH, px, antsOffset.current)
+      if (selection) for (const shape of flattenShapes(selection)) drawAnts(ctx, shape, imgW, imgH, px, antsOffset.current)
       const d = draft.current
       if (d) {
         const shape = draftShape(d)
@@ -436,7 +440,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         drawOverlay()
         return
       }
-      const op = opFromEvent(e)
+      const op = opFromEvent(e, st.selectionMode)
       if (tool === 'lasso') {
         draft.current = { kind: 'lasso', op, points: [p], pointerId: e.pointerId, downClient: { x: e.clientX, y: e.clientY }, freehand: false }
       } else {
@@ -648,10 +652,16 @@ function polyline(ctx: CanvasRenderingContext2D, pts: Pt[]): void {
 
 /** 白黒の動く点線で図形の輪郭を描く */
 function drawAnts(ctx: CanvasRenderingContext2D, shape: ClipShape, w: number, h: number, px: number, offset: number): void {
-  if (shape.kind === 'all') return
+  if (shape.kind === 'region') return
   ctx.save()
-  traceClipShape(ctx, shape, w, h)
-  strokeAnts(ctx, px, offset, shape.mode === 'subtract')
+  if (shape.kind === 'all') {
+    // 画像の縁の内側に描いて、点線が見えるようにする
+    ctx.beginPath()
+    ctx.rect(px, px, w - 2 * px, h - 2 * px)
+  } else {
+    traceClipShape(ctx, shape, w, h)
+  }
+  strokeAnts(ctx, px, offset, shape.mode !== 'add')
   ctx.restore()
 }
 

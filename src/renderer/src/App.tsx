@@ -3,6 +3,7 @@ import {
   deleteSelected,
   deselect,
   invertSelection,
+  selectAll,
   importImageDialog,
   importImageFile,
   newProject,
@@ -25,7 +26,7 @@ import { Toast } from './components/Toast'
 import { Toolbar } from './components/Toolbar'
 import { buildTimeline } from './engine/wb-engine'
 import { isDesktop, setWindowTitle } from './lib/platform'
-import { useEditor } from './store'
+import { SELECTION_TOOLS, useEditor } from './store'
 
 function isTyping(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null
@@ -96,6 +97,8 @@ export default function App(): React.JSX.Element {
         if ((k === 'z' && e.shiftKey) || k === 'y') return void (e.preventDefault(), st.redo())
         // 選択範囲（Photoshop と同じキー）
         if (k === 'd' && !e.shiftKey) return void (e.preventDefault(), deselect())
+        // 選択ツールのときだけ Ctrl+A でキャンバス全体を選択（入力欄では通常の全選択のまま）
+        if (k === 'a' && SELECTION_TOOLS.includes(st.tool)) return void (e.preventDefault(), selectAll())
         if (k === 'i' && e.shiftKey) return void (e.preventDefault(), invertSelection())
         // デスクトップ版ではメニューのアクセラレータが処理する
         if (isDesktop) return

@@ -1,8 +1,9 @@
-import { deselect, importImageDialog, newProject, openExport, openProject, saveProject } from '../commands'
+import { importImageDialog, newProject, openExport, openProject, saveProject } from '../commands'
 import { isDesktop } from '../lib/platform'
-import { useEditor, type Tool } from '../store'
+import { SELECTION_TOOLS, useEditor, type Tool } from '../store'
 import { Icon, type IconName } from './Icon'
 import { PenSizePicker } from './PenSizePicker'
+import { SelectionModeBar } from './SelectionModeBar'
 import { ThemeSwitch } from './ThemeSwitch'
 
 const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
@@ -24,7 +25,6 @@ export function Toolbar(): React.JSX.Element {
   const dirty = useEditor((s) => s.dirty)
   const name = useEditor((s) => s.project.name)
   const hasImage = useEditor((s) => !!s.project.image)
-  const hasSelection = useEditor((s) => !!s.selection)
   const { setTool, undo, redo } = useEditor.getState()
 
   return (
@@ -88,12 +88,10 @@ Shift+ドラッグで追加 / Alt+ドラッグで除外`}
             <Icon name={t.icon} />
           </button>
         ))}
-        <button className="icon-btn" title="選択を解除 (Ctrl+D)" disabled={!hasSelection} onClick={deselect}>
-          <Icon name="deselect" />
-        </button>
       </div>
 
-      <PenSizePicker disabled={!hasImage} />
+      {/* オプションバー：選択ツールなら合成モード、それ以外はペン先サイズ */}
+      {SELECTION_TOOLS.includes(tool) ? <SelectionModeBar /> : <PenSizePicker disabled={!hasImage} />}
 
       <div className="doc-title">
         {name}

@@ -9,13 +9,16 @@ export interface StrokePoint {
   t: number
 }
 
-export type ClipMode = 'add' | 'subtract'
+/** add: 追加 / subtract: 除外 / intersect: 交差（重なった部分だけ残す） */
+export type ClipMode = 'add' | 'subtract' | 'intersect'
 
 /** 選択範囲を構成する図形。rect / ellipse は外接矩形、poly は頂点列、all は画像全体 */
 export type ClipShape =
   | { kind: 'rect' | 'ellipse'; mode: ClipMode; x: number; y: number; w: number; h: number }
   | { kind: 'poly'; mode: ClipMode; points: { x: number; y: number }[] }
   | { kind: 'all'; mode: ClipMode }
+  /** 別の選択範囲をまるごと1つの図形として扱う（反転などで使う） */
+  | { kind: 'region'; mode: ClipMode; region: ClipRegion }
 
 /** 選択範囲。図形を先頭から順に「追加」「除外」して作る */
 export interface ClipRegion {

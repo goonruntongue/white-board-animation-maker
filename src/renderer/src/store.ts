@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { builtinHand } from './engine/handAsset'
 import { createProject } from './engine/project'
+import type { SelectionOp } from './engine/selection'
 import type { ClipRegion, Project, ProjectSettings, Stroke } from './engine/types'
 
 export type Tool = 'draw' | 'select' | 'pan' | 'rect' | 'ellipse' | 'lasso'
@@ -24,6 +25,8 @@ interface EditorState {
   future: Snapshot[]
   /** 現在の選択範囲。この状態で描いた軌跡は範囲の外を見せない */
   selection: ClipRegion | null
+  /** 選択ツールの合成モード（オプションバーで切り替え。Shift / Alt はこれより優先） */
+  selectionMode: SelectionOp
 
   tool: Tool
   selectedId: string | null
@@ -46,6 +49,7 @@ interface EditorState {
   removeStroke: (id: string) => void
   moveStroke: (id: string, toIndex: number) => void
   setSelection: (sel: ClipRegion | null) => void
+  setSelectionMode: (m: SelectionOp) => void
   undo: () => void
   redo: () => void
 
@@ -69,6 +73,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   past: [],
   future: [],
   selection: null,
+  selectionMode: 'new',
   tool: 'draw',
   selectedId: null,
   time: 0,
@@ -146,6 +151,8 @@ export const useEditor = create<EditorState>((set, get) => ({
       future: []
     }))
   },
+
+  setSelectionMode: (selectionMode) => set({ selectionMode }),
 
   undo: () => {
     const { past, project, selection, future } = get()

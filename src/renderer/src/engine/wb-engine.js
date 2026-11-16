@@ -163,9 +163,11 @@ function makeCanvas(w, h) {
 
 // ----------------------------------------------------------------------------
 // 選択範囲（クリップ）
-//   clip = { shapes: [{ kind: 'rect'|'ellipse'|'poly'|'all', mode: 'add'|'subtract', ... }] }
-//   図形を先頭から順に「追加」「除外」して範囲を作る（Photoshop の Shift / Alt と同じ考え方）。
-//   rect / ellipse は外接矩形 {x, y, w, h}、poly は points [{x, y}]、all は画像全体。
+//   clip = { shapes: [{ kind, mode, ... }] }
+//   図形を先頭から順に合成して範囲を作る（Photoshop の 新規／追加／除外／交差 と同じ考え方）。
+//     mode   : 'add'（追加） | 'subtract'（除外） | 'intersect'（交差：重なった部分だけ残す）
+//     kind   : 'rect' | 'ellipse'（外接矩形 {x, y, w, h}） | 'poly'（points） | 'all'（画像全体）
+//              | 'region'（入れ子の選択範囲 { region }。反転などで使う）
 // ----------------------------------------------------------------------------
 
 export function traceClipShape(ctx, shape, width, height) {
@@ -183,47 +185,61 @@ export function traceClipShape(ctx, shape, width, height) {
   ctx.closePath()
 }
 
+const CLIP_OP = { add: 'source-over', subtract: 'destination-out', intersect: 'destination-in' }
+
 /** 選択範囲を、範囲内だけ不透明なマスク画像にする */
 export function rasterizeClip(clip, width, height) {
   const c = makeCanvas(width, height)
   const ctx = c.getContext('2d')
   ctx.fillStyle = '#000'
   for (const shape of clip.shapes) {
-    ctx.globalCompositeOperation = shape.mode === 'subtract' ? 'destination-out' : 'source-over'
-    traceClipShape(ctx, shape, width, height)
-    ctx.fill()
+    // destination-in は、描いた図形の外側をすべて消す＝交差
+    ctx.globalCompositeOperation = CLIP_OP[shape.mode] || 'source-over'
+    if (shape.kind === 'region') {
+      ctx.drawImage(rasterizeClip(shape.region, width, height), 0, 0)
+    } else {
+      traceClipShape(ctx, shape, width, height)
+      ctx.fill()
+    }
   }
   ctx.globalCompositeOperation = 'source-over'
   return c
 }
 
-/** 選択範囲が及びうる矩形（「追加」図形の外接矩形の和）。描画範囲を絞るために使う */
-export function clipBounds(clip, width, height) {
-  let x0 = Infinity
-  let y0 = Infinity
-  let x1 = -Infinity
-  let y1 = -Infinity
+function shapeBox(s, width, height) {
+  if (s.kind === 'all') return { x0: 0, y0: 0, x1: width, y1: height }
+  if (s.kind === 'region') return boxOf(s.region, width, height)
+  if (s.kind === 'poly') {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+    for (const p of s.points) {
+      x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y)
+    }
+    return { x0, y0, x1, y1 }
+  }
+  return { x0: Math.min(s.x, s.x + s.w), y0: Math.min(s.y, s.y + s.h), x1: Math.max(s.x, s.x + s.w), y1: Math.max(s.y, s.y + s.h) }
+}
+
+/** 範囲が及びうる矩形（追加＝和、交差＝共通部分、除外＝そのまま） */
+function boxOf(clip, width, height) {
+  let b = null
   for (const s of clip.shapes) {
-    if (s.mode === 'subtract') continue
-    if (s.kind === 'all') return { x: 0, y: 0, w: width, h: height }
-    if (s.kind === 'poly') {
-      for (const p of s.points) {
-        x0 = Math.min(x0, p.x)
-        y0 = Math.min(y0, p.y)
-        x1 = Math.max(x1, p.x)
-        y1 = Math.max(y1, p.y)
-      }
-    } else {
-      x0 = Math.min(x0, s.x, s.x + s.w)
-      y0 = Math.min(y0, s.y, s.y + s.h)
-      x1 = Math.max(x1, s.x, s.x + s.w)
-      y1 = Math.max(y1, s.y, s.y + s.h)
+    const sb = shapeBox(s, width, height)
+    if (s.mode === 'add') {
+      b = b ? { x0: Math.min(b.x0, sb.x0), y0: Math.min(b.y0, sb.y0), x1: Math.max(b.x1, sb.x1), y1: Math.max(b.y1, sb.y1) } : sb
+    } else if (s.mode === 'intersect' && b) {
+      b = { x0: Math.max(b.x0, sb.x0), y0: Math.max(b.y0, sb.y0), x1: Math.min(b.x1, sb.x1), y1: Math.min(b.y1, sb.y1) }
     }
   }
-  if (x0 === Infinity) return { x: 0, y: 0, w: 0, h: 0 }
-  const x = Math.max(0, Math.floor(x0) - 1)
-  const y = Math.max(0, Math.floor(y0) - 1)
-  return { x, y, w: Math.min(width, Math.ceil(x1) + 1) - x, h: Math.min(height, Math.ceil(y1) + 1) - y }
+  return b || { x0: 0, y0: 0, x1: 0, y1: 0 }
+}
+
+/** 選択範囲が及びうる矩形（描画範囲を絞るために使う） */
+export function clipBounds(clip, width, height) {
+  const b = boxOf(clip, width, height)
+  if (b.x1 <= b.x0 || b.y1 <= b.y0) return { x: 0, y: 0, w: 0, h: 0 }
+  const x = Math.max(0, Math.floor(b.x0) - 1)
+  const y = Math.max(0, Math.floor(b.y0) - 1)
+  return { x, y, w: Math.max(0, Math.min(width, Math.ceil(b.x1) + 1) - x), h: Math.max(0, Math.min(height, Math.ceil(b.y1) + 1) - y) }
 }
 
 /**

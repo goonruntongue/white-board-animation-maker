@@ -7,9 +7,9 @@ const HINTS: Record<string, string> = {
   draw: 'ドラッグで描き順をなぞる ・ 1〜4 / [ ] でペン先サイズ ・ ホイールでズーム ・ Alt+ドラッグで移動',
   select: 'クリックで軌跡を選択 ・ ↑↓ で前後の軌跡 ・ Delete で削除',
   pan: 'ドラッグで表示位置を移動 ・ ホイールでズーム',
-  rect: 'ドラッグで長方形の範囲 ・ Shift で追加 / Alt で除外 ・ クリックで選択解除 ・ Ctrl+D 解除 / Ctrl+Shift+I 反転',
-  ellipse: 'ドラッグで楕円の範囲 ・ Shift で追加 / Alt で除外 ・ クリックで選択解除 ・ Ctrl+D 解除 / Ctrl+Shift+I 反転',
-  lasso: 'ドラッグで自由に囲む / クリックで頂点を打つ多角形 ・ Shift で追加 / Alt で除外 ・ Ctrl+D 解除'
+  rect: 'ドラッグで長方形の範囲 ・ 合成モードはツールバーで切替（Shift 追加 / Alt 除外 / Shift+Alt 交差） ・ Ctrl+A 全体 / Ctrl+D 解除',
+  ellipse: 'ドラッグで楕円の範囲 ・ 合成モードはツールバーで切替（Shift 追加 / Alt 除外 / Shift+Alt 交差） ・ Ctrl+A 全体 / Ctrl+D 解除',
+  lasso: 'ドラッグで自由に囲む / クリックで多角形 ・ Shift 追加 / Alt 除外 / Shift+Alt 交差 ・ Ctrl+A 全体 / Ctrl+D 解除'
 }
 
 export function StatusBar({ zoom }: { zoom: number }): React.JSX.Element {

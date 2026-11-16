@@ -129,6 +129,7 @@ function buildMenu(): void {
         { label: '楕円形選択', accelerator: 'Shift+M', click: () => send('tool-ellipse'), registerAccelerator: false },
         { label: '投げ縄', accelerator: 'L', click: () => send('tool-lasso'), registerAccelerator: false },
         { type: 'separator' },
+        { label: 'すべてを選択', accelerator: 'CmdOrCtrl+A', click: () => send('select-all'), registerAccelerator: false },
         { label: '選択を解除', accelerator: 'CmdOrCtrl+D', click: () => send('deselect'), registerAccelerator: false },
         { label: '選択範囲を反転', accelerator: 'CmdOrCtrl+Shift+I', click: () => send('invert-selection'), registerAccelerator: false }
       ]

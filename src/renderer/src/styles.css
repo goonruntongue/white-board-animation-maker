@@ -1814,3 +1814,20 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
     display: none;
   }
 }
+
+/* ---------- 選択範囲のオプションバー ---------- */
+.sel-modes {
+  gap: 2px;
+}
+.mode-btn {
+  gap: 5px;
+  padding: 0 9px 0 7px;
+}
+.mode-btn svg {
+  flex: none;
+}
+@media (max-width: 1580px) {
+  .mode-btn {
+    padding: 0 6px;
+  }
+}
