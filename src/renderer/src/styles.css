@@ -2630,3 +2630,15 @@ button {
 .app.phone:not(.has-image) .timeline {
   display: none;
 }
+
+/* 長押し中の手ごたえ（押し込まれていく） */
+.clip,
+.stroke-row {
+  -webkit-touch-callout: none;
+  transition: transform 0.45s ease-out, filter 0.45s ease-out;
+}
+.clip[data-pressing],
+.stroke-row[data-pressing] {
+  transform: scale(0.96);
+  filter: brightness(0.9);
+}

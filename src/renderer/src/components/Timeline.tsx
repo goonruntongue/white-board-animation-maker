@@ -1,9 +1,11 @@
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { rewind, togglePlay } from '../commands'
 import { formatTime } from '../engine/project'
 import { buildTimeline } from '../engine/wb-engine'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
+import { StrokeActions } from './phone/StrokeActions'
+import { useLongPress } from '../lib/useLongPress'
 
 export function Timeline(): React.JSX.Element {
   const project = useEditor((s) => s.project)
@@ -14,6 +16,7 @@ export function Timeline(): React.JSX.Element {
   const timeline = useMemo(() => buildTimeline(project), [project])
   const total = Math.max(1, timeline.total)
   const trackRef = useRef<HTMLDivElement>(null)
+  const [menuFor, setMenuFor] = useState<string | null>(null)
 
   const seekTo = (clientX: number): void => {
     const el = trackRef.current
@@ -80,26 +83,61 @@ export function Timeline(): React.JSX.Element {
             const left = (seg.start / total) * 100
             const width = ((seg.end - seg.start) / total) * 100
             return (
-              <div
+              <TimelineClip
                 key={stroke.id}
-                className={`clip ${stroke.id === selectedId ? 'selected' : ''}`}
-                style={{ left: `${left}%`, width: `${width}%`, backgroundColor: stroke.color }}
-                title={`${seg.index + 1}. ${stroke.name}`}
-                onPointerDown={(e) => {
-                  e.stopPropagation()
-                  select(stroke.id)
-                }}
+                index={seg.index}
+                name={stroke.name}
+                color={stroke.color}
+                left={left}
+                width={width}
+                selected={stroke.id === selectedId}
+                onSelect={() => select(stroke.id)}
                 onDoubleClick={() => seekTo(clientXAt(trackRef.current, seg.start / total))}
-              >
-                <span>{seg.index + 1}</span>
-              </div>
+                onMenu={() => {
+                  select(stroke.id)
+                  setMenuFor(stroke.id)
+                }}
+              />
             )
           })}
           {timeline.segments.length === 0 && <div className="track-empty">軌跡を追加するとここに並びます</div>}
         </div>
         <div className="playhead" style={{ left: `${(time / total) * 100}%` }} />
       </div>
+      {menuFor && <StrokeActions strokeId={menuFor} onClose={() => setMenuFor(null)} />}
     </footer>
+  )
+}
+
+/** タイムライン上の1本の軌跡。タップで選択、長押し（右クリック）でメニュー */
+function TimelineClip(props: {
+  index: number
+  name: string
+  color: string
+  left: number
+  width: number
+  selected: boolean
+  onSelect: () => void
+  onDoubleClick: () => void
+  onMenu: () => void
+}): React.JSX.Element {
+  const lp = useLongPress(props.onMenu)
+  return (
+    <div
+      className={`clip ${props.selected ? 'selected' : ''}`}
+      style={{ left: `${props.left}%`, width: `${props.width}%`, backgroundColor: props.color }}
+      title={`${props.index + 1}. ${props.name}（長押し・右クリックでメニュー）`}
+      {...lp.handlers}
+      onPointerDown={(e) => {
+        // 時間軸のシーク（親の pointerdown）にさせない
+        e.stopPropagation()
+        props.onSelect()
+        lp.handlers.onPointerDown(e)
+      }}
+      onDoubleClick={props.onDoubleClick}
+    >
+      <span>{props.index + 1}</span>
+    </div>
   )
 }
 

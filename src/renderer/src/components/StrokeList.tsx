@@ -1,7 +1,16 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useLongPress } from '../lib/useLongPress'
+import { StrokeActions } from './phone/StrokeActions'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
 import { SheetBar } from './SheetBar'
+
+function rowId(e: React.SyntheticEvent): string | null {
+  const t = e.target as HTMLElement
+  // 行内のボタン・入力欄を押したときはメニューを出さない
+  if (t.closest('button, input')) return null
+  return t.closest<HTMLElement>('[data-stroke-id]')?.dataset.strokeId ?? null
+}
 
 export function StrokeList(): React.JSX.Element {
   const strokes = useEditor((s) => s.project.strokes)
@@ -11,6 +20,14 @@ export function StrokeList(): React.JSX.Element {
   const [dragId, setDragId] = useState<string | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  // 行を長押し（右クリック）でメニュー
+  const [menuFor, setMenuFor] = useState<string | null>(null)
+  const pressed = useRef<string | null>(null)
+  const lp = useLongPress(() => {
+    if (!pressed.current) return
+    select(pressed.current)
+    setMenuFor(pressed.current)
+  }, '.stroke-row')
 
   return (
     <aside className="panel left">
@@ -31,10 +48,22 @@ export function StrokeList(): React.JSX.Element {
           </p>
         </div>
       ) : (
-        <ul className="stroke-list">
+        <ul
+          className="stroke-list"
+          {...lp.handlers}
+          onPointerDown={(e) => {
+            pressed.current = rowId(e)
+            if (pressed.current) lp.handlers.onPointerDown(e)
+          }}
+          onContextMenu={(e) => {
+            pressed.current = rowId(e)
+            if (pressed.current) lp.handlers.onContextMenu(e)
+          }}
+        >
           {strokes.map((s, i) => (
             <li
               key={s.id}
+              data-stroke-id={s.id}
               className={[
                 'stroke-row',
                 s.id === selectedId && 'selected',
@@ -136,6 +165,7 @@ export function StrokeList(): React.JSX.Element {
           ))}
         </ul>
       )}
+      {menuFor && <StrokeActions strokeId={menuFor} onClose={() => setMenuFor(null)} />}
     </aside>
   )
 }

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { builtinHand } from './engine/handAsset'
-import { createProject } from './engine/project'
+import { createProject, newId } from './engine/project'
 import type { SelectionOp } from './engine/selection'
 import type { ClipRegion, Project, ProjectSettings, Stroke } from './engine/types'
 
@@ -52,6 +52,8 @@ interface EditorState {
   updateStroke: (id: string, patch: Partial<Stroke>) => void
   removeStroke: (id: string) => void
   moveStroke: (id: string, toIndex: number) => void
+  /** すぐ後ろに複製を作り、それを選ぶ */
+  duplicateStroke: (id: string) => void
   setSelection: (sel: ClipRegion | null) => void
   setSelectionMode: (m: SelectionOp) => void
   undo: () => void
@@ -160,6 +162,20 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
 
   setSelectionMode: (selectionMode) => set({ selectionMode }),
+
+  duplicateStroke: (id) => {
+    const { project } = get()
+    const idx = project.strokes.findIndex((s) => s.id === id)
+    if (idx < 0) return
+    const src = project.strokes[idx]
+    const copy = { ...src, id: newId(), name: `${src.name} のコピー`, points: src.points.map((p) => ({ ...p })) }
+    get().commit((p) => {
+      const strokes = [...p.strokes]
+      strokes.splice(idx + 1, 0, copy)
+      return { ...p, strokes }
+    })
+    set({ selectedId: copy.id })
+  },
 
   undo: () => {
     const { past, project, selection, future } = get()
