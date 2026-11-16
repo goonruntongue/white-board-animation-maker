@@ -18,7 +18,19 @@ export interface AutoTraceOptions {
   detail: AutoDetail
   /** 書く速さ */
   speed: AutoSpeed
+  /** 上下のごしごし（0 = なし 〜 1 = 行の高さいっぱいに上下させながら進む） */
+  scrubV?: number
+  /** 左右のごしごし（0 = なし 〜 1 = 大きく行ったり戻ったりしながら進む） */
+  scrubH?: number
 }
+
+/** 手の動き方のおすすめの組み合わせ */
+export const MOTION_PRESETS: { id: string; label: string; note: string; scrubV: number; scrubH: number }[] = [
+  { id: 'smooth', label: 'なめらか', note: '文字の流れに沿ってすっと進む', scrubV: 0, scrubH: 0 },
+  { id: 'vertical', label: '上下にごしごし', note: '縦に往復しながら右へ進む', scrubV: 0.8, scrubH: 0 },
+  { id: 'horizontal', label: '左右にごしごし', note: '行ったり戻ったりしながら進む', scrubV: 0, scrubH: 0.7 },
+  { id: 'both', label: '斜めにごしごし', note: '上下と左右の両方', scrubV: 0.6, scrubH: 0.45 }
+]
 
 export interface AutoTraceResult {
   strokes: Stroke[]
@@ -322,7 +334,10 @@ export function autoTrace(
     const inkH = inkTop < 0 ? 0 : inkBottom - inkTop + 1
     const bands = inkTop < 0 ? 0 : Math.max(1, Math.round(inkH / refH))
     const bandH = bands ? inkH / bands : 0
-    const bandWidth = bandH * 1.9 + 10 * k // 行の高さより十分太く（範囲の外は clip が守る）
+    // 見せる幅：行の高さより十分太く（範囲の外は clip が守る）。
+    // 上下にごしごしする分だけ線が上下に動くので、その分は細くしても行全体が見える
+    const ampV = (opts.scrubV ?? 0) * bandH * 0.42
+    const bandWidth = Math.max(bandH * 0.7, bandH * 1.9 - 2 * ampV) + 10 * k
 
     for (let j = 0; j < bands; j++) {
       const ya = Math.round(inkTop + j * bandH)
@@ -370,11 +385,36 @@ export function autoTrace(
         let first = true
         // 枠を一周したあとの部分は、太さを行の高さに合わせて切り替える
         const partWidth = frameWidth ? bandWidth : undefined
-        for (let x = xa; x < xb; x += step) {
-          push(b.x0 + x, yAt(x), first, 1, partWidth)
-          first = false
+        const sv = opts.scrubV ?? 0
+        const sh = opts.scrubH ?? 0
+        if (sv <= 0.01 && sh <= 0.01) {
+          // なめらか：インクの重心をたどって進む
+          for (let x = xa; x < xb; x += step) {
+            push(b.x0 + x, yAt(x), first, 1, partWidth)
+            first = false
+          }
+          push(b.x0 + xb + (xa === xb ? 1 : 0), yAt(xb), first, 1, partWidth)
+        } else {
+          // ごしごし：半周期ごとに、上下（sv）と左右（sh）に振りながら右へ進む。
+          //   上下：行の中心から ±ampV
+          //   左右：進む位置の前後に ±hAmp。半周期の進みより大きいと、手が少し戻ってまた進む動きになる
+          const half = Math.max(step, bandH * 0.38) // 半周期で進む距離
+          const hAmp = sh * half * 0.95
+          // 往復するぶん道のりが長くなるので、手を速く動かして全体の時間を抑える
+          const pace = 1 + 1.6 * Math.max(sv, sh)
+          const len = xb - xa
+          const count = Math.max(1, Math.round(len / half))
+          for (let i = 0; i <= count; i++) {
+            const xp = xa + (len * i) / count
+            const dir = i % 2 === 0 ? -1 : 1
+            // 書き始めと書き終わりは振らずに、行の端から端まで確実に届かせる
+            const edge = i === 0 || i === count
+            const x = Math.max(xa, Math.min(xb, xp + (edge ? 0 : dir * hAmp)))
+            const y = Math.max(ya, Math.min(yb, (sv > 0 ? center : yAt(xp)) + (edge ? 0 : dir * ampV)))
+            push(b.x0 + x + (len === 0 && i > 0 ? 1 : 0), y, first, pace, partWidth)
+            first = false
+          }
         }
-        push(b.x0 + xb + (xa === xb ? 1 : 0), yAt(xb), first, 1, partWidth)
       }
     }
     if (pts.length === 0) continue

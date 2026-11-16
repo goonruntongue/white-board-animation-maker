@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { autoTrace, type AutoDetail, type AutoSpeed } from '../engine/autoTrace'
+import { autoTrace, MOTION_PRESETS, type AutoDetail, type AutoSpeed } from '../engine/autoTrace'
+import { SliderField } from './Field'
 import { loadImage } from '../engine/wb-engine'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
@@ -15,12 +16,41 @@ const SPEEDS: { id: AutoSpeed; label: string }[] = [
   { id: 'fast', label: '速い' }
 ]
 
+// 前回選んだ設定を覚えておく（この端末の利用者ごとの好み）
+const PREF_KEY = 'wbam.autoTrace'
+interface AutoPrefs {
+  detail: AutoDetail
+  speed: AutoSpeed
+  scrubV: number
+  scrubH: number
+}
+function loadPrefs(): AutoPrefs {
+  const base: AutoPrefs = { detail: 'normal', speed: 'normal', scrubV: 0, scrubH: 0 }
+  try {
+    return { ...base, ...(JSON.parse(localStorage.getItem(PREF_KEY) ?? '{}') as Partial<AutoPrefs>) }
+  } catch {
+    return base
+  }
+}
+function savePrefs(p: AutoPrefs): void {
+  try {
+    localStorage.setItem(PREF_KEY, JSON.stringify(p))
+  } catch {
+    /* 保存できなくても続ける */
+  }
+}
+
 /** 画像を解析して、描き順（軌跡）の下書きを自動で作る */
 export function AutoTraceDialog(): React.JSX.Element {
   const project = useEditor((s) => s.project)
   const { openDialog, notify } = useEditor.getState()
-  const [detail, setDetail] = useState<AutoDetail>('normal')
-  const [speed, setSpeed] = useState<AutoSpeed>('normal')
+  const [prefs] = useState(loadPrefs)
+  const [detail, setDetail] = useState<AutoDetail>(prefs.detail)
+  const [speed, setSpeed] = useState<AutoSpeed>(prefs.speed)
+  // 手の動き：上下・左右のごしごしの強さ（0〜1）
+  const [scrubV, setScrubV] = useState(prefs.scrubV)
+  const [scrubH, setScrubH] = useState(prefs.scrubH)
+  const preset = MOTION_PRESETS.find((m) => Math.abs(m.scrubV - scrubV) < 0.005 && Math.abs(m.scrubH - scrubH) < 0.005)
   const [mode, setMode] = useState<'replace' | 'append'>('replace')
   const [busy, setBusy] = useState(false)
   const existing = project.strokes.length
@@ -41,7 +71,8 @@ export function AutoTraceDialog(): React.JSX.Element {
     try {
       const img = await loadImage(project.image.dataUrl)
       const start = mode === 'append' ? existing : 0
-      const result = autoTrace(img, project.image, project.settings.boardColor, { detail, speed }, start)
+      savePrefs({ detail, speed, scrubV, scrubH })
+      const result = autoTrace(img, project.image, project.settings.boardColor, { detail, speed, scrubV, scrubH }, start)
       const st = useEditor.getState()
       // まとめて1回の変更にする（「元に戻す」1回で取り消せる）
       st.commit((p) => ({ ...p, strokes: mode === 'append' ? [...p.strokes, ...result.strokes] : result.strokes }))
@@ -84,6 +115,48 @@ export function AutoTraceDialog(): React.JSX.Element {
                 </button>
               ))}
             </div>
+            <label>手の動き</label>
+            <div className="motion-picker">
+              <div className="choice-row wrap" role="radiogroup" aria-label="手の動き">
+                {MOTION_PRESETS.map((m) => (
+                  <button
+                    key={m.id}
+                    role="radio"
+                    aria-checked={preset?.id === m.id}
+                    className={`choice ${preset?.id === m.id ? 'on' : ''}`}
+                    title={m.note}
+                    onClick={() => {
+                      setScrubV(m.scrubV)
+                      setScrubH(m.scrubH)
+                    }}
+                  >
+                    <MotionIcon v={m.scrubV} h={m.scrubH} />
+                    <strong>{m.label}</strong>
+                  </button>
+                ))}
+              </div>
+              <SliderField
+                label="上下のごしごし"
+                hint="0% で上下に振らない（抑える）。大きいほど、行の高さいっぱいに上下させながら進みます"
+                value={Math.round(scrubV * 100)}
+                min={0}
+                max={100}
+                step={5}
+                unit="%"
+                onChange={(v) => setScrubV(v / 100)}
+              />
+              <SliderField
+                label="左右のごしごし"
+                hint="0% で行ったり戻ったりしない（抑える）。大きいほど、手が少し戻ってはまた進む動きになります"
+                value={Math.round(scrubH * 100)}
+                min={0}
+                max={100}
+                step={5}
+                unit="%"
+                onChange={(v) => setScrubH(v / 100)}
+              />
+              <MotionPreview v={scrubV} h={scrubH} />
+            </div>
             <label>書く速さ</label>
             <div className="choice-row" role="radiogroup" aria-label="書く速さ">
               {SPEEDS.map((s) => (
@@ -118,4 +191,48 @@ export function AutoTraceDialog(): React.JSX.Element {
       </div>
     </div>
   )
+}
+
+/** 手の動きの小さな図（プリセットのボタン用） */
+function MotionIcon({ v, h }: { v: number; h: number }): React.JSX.Element {
+  return (
+    <svg width="44" height="16" viewBox="0 0 44 16" aria-hidden>
+      <path d={motionPath(v, h, 44, 16, 6)} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** いまの設定で、手がどう動くかの見本 */
+function MotionPreview({ v, h }: { v: number; h: number }): React.JSX.Element {
+  return (
+    <div className="motion-preview" aria-label="手の動きの見本">
+      <svg viewBox="0 0 240 44" preserveAspectRatio="none">
+        <path d={motionPath(v, h, 240, 44, 14)} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </div>
+  )
+}
+
+/** autoTrace と同じ考え方で、見本の折れ線を作る（なめらかのときは少し波打つ線） */
+function motionPath(v: number, h: number, w: number, hgt: number, cycles: number): string {
+  const pad = 3
+  const cy = hgt / 2
+  if (v <= 0.01 && h <= 0.01) {
+    const pts = Array.from({ length: 13 }, (_, i) => {
+      const x = pad + ((w - pad * 2) * i) / 12
+      return `${x.toFixed(1)},${(cy + Math.sin(i * 0.9) * hgt * 0.08).toFixed(1)}`
+    })
+    return 'M' + pts.join(' L')
+  }
+  const count = cycles * 2
+  const half = (w - pad * 2) / count
+  const pts: string[] = []
+  for (let i = 0; i <= count; i++) {
+    const dir = i % 2 === 0 ? -1 : 1
+    const edge = i === 0 || i === count
+    const x = pad + half * i + (edge ? 0 : dir * h * half * 0.95)
+    const y = cy + (edge ? 0 : dir * v * (hgt / 2 - pad))
+    pts.push(`${Math.max(pad, Math.min(w - pad, x)).toFixed(1)},${y.toFixed(1)}`)
+  }
+  return 'M' + pts.join(' L')
 }
