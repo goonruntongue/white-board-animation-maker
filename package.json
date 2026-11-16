@@ -27,6 +27,12 @@
     "files": [
       "out/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "assets/icon/app-icon-hand.ico",
+        "to": "app-icon.ico"
+      }
+    ],
     "fileAssociations": [
       {
         "ext": "wbanim",
@@ -35,6 +41,7 @@
       }
     ],
     "win": {
+      "icon": "assets/icon/app-icon-hand.ico",
       "target": [
         "nsis"
       ]
