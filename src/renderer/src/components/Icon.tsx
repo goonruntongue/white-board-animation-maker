@@ -39,6 +39,7 @@ const PATHS: Record<string, string> = {
   camera: 'M4 8a2 2 0 0 1 2-2h2l2-2h4l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z',
   selectAll: 'M4 4h16v16H4Z M8 8h8v8H8Z',
   invert: 'M4 4h16v16H4Z M4 20L20 4',
+  eraser: 'M7 21h10 M5.6 14.4l7.1-7.1a2 2 0 0 1 2.8 0l3.2 3.2a2 2 0 0 1 0 2.8L13 19H8.6l-3-3a1.1 1.1 0 0 1 0-1.6Z M9 11l5 5',
   sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z'
 }
 

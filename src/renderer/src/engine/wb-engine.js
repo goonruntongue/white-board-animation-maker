@@ -167,6 +167,7 @@ function makeCanvas(w, h) {
 //   図形を先頭から順に合成して範囲を作る（Photoshop の 新規／追加／除外／交差 と同じ考え方）。
 //     mode   : 'add'（追加） | 'subtract'（除外） | 'intersect'（交差：重なった部分だけ残す）
 //     kind   : 'rect' | 'ellipse'（外接矩形 {x, y, w, h}） | 'poly'（points） | 'all'（画像全体）
+//              | 'stroke'（太さ width でなぞった線 points。消しゴムの跡）
 //              | 'region'（入れ子の選択範囲 { region }。反転などで使う）
 // ----------------------------------------------------------------------------
 
@@ -178,11 +179,11 @@ export function traceClipShape(ctx, shape, width, height) {
     ctx.rect(shape.x, shape.y, shape.w, shape.h)
   } else if (shape.kind === 'ellipse') {
     ctx.ellipse(shape.x + shape.w / 2, shape.y + shape.h / 2, Math.abs(shape.w / 2), Math.abs(shape.h / 2), 0, 0, Math.PI * 2)
-  } else if (shape.kind === 'poly' && shape.points.length) {
+  } else if ((shape.kind === 'poly' || shape.kind === 'stroke') && shape.points.length) {
     ctx.moveTo(shape.points[0].x, shape.points[0].y)
     for (let i = 1; i < shape.points.length; i++) ctx.lineTo(shape.points[i].x, shape.points[i].y)
   }
-  ctx.closePath()
+  if (shape.kind !== 'stroke') ctx.closePath()
 }
 
 const CLIP_OP = { add: 'source-over', subtract: 'destination-out', intersect: 'destination-in' }
@@ -197,6 +198,20 @@ export function rasterizeClip(clip, width, height) {
     ctx.globalCompositeOperation = CLIP_OP[shape.mode] || 'source-over'
     if (shape.kind === 'region') {
       ctx.drawImage(rasterizeClip(shape.region, width, height), 0, 0)
+    } else if (shape.kind === 'stroke') {
+      // 線（消しゴムの跡）は塗りではなく太さのある線として描く
+      ctx.lineCap = 'round'
+      ctx.lineJoin = 'round'
+      ctx.lineWidth = shape.width
+      ctx.strokeStyle = '#000'
+      if (shape.points.length === 1) {
+        ctx.beginPath()
+        ctx.arc(shape.points[0].x, shape.points[0].y, shape.width / 2, 0, Math.PI * 2)
+        ctx.fill()
+      } else {
+        traceClipShape(ctx, shape, width, height)
+        ctx.stroke()
+      }
     } else {
       traceClipShape(ctx, shape, width, height)
       ctx.fill()
@@ -209,12 +224,13 @@ export function rasterizeClip(clip, width, height) {
 function shapeBox(s, width, height) {
   if (s.kind === 'all') return { x0: 0, y0: 0, x1: width, y1: height }
   if (s.kind === 'region') return boxOf(s.region, width, height)
-  if (s.kind === 'poly') {
+  if (s.kind === 'poly' || s.kind === 'stroke') {
+    const r = s.kind === 'stroke' ? s.width / 2 : 0
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
     for (const p of s.points) {
       x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y)
     }
-    return { x0, y0, x1, y1 }
+    return { x0: x0 - r, y0: y0 - r, x1: x1 + r, y1: y1 + r }
   }
   return { x0: Math.min(s.x, s.x + s.w), y0: Math.min(s.y, s.y + s.h), x1: Math.max(s.x, s.x + s.w), y1: Math.max(s.y, s.y + s.h) }
 }

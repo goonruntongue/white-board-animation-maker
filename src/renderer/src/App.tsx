@@ -18,7 +18,7 @@ import {
 import { ExportDialogs } from './components/ExportDialogs'
 import { Inspector } from './components/Inspector'
 import { PhoneAppBar, PhoneContextBar, PhoneDock } from './components/phone/PhoneChrome'
-import { PEN_MAX, PEN_MIN, PEN_PRESETS } from './components/PenSizePicker'
+import { ERASER_PRESETS, PEN_MAX, PEN_MIN, PEN_PRESETS } from './components/PenSizePicker'
 import { Stage } from './components/Stage'
 import { StatusBar } from './components/StatusBar'
 import { StrokeList } from './components/StrokeList'
@@ -142,16 +142,19 @@ export default function App(): React.JSX.Element {
       // ペン先サイズ: [ で小さく / ] で大きく。
       // e.code は物理キー位置（US配列基準）なので、JIS配列では [ が「@」キーになってしまう。
       // 入力される文字（e.key）で判定し、念のため keyCode（[ = 219, ] = 221）も見る。
+      // 消しゴムツールのときは消しゴムの大きさ、それ以外はペン先
+      const sizeKey = st.tool === 'erase' ? 'eraserWidth' : 'defaultRevealWidth'
       const bracket = e.key === '[' || e.keyCode === 219 ? -1 : e.key === ']' || e.keyCode === 221 ? 1 : 0
       if (bracket !== 0) {
         e.preventDefault()
-        const w = st.project.settings.defaultRevealWidth
+        const w = st.project.settings[sizeKey]
         const next = Math.max(PEN_MIN, Math.min(PEN_MAX, Math.round(w * (bracket < 0 ? 0.85 : 1.18))))
-        return st.updateSettings({ defaultRevealWidth: next })
+        return st.updateSettings({ [sizeKey]: next })
       }
-      const preset = PEN_PRESETS.find((p) => p.key === e.key)
-      if (preset) return st.updateSettings({ defaultRevealWidth: preset.width })
+      const preset = (st.tool === 'erase' ? ERASER_PRESETS : PEN_PRESETS).find((p) => p.key === e.key)
+      if (preset) return st.updateSettings({ [sizeKey]: preset.width })
       if (k === 'd') st.setTool('draw')
+      else if (k === 'e') st.setTool('erase')
       else if (k === 'm') st.setTool(e.shiftKey ? 'ellipse' : 'rect')
       else if (k === 'l') st.setTool('lasso')
       else if (k === 'v') st.setTool('select')

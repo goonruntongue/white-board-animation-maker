@@ -31,6 +31,7 @@ export function scaleClip(clip: ClipRegion, k: number): ClipRegion {
       if (s.kind === 'all') return s
       if (s.kind === 'region') return { ...s, region: scaleClip(s.region, k) }
       if (s.kind === 'poly') return { ...s, points: s.points.map((p) => ({ x: p.x * k, y: p.y * k })) }
+      if (s.kind === 'stroke') return { ...s, width: s.width * k, points: s.points.map((p) => ({ x: p.x * k, y: p.y * k })) }
       return { ...s, x: s.x * k, y: s.y * k, w: s.w * k, h: s.h * k }
     })
   }
@@ -41,9 +42,34 @@ export function flattenShapes(clip: ClipRegion): ClipShape[] {
   return clip.shapes.flatMap((s) => (s.kind === 'region' ? flattenShapes(s.region) : [s]))
 }
 
+// ---------------------------------------------------------------------------
+// 消しゴム：軌跡ごとの「見せる範囲」から、なぞった線の部分を除外する
+// （軌跡の道筋や時間は変えないので、手の動き・再生時間はそのまま）
+// ---------------------------------------------------------------------------
+
+/** 軌跡の表示範囲に消しゴムの跡を加える。範囲がまだなければ「全体」から始める */
+export function addEraserMark(clip: ClipRegion | undefined, points: { x: number; y: number }[], width: number): ClipRegion {
+  const mark: ClipShape = { kind: 'stroke', mode: 'subtract', points, width }
+  const base: ClipRegion = clip && clip.shapes.length ? clip : { shapes: [{ kind: 'all', mode: 'add' }] }
+  return { shapes: [...base.shapes, mark] }
+}
+
+/** 消しゴムの跡の数 */
+export function countEraserMarks(clip: ClipRegion | undefined): number {
+  return clip ? clip.shapes.filter((s) => s.kind === 'stroke' && s.mode === 'subtract').length : 0
+}
+
+/** 消しゴムの跡だけを取り除く。範囲の制限が何も残らなければ undefined（制限なし） */
+export function clearEraserMarks(clip: ClipRegion | undefined): ClipRegion | undefined {
+  if (!clip) return undefined
+  const shapes = clip.shapes.filter((s) => !(s.kind === 'stroke' && s.mode === 'subtract'))
+  if (shapes.length === 0 || (shapes.length === 1 && shapes[0].kind === 'all' && shapes[0].mode === 'add')) return undefined
+  return { shapes }
+}
+
 /** 幅か高さがほぼ 0 の図形（クリックしただけ等）は無視する */
 export function isDegenerate(shape: ClipShape): boolean {
-  if (shape.kind === 'all' || shape.kind === 'region') return false
+  if (shape.kind === 'all' || shape.kind === 'region' || shape.kind === 'stroke') return false
   if (shape.kind === 'poly') {
     if (shape.points.length < 3) return true
     const xs = shape.points.map((p) => p.x)

@@ -23,7 +23,8 @@ export function createProject(): Project {
       handSize: 0.45,
       penColor,
       defaultRevealWidth: 28,
-      defaultDelayAfter: 250
+      defaultDelayAfter: 250,
+      eraserWidth: 40
     },
     strokes: []
   }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { captureImage, importImageDialog } from '../commands'
 import { simplifyPoints, strokeFromRecording } from '../engine/project'
-import { combine, flattenShapes, isDegenerate, normalizeBox, type SelectionOp } from '../engine/selection'
+import { addEraserMark, combine, flattenShapes, isDegenerate, normalizeBox, type SelectionOp } from '../engine/selection'
 import type { ClipShape, Stroke, StrokePoint } from '../engine/types'
 import { buildTimeline, rasterizeClip, traceClipShape, WBRenderer } from '../engine/wb-engine'
 import { CANVAS_FONT_FAMILY } from '../fonts'
@@ -120,6 +120,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const rendererRef = useRef<WBRenderer | null>(null)
   const recording = useRef<Recording | null>(null)
+  // 消しゴムでなぞっている途中の線
+  const erasing = useRef<{ pointerId: number; points: Pt[] } | null>(null)
   const panDrag = useRef<PanDrag | null>(null)
   // タッチ操作：画面に触れている指、ピンチ中の状態、ピンチ後に指が離れきるまで描画を止めるフラグ
   const touches = useRef(new Map<number, Pt>())
@@ -302,6 +304,18 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       polyline(ctx, rec.points)
     }
 
+    // 消しゴムでなぞっている線
+    const er = erasing.current
+    if (er && er.points.length) {
+      const w = useEditor.getState().project.settings.eraserWidth
+      ctx.strokeStyle = 'rgba(255, 70, 70, 0.4)'
+      ctx.lineWidth = w
+      polyline(ctx, er.points)
+      ctx.strokeStyle = 'rgba(255, 70, 70, 0.9)'
+      ctx.lineWidth = 1.5 * px
+      polyline(ctx, er.points)
+    }
+
     // 選択範囲の点線（動く点線）
     if (viewMode === 'edit') {
       if (selection) for (const shape of flattenShapes(selection)) drawAnts(ctx, shape, imgW, imgH, px, antsOffset.current)
@@ -330,8 +344,9 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     }
 
     const cur = cursor.current
-    if (cur && tool === 'draw' && viewMode === 'edit') {
-      const w = project.settings.defaultRevealWidth
+    if (cur && (tool === 'draw' || tool === 'erase') && viewMode === 'edit') {
+      const w = tool === 'erase' ? project.settings.eraserWidth : project.settings.defaultRevealWidth
+      if (tool === 'erase') ctx.setLineDash([4 * px, 3 * px])
       ctx.strokeStyle = 'rgba(0,0,0,0.55)'
       ctx.lineWidth = 1 * px
       ctx.beginPath()
@@ -341,6 +356,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       ctx.beginPath()
       ctx.arc(cur.x, cur.y, w / 2 + px, 0, Math.PI * 2)
       ctx.stroke()
+      ctx.setLineDash([])
     }
   }, [image, imgW, imgH, scale, viewMode, project, selectedId, rerecordId, tool, selection, selMask, selectedClipMask, drawClippedBand])
 
@@ -506,6 +522,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     const [a, b] = [...touches.current.values()]
     // 1本目の指で始めていた線や選択は取り消す（ピンチのつもりの誤描画を防ぐ）
     recording.current = null
+    erasing.current = null
     const d = draft.current
     if (d && d.pointerId !== null) {
       if (d.kind === 'lasso' && !d.freehand && d.points.length > 1) {
@@ -597,6 +614,16 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       return
     }
 
+    if (tool === 'erase') {
+      if (st.playing) st.setPlaying(false)
+      if (st.viewMode !== 'edit') st.setViewMode('edit')
+      erasing.current = { pointerId: e.pointerId, points: [p] }
+      capture(e)
+      if (e.pointerType === 'touch') requestAnimationFrame(() => showLoupe(e.clientX, e.clientY))
+      drawOverlay()
+      return
+    }
+
     if (tool === 'draw') {
       if (st.playing) st.setPlaying(false)
       if (st.viewMode !== 'edit') st.setViewMode('edit')
@@ -642,6 +669,11 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         }
       }
     }
+    const er = erasing.current
+    if (er && er.pointerId === e.pointerId) {
+      const events = typeof e.nativeEvent.getCoalescedEvents === 'function' ? e.nativeEvent.getCoalescedEvents() : []
+      for (const ev of events.length ? events : [e.nativeEvent]) er.points.push(toImage(ev.clientX, ev.clientY))
+    }
     const rec = recording.current
     if (rec && rec.pointerId === e.pointerId) {
       const events = typeof e.nativeEvent.getCoalescedEvents === 'function' ? e.nativeEvent.getCoalescedEvents() : []
@@ -653,7 +685,10 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     }
     cursor.current = e.pointerType === 'touch' ? null : p
     drawOverlay()
-    const held = (recording.current?.pointerId === e.pointerId) || (draft.current?.pointerId === e.pointerId)
+    const held =
+      recording.current?.pointerId === e.pointerId ||
+      draft.current?.pointerId === e.pointerId ||
+      erasing.current?.pointerId === e.pointerId
     if (e.pointerType === 'touch' && held) showLoupe(e.clientX, e.clientY)
   }
 
@@ -683,6 +718,13 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       finishDraft()
       return
     }
+    const er = erasing.current
+    if (er && er.pointerId === e.pointerId) {
+      erasing.current = null
+      finishErase(er.points)
+      drawOverlay()
+      return
+    }
     const rec = recording.current
     if (!rec || rec.pointerId !== e.pointerId) return
     recording.current = null
@@ -707,6 +749,27 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       }
     }
     drawOverlay()
+  }
+
+  /** 消しゴムの線を、選んでいる軌跡（なければ書き始めの位置にある軌跡）の表示範囲から除外する */
+  const finishErase = (raw: Pt[]): void => {
+    const st = useEditor.getState()
+    const w = st.project.settings.eraserWidth
+    const target =
+      st.project.strokes.find((s) => s.id === st.selectedId) ?? hitStroke(st.project.strokes, raw[0].x, raw[0].y, w / 2)
+    if (!target) {
+      st.notify('消しゴムをかける軌跡を選んでください（「選ぶ」ツール・描き順・タイムラインから）', 'error')
+      return
+    }
+    // 近すぎる点を間引く
+    const pts: Pt[] = []
+    for (const p of raw) {
+      const last = pts[pts.length - 1]
+      if (!last || Math.hypot(p.x - last.x, p.y - last.y) >= 1.5) pts.push({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 })
+    }
+    st.updateStroke(target.id, { clip: addEraserMark(target.clip, pts, w) })
+    st.select(target.id)
+    haptic()
   }
 
   const popVertex = (): void => {
@@ -744,7 +807,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     ? ''
     : tool === 'pan' || panDrag.current
       ? 'cur-grab'
-      : tool === 'draw' && viewMode === 'edit'
+      : (tool === 'draw' || tool === 'erase') && viewMode === 'edit'
         ? 'cur-none'
         : tool === 'select'
           ? 'cur-default'
@@ -863,7 +926,7 @@ function polyline(ctx: CanvasRenderingContext2D, pts: Pt[]): void {
 
 /** 白黒の動く点線で図形の輪郭を描く */
 function drawAnts(ctx: CanvasRenderingContext2D, shape: ClipShape, w: number, h: number, px: number, offset: number): void {
-  if (shape.kind === 'region') return
+  if (shape.kind === 'region' || shape.kind === 'stroke') return
   ctx.save()
   if (shape.kind === 'all') {
     // 画像の縁の内側に描いて、点線が見えるようにする

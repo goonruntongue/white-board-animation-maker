@@ -17,6 +17,8 @@ export type ClipShape =
   | { kind: 'rect' | 'ellipse'; mode: ClipMode; x: number; y: number; w: number; h: number }
   | { kind: 'poly'; mode: ClipMode; points: { x: number; y: number }[] }
   | { kind: 'all'; mode: ClipMode }
+  /** ブラシでなぞった線（太さ width）。消しゴムの跡に使う */
+  | { kind: 'stroke'; mode: ClipMode; points: { x: number; y: number }[]; width: number }
   /** 別の選択範囲をまるごと1つの図形として扱う（反転などで使う） */
   | { kind: 'region'; mode: ClipMode; region: ClipRegion }
 
@@ -84,6 +86,8 @@ export interface ProjectSettings {
   /** 新しく録画する軌跡の既定値 */
   defaultRevealWidth: number
   defaultDelayAfter: number
+  /** 消しゴムの太さ (px) */
+  eraserWidth: number
 }
 
 export interface Project {

@@ -20,7 +20,7 @@ import { haptic } from '../../lib/useMedia'
 import { setThemePref, useTheme } from '../../lib/theme'
 import { useEditor, type Tool } from '../../store'
 import { Icon, type IconName } from '../Icon'
-import { PEN_PRESETS, PEN_MAX, PEN_MIN, penDotSize } from '../PenSizePicker'
+import { ERASER_PRESETS, PEN_PRESETS, PEN_MAX, PEN_MIN, penDotSize } from '../PenSizePicker'
 
 const toLog = (w: number): number => (Math.log(Math.max(PEN_MIN, Math.min(PEN_MAX, w)) / PEN_MIN) / Math.log(PEN_MAX / PEN_MIN)) * 1000
 const fromLog = (t: number): number => Math.round(PEN_MIN * Math.pow(PEN_MAX / PEN_MIN, t / 1000))
@@ -98,6 +98,7 @@ export function PhoneContextBar(): React.JSX.Element | null {
   return (
     <div className="phone-context" role="toolbar" aria-label="道具の設定">
       {tool === 'draw' && <PenOptions />}
+      {tool === 'erase' && <PenOptions kind="eraser" />}
       {(tool === 'rect' || tool === 'ellipse' || tool === 'lasso') && <SelectionOptions />}
       {tool === 'select' && <StrokeOptions />}
       {tool === 'pan' && <span className="pc-hint">ドラッグで表示位置を移動（2本指でも移動・拡大できます）</span>}
@@ -105,14 +106,20 @@ export function PhoneContextBar(): React.JSX.Element | null {
   )
 }
 
-function PenOptions(): React.JSX.Element {
-  const width = useEditor((s) => s.project.settings.defaultRevealWidth)
+function PenOptions({ kind = 'pen' }: { kind?: 'pen' | 'eraser' }): React.JSX.Element {
+  const key = kind === 'eraser' ? 'eraserWidth' : 'defaultRevealWidth'
+  const width = useEditor((s) => s.project.settings[key])
+  const target = useEditor((s) => (kind === 'eraser' ? s.project.strokes.findIndex((x) => x.id === s.selectedId) : -1))
   const set = (w: number): void =>
-    useEditor.getState().updateSettings({ defaultRevealWidth: Math.max(PEN_MIN, Math.min(PEN_MAX, Math.round(w))) })
+    useEditor.getState().updateSettings({ [key]: Math.max(PEN_MIN, Math.min(PEN_MAX, Math.round(w))) })
+  const presets = kind === 'eraser' ? ERASER_PRESETS : PEN_PRESETS
   return (
     <>
-      <span className="pc-label">ペン先</span>
-      {PEN_PRESETS.map((p) => (
+      {kind === 'eraser' && (
+        <span className={`pc-target ${target < 0 ? 'none' : ''}`}>{target < 0 ? '軌跡を選択' : `#${target + 1} を消す`}</span>
+      )}
+      <span className="pc-label">{kind === 'eraser' ? '大きさ' : 'ペン先'}</span>
+      {presets.map((p) => (
         <button key={p.width} className={`pc-key ${width === p.width ? 'on' : ''}`} aria-label={`${p.label} ${p.width}px`} onClick={() => set(p.width)}>
           <span className="pen-dot" style={{ width: penDotSize(p.width, 20), height: penDotSize(p.width, 20) }} />
           <small>{p.label}</small>
@@ -126,7 +133,7 @@ function PenOptions(): React.JSX.Element {
         max={1000}
         value={toLog(width)}
         style={{ '--fill': `${toLog(width) / 10}%` } as React.CSSProperties}
-        aria-label="ペン先のサイズ"
+        aria-label={kind === 'eraser' ? '消しゴムの大きさ' : 'ペン先のサイズ'}
         onChange={(e) => set(fromLog(Number(e.target.value)))}
       />
       <span className="pc-value">{width}</span>
@@ -255,6 +262,7 @@ export function PhoneDock(): React.JSX.Element {
   return (
     <nav className="phone-dock" aria-label="道具とメニュー">
       {key({ id: 'draw', icon: 'pen', label: '描く', on: tool === 'draw', disabled: !hasImage, onClick: () => pick('draw') })}
+      {key({ id: 'erase', icon: 'eraser', label: '消す', on: tool === 'erase', disabled: !hasImage, onClick: () => pick('erase') })}
       {key({
         id: 'sel',
         icon: shape.icon,

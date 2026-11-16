@@ -8,6 +8,7 @@ import { ThemeSwitch } from './ThemeSwitch'
 
 const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
   { id: 'draw', icon: 'pen', label: '描く', key: 'D' },
+  { id: 'erase', icon: 'eraser', label: '消す', key: 'E' },
   { id: 'select', icon: 'cursor', label: '軌跡を選ぶ', key: 'V' },
   { id: 'pan', icon: 'hand', label: '移動', key: 'H' }
 ]
@@ -91,7 +92,11 @@ Shift+ドラッグで追加 / Alt+ドラッグで除外`}
       </div>
 
       {/* オプションバー：選択ツールなら合成モード、それ以外はペン先サイズ */}
-      {SELECTION_TOOLS.includes(tool) ? <SelectionModeBar /> : <PenSizePicker disabled={!hasImage} />}
+      {SELECTION_TOOLS.includes(tool) ? (
+        <SelectionModeBar />
+      ) : (
+        <PenSizePicker disabled={!hasImage} kind={tool === 'erase' ? 'eraser' : 'pen'} />
+      )}
 
       <div className="doc-title">
         {name}

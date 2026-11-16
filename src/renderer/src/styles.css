@@ -2642,3 +2642,19 @@ button {
   transform: scale(0.96);
   filter: brightness(0.9);
 }
+
+/* 消しゴム：対象の軌跡の表示 */
+.pc-target {
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--lcd-bg);
+  color: var(--lcd-fg);
+  text-shadow: var(--lcd-glow);
+  font-size: 11.5px;
+  font-weight: 700;
+  box-shadow: var(--well-shadow);
+}
+.pc-target.none {
+  color: var(--warn);
+  text-shadow: none;
+}

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { importHandDialog, importImageDialog, selectHandPreset } from '../commands'
 import { builtinHand } from '../engine/handAsset'
+import { clearEraserMarks, countEraserMarks } from '../engine/selection'
 import { getHandPresets } from '../engine/handPresets'
 import { dataUrlBytes, formatBytes } from '../lib/imageTools'
 import { useEditor } from '../store'
@@ -48,6 +49,7 @@ function StrokeInspector(): React.JSX.Element | null {
   const { updateStroke, setRerecord, removeStroke, setSelection } = useEditor.getState()
   if (!stroke) return null
   const set = (patch: Parameters<typeof updateStroke>[1]): void => updateStroke(stroke.id, patch)
+  const erased = countEraserMarks(stroke.clip)
   const recorded = stroke.points.length > 1 ? stroke.points[stroke.points.length - 1].t - stroke.points[0].t : 0
 
   return (
@@ -98,9 +100,11 @@ function StrokeInspector(): React.JSX.Element | null {
       </Section>
       <Section title="表示できる範囲">
         <p className="muted-text">
-          {stroke.clip
-            ? `選択範囲で制限されています（図形 ${stroke.clip.shapes.length} 個）。範囲の外はこの軌跡では表示されません。`
-            : '制限なし。なぞった幅の分だけ表示されます。'}
+          {!stroke.clip
+            ? '制限なし。なぞった幅の分だけ表示されます。'
+            : erased > 0 && erased === stroke.clip.shapes.length - 1
+              ? `消しゴムで ${erased} か所を消しています。`
+              : `選択範囲で制限されています${erased > 0 ? `（うち消しゴム ${erased} か所）` : ''}。範囲の外はこの軌跡では表示されません。`}
         </p>
         <div className="btn-row wrap">
           <button
@@ -111,6 +115,11 @@ function StrokeInspector(): React.JSX.Element | null {
           >
             いまの選択範囲を適用
           </button>
+          {erased > 0 && (
+            <button className="btn" onClick={() => set({ clip: clearEraserMarks(stroke.clip) })}>
+              消しゴムの跡をすべて戻す
+            </button>
+          )}
           {stroke.clip && (
             <>
               <button className="btn" title="この軌跡の範囲を選択範囲として読み込む" onClick={() => setSelection(stroke.clip ?? null)}>

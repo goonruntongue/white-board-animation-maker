@@ -4,7 +4,7 @@ import { createProject, newId } from './engine/project'
 import type { SelectionOp } from './engine/selection'
 import type { ClipRegion, Project, ProjectSettings, Stroke } from './engine/types'
 
-export type Tool = 'draw' | 'select' | 'pan' | 'rect' | 'ellipse' | 'lasso'
+export type Tool = 'draw' | 'erase' | 'select' | 'pan' | 'rect' | 'ellipse' | 'lasso'
 export const SELECTION_TOOLS: Tool[] = ['rect', 'ellipse', 'lasso']
 
 /** 元に戻す単位。選択範囲も含める（Photoshop と同じく、選択の失敗も Ctrl+Z で戻せる） */
