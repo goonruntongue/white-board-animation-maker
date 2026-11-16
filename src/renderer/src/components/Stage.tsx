@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { captureImage, importImageDialog, openAutoTrace } from '../commands'
+import { captureImage, importImageDialog, importSampleImage, openAutoTrace } from '../commands'
 import { appendToStroke, simplifyPoints, strokeFromRecording } from '../engine/project'
 import { addEraserMark, combine, flattenShapes, isDegenerate, normalizeBox, type SelectionOp } from '../engine/selection'
 import type { ClipShape, Stroke, StrokePoint } from '../engine/types'
@@ -857,8 +857,11 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
             <h2>画像を読み込む</h2>
             <p>{isPhone ? 'PNG / JPEG / WebP、またはカメラで撮影' : 'PNG / JPEG / WebP をここにドラッグ＆ドロップ'}</p>
             <div className="empty-actions">
-              <button className="btn primary" onClick={() => void importImageDialog()}>
+              <button className="btn primary" data-tour="import" onClick={() => void importImageDialog()}>
                 <Icon name="image" /> 画像を選ぶ
+              </button>
+              <button className="btn" onClick={() => void importSampleImage()}>
+                サンプル画像を使う
               </button>
               {isPhone && (
                 <button className="btn" onClick={() => void captureImage()}>

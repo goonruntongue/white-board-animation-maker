@@ -172,6 +172,14 @@ function buildMenu(): void {
       ]
     },
     {
+      label: 'ヘルプ',
+      submenu: [
+        { label: 'ツアーを始める', click: () => send('tour') },
+        { label: '使い方ガイド', click: () => send('guide') },
+        { label: 'サンプル画像を使う', click: () => send('sample') }
+      ]
+    },
+    {
       label: '表示',
       submenu: [
         { role: 'resetZoom', label: 'UIの拡大率をリセット' },

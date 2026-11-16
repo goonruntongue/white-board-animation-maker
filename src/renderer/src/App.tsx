@@ -27,6 +27,9 @@ import { StrokeList } from './components/StrokeList'
 import { Timeline } from './components/Timeline'
 import { Toast } from './components/Toast'
 import { Toolbar } from './components/Toolbar'
+import { TourGuide } from './components/TourGuide'
+import { Tour } from './components/Tour'
+import { getTourPrefs, GUIDE_EVENT, TOUR_EVENT } from './lib/tour'
 import { buildTimeline } from './engine/wb-engine'
 import { isDesktop, setWindowTitle } from './lib/platform'
 import { useIsPhone } from './lib/useMedia'
@@ -50,8 +53,49 @@ export default function App(): React.JSX.Element {
   const hasImage = !!project.image
   const [zoom, setZoom] = useState(1)
   const [dragOver, setDragOver] = useState(false)
+  // tour = ボタンのそばに出すツアー / guide = 説明カードの「使い方ガイド」
+  const [tourOpen, setTourOpen] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(false)
   const total = useMemo(() => buildTimeline(project).total, [project])
   const onZoomChange = useCallback((z: number) => setZoom(z), [])
+
+  useEffect(() => {
+    const openTour = (): void => {
+      setGuideOpen(false)
+      useEditor.getState().setMobileSheet(null)
+      setTourOpen(true)
+    }
+    const openGuideCard = (): void => {
+      setTourOpen(false)
+      setGuideOpen(true)
+    }
+    window.addEventListener(TOUR_EVENT, openTour)
+    window.addEventListener(GUIDE_EVENT, openGuideCard)
+    return () => {
+      window.removeEventListener(TOUR_EVENT, openTour)
+      window.removeEventListener(GUIDE_EVENT, openGuideCard)
+    }
+  }, [])
+
+  // 起動時のツアー：「次回から表示しない」にしていなければ出す。
+  // 復元ダイアログなどが開いていたら、閉じてから出す
+  useEffect(() => {
+    if (!getTourPrefs().showOnStartup) return
+    let shown = false
+    const tryOpen = (): void => {
+      if (shown || useEditor.getState().dialog) return
+      shown = true
+      setTourOpen(true)
+    }
+    const timer = window.setTimeout(tryOpen, 700)
+    const unsub = useEditor.subscribe((s, prev) => {
+      if (prev.dialog && !s.dialog) window.setTimeout(tryOpen, 300)
+    })
+    return () => {
+      window.clearTimeout(timer)
+      unsub()
+    }
+  }, [])
 
   // ---- 自動バックアップ（異常終了していたら、起動時に復元を案内） ----
   useEffect(() => {
@@ -233,6 +277,8 @@ export default function App(): React.JSX.Element {
       {dialog === 'recovery' && <RecoveryDialog />}
       {dialog === 'auto' && <AutoTraceDialog />}
       <Toast />
+      {tourOpen && <Tour isPhone={isPhone} onClose={() => setTourOpen(false)} />}
+      {guideOpen && <TourGuide onClose={() => setGuideOpen(false)} isPhone={isPhone} />}
       {dragOver && (
         <div className="drop-overlay" onDragLeave={() => setDragOver(false)}>
           <div>画像（PNG / JPEG / WebP）または .wbanim をドロップ</div>

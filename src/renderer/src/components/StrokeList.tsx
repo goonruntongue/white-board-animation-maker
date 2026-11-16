@@ -33,7 +33,7 @@ export function StrokeList(): React.JSX.Element {
   }, '.stroke-row')
 
   return (
-    <aside className="panel left">
+    <aside className="panel left" data-tour="strokes">
       <SheetBar title="ページと描き順" />
       <PageStrip />
       <header className="panel-header">

@@ -11,6 +11,7 @@
     "dev": "electron-vite dev",
     "dev:web": "vite --config vite.web.config.ts",
     "build:web": "vite build --config vite.web.config.ts",
+    "build:standalone": "vite build --config vite.standalone.config.ts",
     "preview:web": "vite preview --config vite.web.config.ts",
     "icons:pwa": "python scripts/make-pwa-icons.py assets/icon/app-icon-hand.png src/renderer/public/icons",
     "build": "electron-vite build",
@@ -61,7 +62,8 @@
     "electron-vite": "^6.0.0",
     "typescript": "^5.9.3",
     "vite": "^8.3.8",
-    "vite-plugin-pwa": "^2.0.0"
+    "vite-plugin-pwa": "^2.0.0",
+    "vite-plugin-singlefile": "^2.3.4"
   },
   "dependencies": {
     "@fontsource/noto-sans-jp": "^5.3.1",

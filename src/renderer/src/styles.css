@@ -2974,3 +2974,290 @@ button {
 .app.phone .form-grid .choice-row.wrap .choice {
   min-width: 0;
 }
+/* 初めて使う方向けのガイド */
+.tour-backdrop { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; padding: 20px; background: rgba(0, 0, 0, .72); }
+.tour-card { width: min(100%, 510px); max-height: 90dvh; overflow: auto; padding: 24px; border: 1px solid #76877a; border-radius: 12px; background: #242d28; color: #f3f7f3; box-shadow: 0 14px 40px #0009; }
+.tour-top, .tour-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.tour-top { color: #bde98b; font-size: 13px; font-weight: 700; }
+.tour-progress { display: flex; gap: 6px; margin: 20px 0; }
+.tour-progress span { height: 4px; flex: 1; border-radius: 4px; background: #566159; }
+.tour-progress span.on { background: #bce879; }
+.tour-card h2 { margin: 0 0 12px; font-size: 21px; color: #fff; }
+.tour-card p { font-size: 14px; line-height: 1.8; color: #e3ebe4; }
+.tour-card .tour-note { color: #b6c5b7; font-size: 12px; margin-top: 24px; }
+.tour-actions { margin-top: 20px; }
+
+/* ============================================================================
+   ツアーガイド（ボタンのそばに出す吹き出し）
+   ========================================================================== */
+.tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+}
+/* 後ろの画面を触れないようにする透明な板 */
+.tour-shield {
+  position: absolute;
+  inset: 0;
+}
+/* スポットライト：対象のまわり以外を暗くする */
+.tour-spot {
+  position: absolute;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 14px 2px rgba(255, 122, 46, 0.55),
+    0 0 0 9999px rgba(6, 8, 12, 0.62);
+  pointer-events: none;
+  transition:
+    left 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+    top 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+    height 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.tour-dim {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 8, 12, 0.62);
+}
+.tour-bubble {
+  position: absolute;
+  width: min(340px, calc(100vw - 20px));
+  padding: 12px 14px 12px;
+  border-radius: 12px;
+  background-image: var(--noise), linear-gradient(180deg, var(--panel-top), var(--panel-bot));
+  box-shadow:
+    inset 0 1px 0 var(--hilite),
+    0 0 0 1px var(--line-strong),
+    0 14px 40px rgba(0, 0, 0, 0.5);
+  color: var(--text-1);
+  animation: tour-pop 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition:
+    left 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+    top 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes tour-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+/* 吹き出しの矢印（対象の方を指す） */
+.tour-bubble.bottom::before,
+.tour-bubble.top::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--arrow-x) - 8px);
+  width: 16px;
+  height: 16px;
+  background: var(--panel-top);
+  box-shadow: -1px -1px 0 var(--line-strong);
+  transform: rotate(45deg);
+}
+.tour-bubble.bottom::before {
+  top: -8px;
+}
+.tour-bubble.top::before {
+  bottom: -8px;
+  background: var(--panel-bot);
+  box-shadow: 1px 1px 0 var(--line-strong);
+}
+.tour-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.tour-count {
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--lcd-bg);
+  color: var(--lcd-fg);
+  text-shadow: var(--lcd-glow);
+  font: 700 11px var(--mono);
+  box-shadow: var(--well-shadow);
+}
+.tour-skip {
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  padding: 4px 2px;
+}
+.tour-skip:hover {
+  color: var(--text-0);
+}
+.tour-bubble h3 {
+  margin: 4px 0 6px;
+  font-size: 15px;
+  color: var(--text-0);
+  text-shadow: var(--engrave);
+}
+.tour-bubble p {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-1);
+}
+.tour-dots {
+  display: flex;
+  gap: 4px;
+  margin: 10px 0 10px;
+}
+.tour-dots i {
+  flex: 1;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--well-deep);
+}
+.tour-dots i.done {
+  background: var(--accent-bot);
+  opacity: 0.6;
+}
+.tour-dots i.on {
+  background: var(--accent);
+  box-shadow: var(--accent-glow);
+}
+.tour-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tour-optout {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.tour-optout input {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+.tour-nav {
+  display: flex;
+  gap: 6px;
+}
+.tour-nav .btn {
+  height: 30px;
+}
+.app.phone ~ .tour-layer .tour-nav .btn,
+.tour-layer .tour-nav .btn {
+  min-width: 56px;
+  justify-content: center;
+}
+@media (pointer: coarse) {
+  .tour-nav .btn {
+    height: 38px;
+  }
+  .tour-skip {
+    padding: 8px 4px;
+  }
+}
+
+/* ---------- ⚙ ヘルプと設定 ---------- */
+.help-menu {
+  position: relative;
+}
+.help-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--knob);
+  box-shadow: var(--knob-shadow);
+}
+.help-btn.on,
+.help-btn:hover {
+  color: var(--accent-text);
+}
+.help-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  min-width: 230px;
+  padding: 6px;
+  border-radius: 11px;
+  background-image: var(--noise), linear-gradient(180deg, var(--panel-top), var(--panel-bot));
+  box-shadow:
+    inset 0 1px 0 var(--hilite),
+    0 0 0 1px var(--line-strong),
+    0 14px 34px rgba(0, 0, 0, 0.45);
+  animation: tour-pop 0.16s ease-out;
+}
+.help-pop > button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-0);
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.help-pop > button:hover {
+  background: linear-gradient(180deg, var(--key-top), var(--key-bot));
+  box-shadow: var(--key-shadow);
+}
+.help-pop > button svg {
+  color: var(--accent-text);
+}
+.help-pop hr {
+  margin: 6px 4px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--hilite);
+}
+.help-toggle {
+  padding: 4px 10px 6px;
+  font-size: 12.5px;
+}
+
+/* ---------- 使い方ガイド（説明カード）をテーマの色に合わせる ---------- */
+.tour-backdrop {
+  background: var(--overlay);
+  backdrop-filter: blur(3px);
+}
+.tour-card {
+  border: 0;
+  border-radius: 16px;
+  background-image: var(--noise), var(--hairline), linear-gradient(180deg, var(--panel-top), var(--panel-bot));
+  color: var(--text-1);
+  box-shadow:
+    inset 0 1px 0 var(--hilite),
+    0 0 0 1px var(--line-strong),
+    0 30px 90px rgba(0, 0, 0, 0.55);
+}
+.tour-top {
+  color: var(--accent-text);
+}
+.tour-progress span {
+  background: var(--well-deep);
+}
+.tour-progress span.on {
+  background: var(--accent);
+  box-shadow: var(--accent-glow);
+}
+.tour-card h2 {
+  color: var(--text-0);
+  text-shadow: var(--engrave);
+}
+.tour-card p {
+  color: var(--text-1);
+}
+.tour-card .tour-note {
+  color: var(--text-2);
+}

@@ -5,6 +5,7 @@ import { Icon, type IconName } from './Icon'
 import { AppendToggle, PenSizePicker } from './PenSizePicker'
 import { SelectionModeBar } from './SelectionModeBar'
 import { ThemeSwitch } from './ThemeSwitch'
+import { HelpMenu } from './HelpMenu'
 
 const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
   { id: 'draw', icon: 'pen', label: '描く', key: 'D' },
@@ -50,7 +51,7 @@ export function Toolbar(): React.JSX.Element {
         <button className="icon-btn" title="自動バックアップから復元" onClick={() => useEditor.getState().openDialog('recovery')}>
           <Icon name="history" />
         </button>
-        <button className="icon-btn" title="画像を読み込む (Ctrl+I)" onClick={() => void importImageDialog()}>
+        <button className="icon-btn" data-tour="import-alt" title="画像を読み込む (Ctrl+I)" onClick={() => void importImageDialog()}>
           <Icon name="image" />
         </button>
       </div>
@@ -69,6 +70,7 @@ export function Toolbar(): React.JSX.Element {
           <button
             key={t.id}
             className={`tool-btn ${tool === t.id ? 'on' : ''}`}
+            data-tour={t.id === 'draw' ? 'draw' : undefined}
             title={`${t.label} (${t.key})`}
             disabled={!hasImage}
             onClick={() => setTool(t.id)}
@@ -82,6 +84,7 @@ export function Toolbar(): React.JSX.Element {
       <div className="tb-group">
         <button
           className="tool-btn"
+          data-tour="auto"
           title="描き順を自動で作る：画像を解析して、手が順番に書いていく軌跡の下書きを作ります"
           disabled={!hasImage}
           onClick={openAutoTrace}
@@ -124,10 +127,11 @@ Shift+ドラッグで追加 / Alt+ドラッグで除外`}
 
       <div className="tb-group end">
         <ThemeSwitch />
+        <HelpMenu />
         <button className="btn" onClick={() => openExport('video')} title="動画 (WebM) として書き出す">
           <Icon name="film" /> 動画
         </button>
-        <button className="btn primary" onClick={() => openExport('html')} title="単一HTMLとして書き出す (Ctrl+E)">
+        <button className="btn primary" data-tour="export" onClick={() => openExport('html')} title="単一HTMLとして書き出す (Ctrl+E)">
           <Icon name="code" /> HTMLを書き出す
         </button>
       </div>

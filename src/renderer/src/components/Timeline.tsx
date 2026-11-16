@@ -46,7 +46,7 @@ export function Timeline(): React.JSX.Element {
         <button className="icon-btn" title="先頭へ (Home)" onClick={rewind}>
           <Icon name="rewind" />
         </button>
-        <button className="icon-btn play" title="再生 / 一時停止 (Space)" onClick={togglePlay}>
+        <button className="icon-btn play" data-tour="play" title="再生 / 一時停止 (Space)" onClick={togglePlay}>
           <Icon name={playing ? 'pause' : 'play'} size={18} />
         </button>
         <Lcd time={time} total={timeline.total} playing={playing} />

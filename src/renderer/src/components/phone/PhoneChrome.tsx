@@ -26,6 +26,7 @@ import { ERASER_PRESETS, PEN_PRESETS, PEN_MAX, PEN_MIN, penDotSize } from '../Pe
 const toLog = (w: number): number => (Math.log(Math.max(PEN_MIN, Math.min(PEN_MAX, w)) / PEN_MIN) / Math.log(PEN_MAX / PEN_MIN)) * 1000
 const fromLog = (t: number): number => Math.round(PEN_MIN * Math.pow(PEN_MAX / PEN_MIN, t / 1000))
 import { ActionSheet, type SheetAction } from './ActionSheet'
+import { HelpMenu } from '../HelpMenu'
 
 type Menu = 'app' | 'export' | 'shape' | null
 
@@ -68,7 +69,7 @@ export function PhoneAppBar(): React.JSX.Element {
 
   return (
     <header className="phone-appbar">
-      <button className="pa-btn" aria-label="メニュー" onClick={() => setMenu('app')}>
+      <button className="pa-btn" data-tour="menu" aria-label="メニュー" onClick={() => setMenu('app')}>
         <Icon name="menu" size={20} />
       </button>
       <div className="pa-title">
@@ -86,6 +87,7 @@ export function PhoneAppBar(): React.JSX.Element {
       <button className="pa-btn" aria-label="やり直す" disabled={!canRedo} onClick={redo}>
         <Icon name="redo" size={20} />
       </button>
+      <HelpMenu phone />
       {menu === 'app' && <ActionSheet title="メニュー" actions={appActions} onClose={() => setMenu(null)} />}
     </header>
   )
@@ -273,6 +275,7 @@ export function PhoneDock(): React.JSX.Element {
   }): React.JSX.Element => (
     <button
       key={opts.id}
+      data-tour={opts.id === 'draw' || opts.id === 'strokes' || opts.id === 'export' ? opts.id : undefined}
       className={`dock-key ${opts.on ? 'on' : ''}`}
       aria-pressed={opts.on}
       disabled={opts.disabled}

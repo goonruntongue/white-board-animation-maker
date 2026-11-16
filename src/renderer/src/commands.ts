@@ -5,9 +5,11 @@ import { allPages, createProject, parseProject, PROJECT_EXT, serializeProject } 
 import { invert } from './engine/selection'
 import { buildTimeline } from './engine/wb-engine'
 import { setThemePref, type ThemePref } from './lib/theme'
+import { openGuide, startTour } from './lib/tour'
 import { importHand, importImage } from './lib/imageTools'
 import { openImageFile, openProjectFile, readFileAsDataUrl, saveTextFile } from './lib/platform'
 import { useEditor } from './store'
+import sampleGuideUrl from './sample-guide.png'
 
 const get = useEditor.getState
 
@@ -99,6 +101,20 @@ export async function setImageFromDataUrl(name: string, dataUrl: string, replace
 export async function importImageDialog(): Promise<void> {
   const res = await openImageFile()
   if (res) await setImageFromDataUrl(res.name, res.dataUrl)
+}
+
+/** アプリに同梱された練習画像を通常の画像と同じように追加する。 */
+export async function importSampleImage(): Promise<void> {
+  try {
+    // スタンドアロン版では画像が data URL として埋め込まれているので、そのまま使う。
+    // それ以外はファイルをそのまま読み込む（キャンバスで描き直して PNG に再圧縮すると数秒かかるため）
+    const dataUrl = sampleGuideUrl.startsWith('data:')
+      ? sampleGuideUrl
+      : await readFileAsDataUrl(new File([await (await fetch(sampleGuideUrl)).blob()], 'sample.png', { type: 'image/png' }))
+    await setImageFromDataUrl('使い方サンプル.png', dataUrl)
+  } catch (e) {
+    get().notify('サンプル画像を読み込めませんでした: ' + errorText(e), 'error')
+  }
 }
 
 /** いまのページの画像を差し替える（描き順はそのまま） */
@@ -269,6 +285,12 @@ export function runMenuCommand(cmd: string, payload?: unknown): void {
       return setThemePref(payload as ThemePref, true)
     case 'deselect':
       return deselect()
+    case 'tour':
+      return startTour()
+    case 'guide':
+      return openGuide()
+    case 'sample':
+      return void importSampleImage()
     case 'auto-trace':
       return openAutoTrace()
     case 'recovery':
