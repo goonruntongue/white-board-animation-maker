@@ -21,6 +21,14 @@ export function StrokeActions({ strokeId, onClose }: { strokeId: string; onClose
     st.setPlaying(true)
   }
 
+  // 結合：再生から外した軌跡と、再生する軌跡はまとめない（どちらの扱いにするか決められないため）
+  const mergeNote = (other: number): string => {
+    if (other < 0 || other >= count) return other < 0 ? 'これより前の軌跡がありません' : 'これより後の軌跡がありません'
+    if (!!project.strokes[other].hidden !== !!stroke.hidden) return '再生から外した軌跡とは結合できません'
+    return `#${other + 1} と1本にまとめる（描くタイミングはそのまま）`
+  }
+  const canMerge = (other: number): boolean => other >= 0 && other < count && !!project.strokes[other].hidden === !!stroke.hidden
+
   const actions: SheetAction[] = [
     { icon: 'play', label: 'ここから再生', onSelect: playFromHere, disabled: !!stroke.hidden },
     {
@@ -36,6 +44,20 @@ export function StrokeActions({ strokeId, onClose }: { strokeId: string; onClose
     { icon: 'up', label: '前へ移動', note: '描く順番を1つ早く', disabled: index === 0, onSelect: () => st.moveStroke(stroke.id, index - 1) },
     { icon: 'down', label: '後ろへ移動', note: '描く順番を1つ遅く', disabled: index === count - 1, onSelect: () => st.moveStroke(stroke.id, index + 1) },
     { icon: 'layers', label: '複製', note: 'すぐ後ろにコピーを作る', onSelect: () => st.duplicateStroke(stroke.id) },
+    {
+      icon: 'merge',
+      label: '前の軌跡と結合',
+      note: mergeNote(index - 1),
+      disabled: !canMerge(index - 1),
+      onSelect: () => st.mergeStroke(stroke.id, 'prev')
+    },
+    {
+      icon: 'merge',
+      label: '次の軌跡と結合',
+      note: mergeNote(index + 1),
+      disabled: !canMerge(index + 1),
+      onSelect: () => st.mergeStroke(stroke.id, 'next')
+    },
     {
       icon: stroke.hidden ? 'eye' : 'eyeOff',
       label: stroke.hidden ? '再生に含める' : '再生から外す',

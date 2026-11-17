@@ -3,7 +3,8 @@
 //   ・最初の線の太さ … 軌跡の revealWidth
 //   ・2本目以降の線  … その線の書き始め（b: 1 の点）の w。なければ revealWidth
 // レンダラー（wb-engine の partWidth）と同じ決まりで読む。
-import type { Stroke } from './types'
+import type { ClipRegion, Stroke, StrokePoint } from './types'
+import { prepareStroke } from './wb-engine'
 
 export interface StrokePart {
   /** 線の書き始めの点の番号（最初の線は 0、ほかは b: 1 の点） */
@@ -122,4 +123,41 @@ export function transformPart(stroke: Stroke, partIndex: number, dx: number, dy:
     i < part.start || i > part.end ? p : { ...p, x: r1(center.x + (p.x - center.x) * scale + dx), y: r1(center.y + (p.y - center.y) * scale + dy) }
   )
   return { ...stroke, points }
+}
+
+/**
+ * 2本の軌跡を1本にまとめる（first の後ろに second をつなぐ。並び順は first → second）。
+ *  ・描くタイミングはそのまま：first を描く → first の待ち時間（この間にペンを上げて移動）→ second を描く
+ *  ・second の書き始めはペンを上げた点になり、線ごとの太さもそのまま引き継ぐ
+ *  ・表示範囲：どちらかが「制限なし」なら制限なし。両方にあれば、2つを合わせた範囲
+ *    （1本の軌跡は範囲を1つしか持てないので、first の線が second の範囲も見せられるようになる）
+ */
+export function mergeStrokes(first: Stroke, second: Stroke): Stroke {
+  const timed = (s: Stroke, offset: number): StrokePoint[] => {
+    const prep = prepareStroke(s)
+    return s.points.map((p, i) => ({ ...p, t: Math.round(offset + prep.param[i] * s.duration) }))
+  }
+  const a = timed(first, 0)
+  const gapStart = first.duration + Math.max(0, first.delayAfter)
+  const b = timed(second, gapStart).map((p, i) => {
+    if (i === 0) return { ...p, b: 1 as const, w: second.revealWidth }
+    // second の中で「基本の太さ」を使っていた線は、その太さを書き込んで固定する
+    if (p.b && p.w === undefined) return { ...p, w: second.revealWidth }
+    return p
+  })
+  let clip: ClipRegion | undefined
+  if (first.clip && second.clip) {
+    clip =
+      JSON.stringify(first.clip) === JSON.stringify(second.clip)
+        ? first.clip
+        : { shapes: [{ kind: 'region', mode: 'add', region: first.clip }, { kind: 'region', mode: 'add', region: second.clip }] }
+  }
+  return {
+    ...first,
+    points: [...a, ...b],
+    duration: Math.max(50, gapStart + second.duration),
+    delayAfter: second.delayAfter,
+    useRecordedTiming: true,
+    clip
+  }
 }

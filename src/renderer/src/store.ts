@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { builtinHand } from './engine/handAsset'
+import { mergeStrokes } from './engine/strokeParts'
 import { addPage, createProject, duplicatePage, movePage, newId, removePage, switchPage } from './engine/project'
 import type { SelectionOp } from './engine/selection'
 import type { ClipRegion, ImageAsset, Project, ProjectSettings, Stroke } from './engine/types'
@@ -63,6 +64,8 @@ interface EditorState {
   moveStroke: (id: string, toIndex: number) => void
   /** すぐ後ろに複製を作り、それを選ぶ */
   duplicateStroke: (id: string) => void
+  /** となりの軌跡と1本にまとめる（dir：前と／次と）。まとめた軌跡を選ぶ */
+  mergeStroke: (id: string, dir: 'prev' | 'next') => void
   setSelection: (sel: ClipRegion | null) => void
   // --- ページ（スライド） ---
   /** ページを切り替える（履歴には残さない・未保存扱いにもしない） */
@@ -198,6 +201,21 @@ export const useEditor = create<EditorState>((set, get) => ({
       return { ...p, strokes }
     })
     set({ selectedId: copy.id })
+  },
+
+  mergeStroke: (id, dir) => {
+    const { project } = get()
+    const idx = project.strokes.findIndex((s) => s.id === id)
+    const other = dir === 'prev' ? idx - 1 : idx + 1
+    if (idx < 0 || other < 0 || other >= project.strokes.length) return
+    const i0 = Math.min(idx, other)
+    const merged = mergeStrokes(project.strokes[i0], project.strokes[i0 + 1])
+    get().commit((p) => {
+      const strokes = [...p.strokes]
+      strokes.splice(i0, 2, merged)
+      return { ...p, strokes }
+    })
+    set({ selectedId: merged.id, livePart: null })
   },
 
   gotoPage: (index) => {
