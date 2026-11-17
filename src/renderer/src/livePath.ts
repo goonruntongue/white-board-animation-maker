@@ -1,6 +1,38 @@
 // ライブ編集の「パス編集」の操作（キャンバス・オプションバー・Delete キーから共通で使う）
 import { applyPath, removeAnchor, type PathNode } from './engine/pathEdit'
+import { addRevealMark } from './engine/selection'
+import { strokeParts } from './engine/strokeParts'
 import { useEditor } from './store'
+
+/**
+ * 線が通る所を、そのグループで見える範囲に加える（通過部分を表示）。
+ * 線を動かす・太さや大きさを変える・パス編集したあとに自動で行う。part が -1 ならグループのすべての線。
+ * mergeKey を変更と同じにすると、元に戻す1回分にまとまる
+ */
+export function revealLine(strokeId: string, part: number, mergeKey?: string): void {
+  const st = useEditor.getState()
+  st.commit(
+    (p) => ({
+      ...p,
+      strokes: p.strokes.map((s) => {
+        if (s.id !== strokeId || !s.clip) return s
+        const parts = strokeParts(s)
+        const chosen = part < 0 ? parts : parts.slice(part, part + 1)
+        let clip = s.clip
+        for (const q of chosen) clip = addRevealMark(clip, s.points.slice(q.start, q.end + 1), q.width) ?? clip
+        return clip === s.clip ? s : { ...s, clip }
+      })
+    }),
+    mergeKey
+  )
+}
+
+let revealTimer = 0
+/** 続けて変えている間（スライダー・キー・ボタン連打）は待ち、止まってから1回だけ表示範囲に加える */
+export function revealLineSoon(strokeId: string, part: number, mergeKey?: string): void {
+  clearTimeout(revealTimer)
+  revealTimer = window.setTimeout(() => revealLine(strokeId, part, mergeKey), 350)
+}
 
 /**
  * パス編集中の曲線を nodes に変え、線の点を作り直して軌跡に書き戻す。
@@ -15,6 +47,8 @@ export function updatePathNodes(nodes: PathNode[], mergeKey?: string, selected?:
   const next = applyPath(stroke, lp.part, nodes)
   st.commit((p) => ({ ...p, strokes: p.strokes.map((s) => (s.id === stroke.id ? next : s)) }), mergeKey)
   st.setLivePath({ ...lp, nodes, pointsRef: next.points, selected: selected === undefined ? lp.selected : selected })
+  // アンカーの追加・削除のような1回きりの変更は、すぐ通過部分を表示する（ドラッグ中は、離したときに行う）
+  if (mergeKey === undefined) revealLine(stroke.id, lp.part)
 }
 
 /** 選んでいるアンカーを消す（アンカーが2つしかないときは消さない）。消したら true */

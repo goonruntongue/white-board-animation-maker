@@ -288,9 +288,6 @@ export function Timeline(): React.JSX.Element {
           </div>
         })()}
         <div className="timeline-actions" onPointerDown={(e) => e.stopPropagation()} onPointerMove={(e) => e.stopPropagation()}>
-          {multiIds.length < 2 && selectedLine && <button className="timeline-insert" onClick={() => {
-            useEditor.getState().setRerecordPart(selectedLine.strokeId, selectedLine.part)
-          }}>選んだ線を描き直す</button>}
           {multiIds.length < 2 && selectedLine && selectedLine.part > 0 && <button className="timeline-insert" title="選んだ線の手前で、グループを2つに分ける（描くタイミングはそのまま）" onClick={() => {
             const st = useEditor.getState()
             st.splitGroup(selectedLine.strokeId, selectedLine.part)

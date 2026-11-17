@@ -3,7 +3,7 @@ import { captureImage, importImageDialog, importSampleImage, openAutoTrace } fro
 import { appendToStroke, simplifyPoints, strokeFromRecording } from '../engine/project'
 import { hitPart, replaceStrokePart, strokeParts, transformPart, transformStroke } from '../engine/strokeParts'
 import { fitPath, fitTolerance, insertAnchor, nearestOnPath, partPoints, type PathNode } from '../engine/pathEdit'
-import { updatePathNodes } from '../livePath'
+import { revealLine, updatePathNodes } from '../livePath'
 import { addEraserMark, addRevealMark, combine, flattenShapes, isDegenerate, normalizeBox, type SelectionOp } from '../engine/selection'
 import type { ClipShape, Stroke, StrokePoint } from '../engine/types'
 import { buildTimeline, rasterizeClip, traceClipShape, WBRenderer } from '../engine/wb-engine'
@@ -1094,14 +1094,22 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       finishDraft()
       return
     }
-    if (pathDrag.current?.pointerId === e.pointerId) {
+    const pdEnd = pathDrag.current
+    if (pdEnd?.pointerId === e.pointerId) {
       pathDrag.current = null
+      // パス編集で形を変えたら、線が通る所を表示する（ドラッグと同じ、元に戻す1回分）
+      const lp = useEditor.getState().livePath
+      if (lp) revealLine(lp.strokeId, lp.part, pdEnd.key)
       return
     }
     const ld = liveDrag.current
     if (ld && ld.pointerId === e.pointerId) {
       liveDrag.current = null
-      if (ld.moved) haptic()
+      if (ld.moved) {
+        // 動かした先で、線が通る所を表示する
+        revealLine(ld.stroke.id, ld.part, ld.key)
+        haptic()
+      }
       return
     }
     const er = erasing.current

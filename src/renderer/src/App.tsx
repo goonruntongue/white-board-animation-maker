@@ -54,6 +54,8 @@ export default function App(): React.JSX.Element {
   const isPhone = useIsPhone()
   // 描き直し中は、スマホでは下のパネル（タイムライン・ドック）を隠して絵を広く使う
   const rerecording = useEditor((s) => !!s.rerecordId)
+  // 手描きのブラシで描いているあいだ（スマホ）は、下のタイムラインを隠して絵を広く使う。ドックは残す
+  const brushFocus = useEditor((s) => s.tool === 'live' && s.liveMode === 'brush' && s.viewMode === 'edit' && !s.playing)
   const hasImage = !!project.image
   const [zoom, setZoom] = useState(1)
   const [dragOver, setDragOver] = useState(false)
@@ -268,7 +270,7 @@ export default function App(): React.JSX.Element {
 
   return (
     <div
-      className={`app ${isPhone ? 'phone' : ''} ${hasImage ? 'has-image' : ''} ${rerecording ? 'rerecording' : ''}`}
+      className={`app ${isPhone ? 'phone' : ''} ${hasImage ? 'has-image' : ''} ${rerecording ? 'rerecording' : ''} ${brushFocus ? 'brush-focus' : ''}`}
       data-sheet={mobileSheet ?? undefined}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('Files')) {

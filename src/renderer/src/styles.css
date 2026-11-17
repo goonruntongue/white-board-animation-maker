@@ -3898,3 +3898,8 @@ button {
   font-size: 13px;
   color: var(--text-2);
 }
+
+/* 手描きのブラシ（スマホ）：タイムラインのパネルを隠して絵を広く使う（ドックは残すので、ほかの道具へすぐ移れる） */
+.app.phone.brush-focus .timeline {
+  display: none;
+}
