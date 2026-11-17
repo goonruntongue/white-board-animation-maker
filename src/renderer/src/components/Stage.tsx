@@ -157,6 +157,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const antsOffset = useRef(0)
   const scratch = useRef<HTMLCanvasElement | null>(null)
   const [hasDraft, setHasDraft] = useState(false)
+  /** スマホの「描き順を作る」案内を閉じたか（画像を読み込み直したら、また出す） */
+  const [coachClosed, setCoachClosed] = useState(false)
 
   const [size, setSize] = useState({ w: 800, h: 600 })
   const [view, setView] = useState<View>({ zoom: 1, x: 0, y: 0 })
@@ -238,7 +240,10 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   useEffect(() => onZoomChange(scale), [scale, onZoomChange])
 
   // 画像が変わったら表示をリセット
-  useEffect(() => setView({ zoom: 1, x: 0, y: 0 }), [image?.dataUrl])
+  useEffect(() => {
+    setView({ zoom: 1, x: 0, y: 0 })
+    setCoachClosed(false)
+  }, [image?.dataUrl])
 
   useLayoutEffect(() => {
     const el = containerRef.current
@@ -278,11 +283,20 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     }
   }, [project, assets, image, renderScale])
 
-  // 描き直しは1コマに1回まとめる（スライダーやドラッグで続けて変わっても、描くのは最後の状態だけ）
+  // 描き直しは1コマに1回まとめる（スライダーやドラッグで続けて変わっても、描くのは最後の状態だけ）。
+  // 予約済みの描画は取り消さず、中身だけ最新に差し替える（取り消すと、再生中のように毎コマ変わるときに
+  // 一度も描かれなくなる）
   const renderFrame = useRef(0)
+  const renderJob = useRef<(() => void) | null>(null)
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(renderFrame.current)
+      renderFrame.current = 0
+    },
+    []
+  )
   useEffect(() => {
-    cancelAnimationFrame(renderFrame.current)
-    renderFrame.current = requestAnimationFrame(() => {
+    renderJob.current = () => {
     const r = rendererRef.current
     if (!r || !image) return
     if (viewMode === 'preview') r.renderAt(time)
@@ -297,8 +311,13 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     else if (live) r.renderAt(liveTime, { hand: false, background: false })
     // 編集表示：なぞった範囲（＝最終的に見える範囲）を全描画して、欠けを確認しやすくする
     else r.renderAt(timeline.total, { hand: false, background: false })
-    })
-    return () => cancelAnimationFrame(renderFrame.current)
+    }
+    if (!renderFrame.current) {
+      renderFrame.current = requestAnimationFrame(() => {
+        renderFrame.current = 0
+        renderJob.current?.()
+      })
+    }
   }, [project, assets, time, viewMode, image, timeline, live, liveTime, rerecordId, rerecordPart, renderScale])
 
   // ---- 選択範囲の外を暗くする層 ----
@@ -1324,13 +1343,17 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         </div>
       )}
       <canvas ref={loupeRef} className="loupe" style={{ width: LOUPE, height: LOUPE, display: 'none' }} aria-hidden />
-      {image && isPhone && !rerecordId && !selection && !lassoPolyActive && viewMode === 'edit' && (
+      {/* 描き始めの案内：軌跡がまだ1本もないときだけ。✕で閉じられる（自動作成はドック・メニューからもできる） */}
+      {image && isPhone && !coachClosed && project.strokes.length === 0 && !rerecordId && !selection && !lassoPolyActive && viewMode === 'edit' && (
         <div className="coach-chip">
           <span>
             <Icon name="pen" size={14} /> 描き順を作る
           </span>
           <button className="btn small primary" data-tour="auto-phone" onClick={openAutoTrace}>
             <Icon name="sparkle" size={13} /> 自動で作る
+          </button>
+          <button className="coach-close" aria-label="この案内を閉じる" onClick={() => setCoachClosed(true)}>
+            <Icon name="x" size={14} />
           </button>
         </div>
       )}

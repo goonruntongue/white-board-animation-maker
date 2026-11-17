@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Icon, type IconName } from '../Icon'
 
 export interface SheetAction {
@@ -32,7 +33,8 @@ export function ActionSheet({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  return (
+  // 呼び出し元（上部バー・ドックなど）の重なり順に閉じ込められないよう、ページの一番上（body 直下）に出す
+  return createPortal(
     <div className="action-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="action-sheet" role="dialog" aria-label={title}>
         <span className="sheet-grip static" aria-hidden />
@@ -63,6 +65,7 @@ export function ActionSheet({
           キャンセル
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

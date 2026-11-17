@@ -3865,3 +3865,20 @@ button {
   left: -18px;
   width: 38px;
 }
+
+/* 「描き順を作る」案内の閉じるボタン */
+.coach-close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: -2px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.coach-close:active {
+  background: var(--hilite);
+}
