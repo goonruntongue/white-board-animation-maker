@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { captureImage, importImageDialog, importSampleImage, openAutoTrace, togglePlay } from '../commands'
 import { appendToStroke, simplifyPoints, strokeFromRecording } from '../engine/project'
+import { getBrushTarget } from '../lib/brushTarget'
 import { hitPart, replaceStrokePart, strokeParts, transformPart, transformStroke } from '../engine/strokeParts'
 import { fitPath, fitTolerance, insertAnchor, nearestOnPath, partPoints, type PathNode } from '../engine/pathEdit'
 import { revealLine, updatePathNodes } from '../livePath'
@@ -27,6 +28,8 @@ interface Recording {
   appendTo?: string
   /** ライブ編集の「ブラシで足す」：描き足すうえに、なぞった所を軌跡の表示範囲にも加える */
   liveBrush?: boolean
+  /** ブラシの「描き直す」：appendTo のグループの、この番号の線を置き換える */
+  redoPart?: number
   /** 何も選ばずにブラシで続けて書いた線：直前に描いたグループへ入れる（選択はしない） */
   chain?: boolean
 }
@@ -974,8 +977,12 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
           Math.hypot(p.x - chain.x, p.y - chain.y) < Math.hypot(imgW, imgH) * CHAIN_DIST
             ? chain.id
             : undefined
+        // 線を選んでいて「描き直す」なら、その線を置き換える。「追加」なら、グループの最後に足す
+        const redoPart = targetId && getBrushTarget() === 'redo' ? st.livePart?.part : undefined
         recording.current = targetId
-          ? { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }], appendTo: targetId, liveBrush: true }
+          ? redoPart !== undefined
+            ? { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }], appendTo: targetId, redoPart }
+            : { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }], appendTo: targetId, liveBrush: true }
           : chainTo
             ? { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }], appendTo: chainTo, chain: true }
             : { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }] }
@@ -1190,7 +1197,16 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         }
       } else if (rec.appendTo) {
         const target = st.project.strokes.find((s) => s.id === rec.appendTo)
-        if (target && rec.liveBrush) {
+        if (target && rec.redoPart !== undefined) {
+          // ブラシで描き直す：選んでいる線を、なぞった線に置き換える（選んだまま。続けてなぞれば、また描き直す）
+          const updated = replaceStrokePart(target, rec.redoPart, simplifyPoints(rec.points))
+          if (updated) {
+            st.updateStroke(target.id, updated)
+            st.setLivePart({ strokeId: target.id, part: rec.redoPart })
+            st.notify(`線 ${rec.redoPart + 1} を描き直しました`)
+            haptic()
+          } else st.notify('線が見つかりませんでした')
+        } else if (target && rec.liveBrush) {
           // ブラシで足す：ペンの通り道を足し、表示範囲もなぞった所まで広げる
           const w = st.project.settings.defaultRevealWidth
           const marks: Pt[] = []

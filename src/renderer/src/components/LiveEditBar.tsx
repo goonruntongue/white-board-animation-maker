@@ -4,7 +4,11 @@
 //  ・ブラシで足す：なぞった所を、選んだ軌跡に足す（ペンもそこを通り、表示範囲も広がる）
 //  ・消しゴム：なぞった所を、選んだ軌跡では見せない
 // 絵（ステージ）は「選んだ軌跡（線）を描き終えた瞬間」を見せているので、変えるとその場で見え方が変わる。
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useShallow } from 'zustand/react/shallow'
+import { setBrushTarget, useBrushTarget, type BrushTarget } from '../lib/brushTarget'
+import { ActionSheet } from './phone/ActionSheet'
 import {
   setAllPartsWidth,
   setPartWidth,
@@ -210,7 +214,7 @@ function BreakKey({ phone }: { phone: boolean }): React.JSX.Element {
 
 const MODES = [
   { id: 'move', icon: 'move', label: '選ぶ・動かす', hint: '選ぶ・動かす：タップで選び、ドラッグで動かす。太さ・大きさも変えられます' },
-  { id: 'brush', icon: 'plusPen', label: 'ブラシ', hint: 'ブラシ：何も選んでいなければ、なぞって新しいグループを描く。線を選んでいれば、そのグループに線を足す（ペンもそこを通り、表示範囲も広がる）' },
+  { id: 'brush', icon: 'plusPen', label: 'ブラシ', hint: 'ブラシ：何も選んでいなければ、なぞって新しいグループを描く。線を選んでいれば、その線を描き直す（▼ で「線を追加」にも切り替えられる）' },
   { id: 'erase', icon: 'eraser', label: '消しゴム', hint: '消しゴム：なぞった所を、選んでいる線でだけ見せない（同じグループのほかの線には効かない）' },
   { id: 'path', icon: 'pathPen', label: 'パス編集', hint: 'パス編集：線をアンカーとハンドルの曲線として編集する' }
 ] as const
@@ -229,23 +233,126 @@ function ModeSwitch({ phone }: { phone: boolean }): React.JSX.Element {
   if (phone) {
     return (
       <div className="pc-seg" role="radiogroup" aria-label="手描きの操作">
-        {MODES.map((m) => (
-          <button key={m.id} role="radio" aria-checked={mode === m.id} className={`pc-key ${mode === m.id ? 'on' : ''}`} onClick={() => setMode(m.id)}>
-            <Icon name={m.icon} size={18} />
-            <small>{m.label}</small>
-          </button>
-        ))}
+        {MODES.map((m) =>
+          m.id === 'brush' ? (
+            <BrushKey key={m.id} phone on={mode === 'brush'} onPick={() => setMode('brush')} />
+          ) : (
+            <button key={m.id} role="radio" aria-checked={mode === m.id} className={`pc-key ${mode === m.id ? 'on' : ''}`} onClick={() => setMode(m.id)}>
+              <Icon name={m.icon} size={18} />
+              <small>{m.label}</small>
+            </button>
+          )
+        )}
       </div>
     )
   }
   return (
     <>
-      {MODES.map((m) => (
-        <button key={m.id} className={`icon-btn ${mode === m.id ? 'on' : ''}`} aria-pressed={mode === m.id} title={m.hint} onClick={() => setMode(m.id)}>
-          <Icon name={m.icon} />
-        </button>
-      ))}
+      {MODES.map((m) =>
+        m.id === 'brush' ? (
+          <BrushKey key={m.id} phone={false} on={mode === 'brush'} onPick={() => setMode('brush')} />
+        ) : (
+          <button key={m.id} className={`icon-btn ${mode === m.id ? 'on' : ''}`} aria-pressed={mode === m.id} title={m.hint} onClick={() => setMode(m.id)}>
+            <Icon name={m.icon} />
+          </button>
+        )
+      )}
     </>
+  )
+}
+
+const Caret = (): React.JSX.Element => (
+  <svg width="10" height="7" viewBox="0 0 10 7" aria-hidden="true">
+    <path d="M1.5 1.5 L5 5.2 L8.5 1.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+/**
+ * ブラシのボタンと、その横の ▼（線を選んでいるときに「描き直す」か「追加」かを選ぶ）。
+ * 線を選んでいるときは、ボタンの名前が「描き直す」「線を追加」に変わり、押す前に何が起きるか分かる。
+ */
+function BrushKey({ phone, on, onPick }: { phone: boolean; on: boolean; onPick: () => void }): React.JSX.Element {
+  const target = useBrushTarget()
+  const selected = useEditor((s) => !!s.livePart)
+  const [menu, setMenu] = useState<DOMRect | null>(null)
+  const redo = target === 'redo'
+  const label = !selected ? 'ブラシ' : redo ? '描き直す' : '線を追加'
+  const icon = selected && redo ? 'record' : 'plusPen'
+  const hint = !selected
+    ? 'ブラシ：なぞって新しいグループを描く（線を選んでいるときの動きは ▼ で選べます）'
+    : redo
+      ? 'ブラシ（描き直す）：なぞると、選んでいる線がその線に置き換わる'
+      : 'ブラシ（線を追加）：なぞった線を、選んでいるグループの最後に足す'
+  const options = [
+    { id: 'redo' as const, icon: 'record' as const, label: '選んだ線を描き直す', note: 'なぞると、選んでいる線が置き換わります（おすすめ）' },
+    { id: 'add' as const, icon: 'plusPen' as const, label: '線を追加', note: '選んでいるグループの最後に線を足します' }
+  ]
+  const open = (e: React.MouseEvent<HTMLButtonElement>): void => setMenu(e.currentTarget.getBoundingClientRect())
+  const choose = (v: BrushTarget): void => {
+    setBrushTarget(v)
+    setMenu(null)
+    onPick()
+  }
+
+  // PC：メニューの外を押す・Esc で閉じる
+  useEffect(() => {
+    if (!menu || phone) return
+    const onDown = (e: PointerEvent): void => {
+      if (!(e.target as Element).closest?.('.brush-pop')) setMenu(null)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setMenu(null)
+    }
+    window.addEventListener('pointerdown', onDown, true)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [menu, phone])
+
+  if (phone) {
+    return (
+      <span className="brush-split">
+        <button role="radio" aria-checked={on} className={`pc-key ${on ? 'on' : ''}`} onClick={onPick}>
+          <Icon name={icon} size={18} />
+          <small>{label}</small>
+        </button>
+        <button className={`pc-key brush-caret ${on ? 'on' : ''}`} aria-label="ブラシの動きを選ぶ（描き直す／線を追加）" onClick={open}>
+          <Caret />
+        </button>
+        {menu && (
+          <ActionSheet
+            title="線を選んでいるときのブラシ"
+            onClose={() => setMenu(null)}
+            actions={options.map((o) => ({ icon: o.icon, label: o.label, note: o.note, active: target === o.id, onSelect: () => choose(o.id) }))}
+          />
+        )}
+      </span>
+    )
+  }
+  return (
+    <span className="brush-split">
+      <button className={`icon-btn ${on ? 'on' : ''}`} aria-pressed={on} title={hint} onClick={onPick}>
+        <Icon name={icon} />
+      </button>
+      <button className={`icon-btn brush-caret ${on ? 'on' : ''}`} title="線を選んでいるときのブラシの動き（描き直す／線を追加）" aria-haspopup="menu" aria-expanded={!!menu} onClick={(e) => (menu ? setMenu(null) : open(e))}>
+        <Caret />
+      </button>
+      {menu &&
+        createPortal(
+          <div className="help-pop brush-pop" role="menu" style={{ position: 'fixed', top: menu.bottom + 6, left: Math.max(8, menu.left - 20), right: 'auto' }}>
+            <div className="brush-pop-title">線を選んでいるときのブラシ</div>
+            {options.map((o) => (
+              <button key={o.id} role="menuitemradio" aria-checked={target === o.id} className={target === o.id ? 'on' : ''} onClick={() => choose(o.id)}>
+                <Icon name={o.icon} /> {o.label}
+                <small>{o.note}</small>
+              </button>
+            ))}
+          </div>,
+          document.body
+        )}
+    </span>
   )
 }
 
@@ -309,7 +416,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
       mode === 'path'
         ? '編集したい線を押して選びます'
         : mode === 'brush'
-        ? 'なぞると新しいグループになります（線を選んでいれば、そのグループに足します）'
+        ? 'なぞると新しいグループになります（線を選んでいれば、その線を描き直します。▼ で「線を追加」にも切り替え）'
         : mode === 'erase'
           ? 'なぞった所にあるグループを消します'
           : `絵の上を押して${what}を選びます。ドラッグで動かし、太さ・大きさも変えられます`
@@ -398,9 +505,6 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
               )}
             </>
           )}
-          <button className="pc-key" onClick={() => { const st = useEditor.getState(); whole ? st.setRerecord(live.strokeId) : st.setRerecordPart(live.strokeId, live.part) }} title={whole ? 'グループ全体を手で描き直す' : '選んだ線だけを手で描き直す'}>
-            <Icon name="record" size={18} /><small>{whole ? '全体を描き直す' : '線を描き直す'}</small>
-          </button>
           <button className="pc-key" disabled={!liveHasClip} onClick={() => useEditor.getState().openDialog('auto')} title="選択中のグループの表示範囲を自動で作り直す">
             <Icon name="sparkle" size={18} /><small>自動で再作成</small>
           </button>
@@ -417,7 +521,6 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
       <ModeSwitch phone={false} />
       {unitSwitch}
       <span className="tb-label">{label}</span>
-      <button className="tool-btn live-redo" title={whole ? 'グループ全体を手で描き直す' : '選んだ線だけを手で描き直す'} onClick={() => { const st = useEditor.getState(); whole ? st.setRerecord(live.strokeId) : st.setRerecordPart(live.strokeId, live.part) }}><Icon name="record" /><span>{whole ? '全体を描き直す' : '線を描き直す'}</span></button>
       <button className="tool-btn live-redo" disabled={!liveHasClip} title={liveHasClip ? '選択中のグループの表示範囲を自動で作り直す' : '自動で再作成するには、グループに表示範囲が必要です'} onClick={() => useEditor.getState().openDialog('auto')}><Icon name="sparkle" /><span>自動で再作成</span></button>
       <button className="icon-btn" title={`前の${what} (,)`} onClick={() => stepLivePart(-1)}>
         <Icon name="up" />
