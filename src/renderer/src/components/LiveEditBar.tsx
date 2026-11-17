@@ -14,6 +14,7 @@ import {
   transformStroke
 } from '../engine/strokeParts'
 import { deleteSelectedAnchor } from '../livePath'
+import { addRevealMark } from '../engine/selection'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
 
@@ -75,6 +76,28 @@ function applyToStroke(): void {
   if (!stroke || !part) return
   st.commit((p) => ({ ...p, strokes: p.strokes.map((s) => (s.id === lp.strokeId ? setAllPartsWidth(s, part.width) : s)) }))
   st.notify(`#${st.project.strokes.indexOf(stroke) + 1} のすべての線を ${part.width}px にしました`)
+}
+
+/** 選択した線の通過範囲を表示可能にする。既存の範囲は残し、元に戻せる。 */
+function revealAlongLive(): void {
+  const st = useEditor.getState()
+  const lp = st.livePart
+  if (!lp) return
+  const whole = isWhole(st)
+  st.commit((project) => ({
+    ...project,
+    strokes: project.strokes.map((stroke) => {
+      if (stroke.id !== lp.strokeId || !stroke.clip) return stroke
+      const parts = strokeParts(stroke)
+      const chosen = whole ? parts : parts.slice(lp.part, lp.part + 1)
+      let clip = stroke.clip
+      for (const part of chosen) {
+        clip = addRevealMark(clip, stroke.points.slice(part.start, part.end + 1), part.width) ?? clip
+      }
+      return { ...stroke, clip }
+    })
+  }))
+  st.notify(`${whole ? '軌跡' : '線'}が通る範囲を表示できるようにしました`)
 }
 
 /** 選んでいる軌跡（線）を、その中心を基準に拡大・縮小する（続けて押した分は、元に戻す1回分にまとめる） */
@@ -206,6 +229,7 @@ function UnitSwitch({ phone }: { phone: boolean }): React.JSX.Element {
 
 export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.Element {
   const live = useLive()
+  const liveHasClip = useEditor((s) => !!s.project.strokes.find((stroke) => stroke.id === s.livePart?.strokeId)?.clip)
   const mode = useEditor((s) => s.liveMode)
   const unit = useEditor((s) => s.liveUnit)
   const hasAnchor = useEditor((s) => s.livePath?.selected != null)
@@ -250,6 +274,15 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
         <ModeSwitch phone />
         {unitSwitch}
         <span className="pc-label">{label}</span>
+        <button className="pc-key" disabled={!liveHasClip} onClick={revealAlongLive} title="選択した線が通る範囲を表示します。近くの絵も表示されることがあります">
+          <Icon name="layers" size={18} /><small>通過部分を表示</small>
+        </button>
+        <button className="pc-key" onClick={() => { const st = useEditor.getState(); whole ? st.setRerecord(live.strokeId) : st.setRerecordPart(live.strokeId, live.part) }} title={whole ? '軌跡全体を手で描き直す' : '選んだ線だけを手で描き直す'}>
+          <Icon name="record" size={18} /><small>{whole ? '全体を描き直す' : '線を描き直す'}</small>
+        </button>
+        <button className="pc-key" disabled={!liveHasClip} onClick={() => useEditor.getState().openDialog('auto')} title="選択中の軌跡の表示範囲を自動で作り直す">
+          <Icon name="sparkle" size={18} /><small>自動で再作成</small>
+        </button>
         <button className="pc-key" aria-label={`前の${what}`} onClick={() => stepLivePart(-1)}>
           <Icon name="up" size={18} />
           <small>前の{what}</small>
@@ -307,6 +340,9 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
       <ModeSwitch phone={false} />
       {unitSwitch}
       <span className="tb-label">{label}</span>
+      <button className="tool-btn live-redo" disabled={!liveHasClip} onClick={revealAlongLive} title="選択した線が通る範囲を表示します。近くの絵も表示されることがあります"><Icon name="layers" /><span>通過部分を表示</span></button>
+      <button className="tool-btn live-redo" title={whole ? '軌跡全体を手で描き直す' : '選んだ線だけを手で描き直す'} onClick={() => { const st = useEditor.getState(); whole ? st.setRerecord(live.strokeId) : st.setRerecordPart(live.strokeId, live.part) }}><Icon name="record" /><span>{whole ? '全体を描き直す' : '線を描き直す'}</span></button>
+      <button className="tool-btn live-redo" disabled={!liveHasClip} title={liveHasClip ? '選択中の軌跡の表示範囲を自動で作り直す' : '自動で再作成するには、軌跡に表示範囲が必要です'} onClick={() => useEditor.getState().openDialog('auto')}><Icon name="sparkle" /><span>自動で再作成</span></button>
       <button className="icon-btn" title={`前の${what} (,)`} onClick={() => stepLivePart(-1)}>
         <Icon name="up" />
       </button>

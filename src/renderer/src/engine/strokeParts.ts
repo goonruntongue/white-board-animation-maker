@@ -5,6 +5,7 @@
 // レンダラー（wb-engine の partWidth）と同じ決まりで読む。
 import type { ClipRegion, Stroke, StrokePoint } from './types'
 import { prepareStroke } from './wb-engine'
+import { addRevealMark } from './selection'
 
 export interface StrokePart {
   /** 線の書き始めの点の番号（最初の線は 0、ほかは b: 1 の点） */
@@ -27,6 +28,31 @@ export function strokeParts(stroke: Stroke): StrokePart[] {
     }
   }
   return parts
+}
+
+/** 1本の線だけを手描きで置き換え、他の線と元の再生時間を保つ。 */
+export function replaceStrokePart(stroke: Stroke, partIndex: number, recording: StrokePoint[]): Stroke | null {
+  const part = strokeParts(stroke)[partIndex]
+  if (!part || !recording.length) return null
+  const prep = prepareStroke(stroke)
+  const duration = Math.max(50, stroke.duration)
+  const timed = stroke.points.map((p, i) => ({ ...p, t: prep.param[i] * duration }))
+  const start = timed[part.start].t
+  const end = timed[part.end].t
+  const t0 = recording[0].t
+  const span = recording[recording.length - 1].t - t0
+  const replacement = recording.map((p, i) => {
+    const ratio = span > 0 ? (p.t - t0) / span : recording.length > 1 ? i / (recording.length - 1) : 0
+    const point: StrokePoint = { x: p.x, y: p.y, t: start + (end - start) * ratio }
+    if (i === 0 && part.start > 0) { point.b = 1; point.w = part.width }
+    return point
+  })
+  return {
+    ...stroke,
+    points: [...timed.slice(0, part.start), ...replacement, ...timed.slice(part.end + 1)],
+    useRecordedTiming: true,
+    clip: addRevealMark(stroke.clip, recording, part.width)
+  }
 }
 
 /** 1本の線の太さだけを変える（ほかの線の見た目は変えない） */

@@ -189,16 +189,42 @@ export function traceClipShape(ctx, shape, width, height) {
 
 const CLIP_OP = { add: 'source-over', subtract: 'destination-out', intersect: 'destination-in' }
 
-/** 選択範囲を、範囲内だけ不透明なマスク画像にする */
-export function rasterizeClip(clip, width, height) {
-  const c = makeCanvas(width, height)
-  const ctx = c.getContext('2d')
+/**
+ * 選択範囲を、範囲内だけ不透明なマスク画像にする。
+ * opt を渡すと、画像の一部（x, y, w, h）だけを scale 倍の解像度で作る（メモリと描く手間を減らす）。
+ * 省略時は画像全体を等倍で作る。
+ */
+export function rasterizeClip(clip, width, height, opt) {
+  const s = (opt && opt.scale) || 1
+  const ox = (opt && opt.x) || 0
+  const oy = (opt && opt.y) || 0
+  const cw = Math.max(1, Math.ceil(((opt && opt.w) || width) * s))
+  const ch = Math.max(1, Math.ceil(((opt && opt.h) || height) * s))
+  const layer = function () {
+    const c = makeCanvas(cw, ch)
+    const ctx = c.getContext('2d')
+    ctx.setTransform(s, 0, 0, s, -ox * s, -oy * s)
+    return { canvas: c, ctx: ctx }
+  }
+  const top = layer()
+  drawClipInto(top.ctx, clip, width, height, layer)
+  return top.canvas
+}
+
+/** 範囲の図形を ctx に描く（ctx の変換は、画像の座標 → キャンバスの画素） */
+function drawClipInto(ctx, clip, width, height, layer) {
   ctx.fillStyle = '#000'
   for (const shape of clip.shapes) {
     // destination-in は、描いた図形の外側をすべて消す＝交差
     ctx.globalCompositeOperation = CLIP_OP[shape.mode] || 'source-over'
     if (shape.kind === 'region') {
-      ctx.drawImage(rasterizeClip(shape.region, width, height), 0, 0)
+      // 入れ子の範囲は、同じ大きさ・同じ変換の別キャンバスに描いてから重ねる
+      const inner = layer()
+      drawClipInto(inner.ctx, shape.region, width, height, layer)
+      ctx.save()
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.drawImage(inner.canvas, 0, 0)
+      ctx.restore()
     } else if (shape.kind === 'rle') {
       // 格子上の連続区間を、画像の大きさに引き伸ばして塗る（すき間が出ないよう外側へ丸める）
       const sx = width / shape.gw
@@ -231,7 +257,6 @@ export function rasterizeClip(clip, width, height) {
     }
   }
   ctx.globalCompositeOperation = 'source-over'
-  return c
 }
 
 function shapeBox(s, width, height) {
@@ -280,13 +305,25 @@ export function clipBounds(clip, width, height) {
  * プレビュー／書き出し共通のレンダラー。
  *   const r = new WBRenderer(canvas, project, { image, hand })
  *   r.renderAt(ms)
+ * opts.scale：内部の解像度（画像の大きさに対する倍率）。編集画面では画面に見える細かさまで下げて軽くする。
+ *   書き出しは省略（＝等倍）。座標・太さはいつも画像の大きさで扱い、描くときだけ縮める。
  */
 export class WBRenderer {
-  constructor(canvas, project, assets) {
+  constructor(canvas, project, assets, opts) {
     this.canvas = canvas
     this.ctx = canvas.getContext('2d')
     this.assets = assets // { image: CanvasImageSource|null, hand: CanvasImageSource|null }
+    this.scale = (opts && opts.scale) || 1
     this.setProject(project)
+  }
+
+  /** 内部の解像度を変える（変わったら作業用のキャンバスと範囲の画像を作り直す） */
+  setScale(scale) {
+    const s = scale || 1
+    if (s === this.scale) return
+    this.scale = s
+    this.mask = null
+    this.setProject(this.project)
   }
 
   setProject(project) {
@@ -295,12 +332,17 @@ export class WBRenderer {
     const h = project.image ? project.image.height : 1080
     this.width = w
     this.height = h
-    if (this.canvas.width !== w) this.canvas.width = w
-    if (this.canvas.height !== h) this.canvas.height = h
-    if (!this.mask || this.mask.width !== w || this.mask.height !== h) {
-      this.mask = makeCanvas(w, h)
-      this.reveal = makeCanvas(w, h)
-      this.scratch = makeCanvas(w, h)
+    // 実際の画素数（内部の解像度）
+    const W = Math.max(1, Math.round(w * this.scale))
+    const H = Math.max(1, Math.round(h * this.scale))
+    this.pw = W
+    this.ph = H
+    if (this.canvas.width !== W) this.canvas.width = W
+    if (this.canvas.height !== H) this.canvas.height = H
+    if (!this.mask || this.mask.width !== W || this.mask.height !== H) {
+      this.mask = makeCanvas(W, H)
+      this.reveal = makeCanvas(W, H)
+      this.scratch = makeCanvas(W, H)
       this.clipCache = new WeakMap()
     }
     this.mctx = this.mask.getContext('2d')
@@ -320,7 +362,8 @@ export class WBRenderer {
   }
 
   resetMask() {
-    this.mctx.clearRect(0, 0, this.width, this.height)
+    this.mctx.setTransform(1, 0, 0, 1, 0, 0)
+    this.mctx.clearRect(0, 0, this.pw, this.ph)
     this.maskTime = -1
     this.revealDirty = true
   }
@@ -331,6 +374,7 @@ export class WBRenderer {
     const from = this.maskTime
     if (t === from) return
     const m = this.mctx
+    const k = this.scale
     for (const seg of this.timeline.segments) {
       if (seg.end <= from || seg.start > t) continue
       const dur = seg.end - seg.start
@@ -338,20 +382,26 @@ export class WBRenderer {
       const u1 = t >= seg.end ? 1 : (t - seg.start) / dur
       const clip = this.clipFor(seg.prep.stroke)
       if (!clip) {
+        m.setTransform(k, 0, 0, k, 0, 0)
         this.strokePortion(m, seg.prep, u0, u1)
         continue
       }
-      // 選択範囲あり：作業用キャンバスに描き、範囲で切り抜いてからマスクへ足す
-      const b = clip.bounds
+      // 選択範囲あり：作業用キャンバスに描き、範囲で切り抜いてからマスクへ足す（範囲の矩形の中だけで行う）
+      const b = clip.px
       if (b.w <= 0 || b.h <= 0) continue
       const sc = this.sctx
+      sc.setTransform(1, 0, 0, 1, 0, 0)
       sc.clearRect(b.x, b.y, b.w, b.h)
+      sc.setTransform(k, 0, 0, k, 0, 0)
       this.strokePortion(sc, seg.prep, u0, u1)
+      sc.setTransform(1, 0, 0, 1, 0, 0)
       sc.globalCompositeOperation = 'destination-in'
-      sc.drawImage(clip.canvas, b.x, b.y, b.w, b.h, b.x, b.y, b.w, b.h)
+      sc.drawImage(clip.canvas, b.x, b.y)
       sc.globalCompositeOperation = 'source-over'
+      m.setTransform(1, 0, 0, 1, 0, 0)
       m.drawImage(this.scratch, b.x, b.y, b.w, b.h, b.x, b.y, b.w, b.h)
     }
+    m.setTransform(1, 0, 0, 1, 0, 0)
     this.maskTime = t
     this.revealDirty = true
   }
@@ -363,7 +413,19 @@ export class WBRenderer {
     // 同じ範囲オブジェクトなら作り直さない（範囲は書き換えずに作り直す決まりなので、同一性で判定できる）
     let hit = this.clipCache.get(clip)
     if (!hit) {
-      hit = { canvas: rasterizeClip(clip, this.width, this.height), bounds: clipBounds(clip, this.width, this.height) }
+      // 範囲が及ぶ矩形の中だけを、内部の解像度で作る（画像全体の大きさで作ると、軌跡の数だけメモリを使う）
+      const k = this.scale
+      const b = clipBounds(clip, this.width, this.height)
+      const x0 = Math.floor(b.x * k)
+      const y0 = Math.floor(b.y * k)
+      const px = {
+        x: x0,
+        y: y0,
+        w: Math.max(0, Math.min(this.pw, Math.ceil((b.x + b.w) * k)) - x0),
+        h: Math.max(0, Math.min(this.ph, Math.ceil((b.y + b.h) * k)) - y0)
+      }
+      const canvas = px.w > 0 && px.h > 0 ? rasterizeClip(clip, this.width, this.height, { scale: k, x: x0 / k, y: y0 / k, w: px.w / k, h: px.h / k }) : null
+      hit = { canvas: canvas, px: px }
       this.clipCache.set(clip, hit)
     }
     return hit
@@ -424,10 +486,11 @@ export class WBRenderer {
   composeReveal() {
     if (!this.revealDirty) return
     const r = this.rctx
+    r.setTransform(1, 0, 0, 1, 0, 0)
     r.globalCompositeOperation = 'source-over'
-    r.clearRect(0, 0, this.width, this.height)
+    r.clearRect(0, 0, this.pw, this.ph)
     if (this.assets.image) {
-      r.drawImage(this.assets.image, 0, 0, this.width, this.height)
+      r.drawImage(this.assets.image, 0, 0, this.pw, this.ph)
       r.globalCompositeOperation = 'destination-in'
       r.drawImage(this.mask, 0, 0)
       r.globalCompositeOperation = 'source-over'
@@ -450,21 +513,24 @@ export class WBRenderer {
     ctx.globalAlpha = 1
     if (o.background !== false) {
       ctx.fillStyle = s.boardColor || '#ffffff'
-      ctx.fillRect(0, 0, this.width, this.height)
+      ctx.fillRect(0, 0, this.pw, this.ph)
     } else {
-      ctx.clearRect(0, 0, this.width, this.height)
+      ctx.clearRect(0, 0, this.pw, this.ph)
     }
     ctx.drawImage(this.reveal, 0, 0)
     // 描き終わったら、画像全体をふわっと出す（薄い影やなぞり残しがあっても、最後は必ず元の絵になる）
     if (s.finishFull && this.assets.image && t > this.timeline.drawEnd && this.timeline.segments.length > 0) {
       ctx.globalAlpha = clamp((t - this.timeline.drawEnd) / 350, 0, 1)
-      ctx.drawImage(this.assets.image, 0, 0, this.width, this.height)
+      ctx.drawImage(this.assets.image, 0, 0, this.pw, this.ph)
       ctx.globalAlpha = 1
     }
 
     if (o.hand !== false && s.showHand && this.assets.hand && this.project.hand) {
       const st = handStateAt(this.timeline, t, this.width, this.height, s.handFollowDirection)
+      // 手は画像の座標で描く（内部の解像度に合わせて縮める）
+      ctx.setTransform(this.scale, 0, 0, this.scale, 0, 0)
       this.drawHand(st)
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
     }
   }
 

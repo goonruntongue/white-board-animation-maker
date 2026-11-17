@@ -47,7 +47,10 @@ export interface RenderAssets {
 }
 
 export class WBRenderer {
-  constructor(canvas: HTMLCanvasElement, project: Project, assets: RenderAssets)
+  /** opts.scale：内部の解像度（画像の大きさに対する倍率。省略時 1） */
+  constructor(canvas: HTMLCanvasElement, project: Project, assets: RenderAssets, opts?: { scale?: number })
+  readonly scale: number
+  setScale(scale: number): void
   readonly canvas: HTMLCanvasElement
   readonly width: number
   readonly height: number
@@ -67,5 +70,10 @@ export function traceClipShape(
   width: number,
   height: number
 ): void
-export function rasterizeClip(clip: ClipRegion, width: number, height: number): HTMLCanvasElement | OffscreenCanvas
+export function rasterizeClip(
+  clip: ClipRegion,
+  width: number,
+  height: number,
+  opt?: { scale?: number; x?: number; y?: number; w?: number; h?: number }
+): HTMLCanvasElement | OffscreenCanvas
 export function clipBounds(clip: ClipRegion, width: number, height: number): { x: number; y: number; w: number; h: number }

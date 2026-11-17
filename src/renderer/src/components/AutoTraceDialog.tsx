@@ -53,12 +53,15 @@ function savePrefs(p: AutoPrefs): void {
 export function AutoTraceDialog(): React.JSX.Element {
   const project = useEditor((s) => s.project)
   const selection = useEditor((s) => s.selection)
+  const selectedId = useEditor((s) => s.selectedId)
+  const selectedStroke = project.strokes.find((s) => s.id === selectedId)
+  const editingStroke = useEditor((s) => s.tool === 'live' && !!s.livePart)
   const { openDialog, notify } = useEditor.getState()
   const [prefs] = useState(loadPrefs)
   const [revealWidth, setRevealWidth] = useState(prefs.revealWidth)
   const [detail, setDetail] = useState<AutoDetail>(prefs.detail)
   const [pathMode, setPathMode] = useState<'natural' | 'group' | 'ink'>(prefs.pathMode === 'ink' || prefs.pathMode === 'group' ? prefs.pathMode : 'natural')
-  const [fill, setFill] = useState(!!selection)
+  const [fill, setFill] = useState(!!selection && !editingStroke)
   // 選択範囲：範囲全体を均一に塗る（area）か、範囲の中の文字・図を見分けて自然な順に描く（detect）
   const [fillKind, setFillKind] = useState<'area' | 'detect'>('area')
   const [fillDirection, setFillDirection] = useState<FillDirection>('horizontal')
@@ -71,7 +74,7 @@ export function AutoTraceDialog(): React.JSX.Element {
   const [scrubCycles, setScrubCycles] = useState(prefs.scrubCycles)
   const [scrubTilt, setScrubTilt] = useState(prefs.scrubTilt)
   const preset = MOTION_PRESETS.find((m) => Math.abs(m.scrubV - scrubV) < 0.005 && Math.abs(m.scrubH - scrubH) < 0.005)
-  const [mode, setMode] = useState<'replace' | 'append'>('replace')
+  const [mode, setMode] = useState<'replace' | 'append' | 'stroke'>(selectedStroke?.clip && (editingStroke || !selection) ? 'stroke' : 'replace')
   const [busy, setBusy] = useState(false)
   const existing = project.strokes.length
   const close = (): void => openDialog(null)
@@ -91,15 +94,20 @@ export function AutoTraceDialog(): React.JSX.Element {
     try {
       const start = mode === 'append' ? existing : 0
       savePrefs({ detail, pathMode, speed, scrubV, scrubH, revealWidth, scrubCycles, scrubTilt, motionVersion: 2 })
-      const result = fill && fillKind === 'detect'
+      const result = mode === 'stroke' && selectedStroke?.clip
+        ? autoTrace(await loadImage(project.image.dataUrl), project.image, project.settings.boardColor, { detail, pathMode, speed, scrubV, scrubH, scrubCycles, scrubTilt, revealWidth, within: selectedStroke.clip }, 0)
+        : fill && fillKind === 'detect'
         ? autoTrace(await loadImage(project.image.dataUrl), project.image, project.settings.boardColor, { detail, pathMode: 'natural', speed, revealWidth, within: selection! }, start)
         : fill
         ? { strokes: [fillSelection(selection!, project.image, fillWidth, fillDirection, fillMotion, project.image.width * ({ slow: 0.38, normal: 0.65, fast: 1.1 }[speed]), start, scrubV, scrubH, scrubCycles, scrubTilt)], blocks: 1, fallback: false }
         : autoTrace(await loadImage(project.image.dataUrl), project.image, project.settings.boardColor, { detail, pathMode, speed, scrubV, scrubH, scrubCycles, scrubTilt, revealWidth }, start)
       const st = useEditor.getState()
+      if (st.project !== project || (mode === 'stroke' && !selectedStroke?.clip)) throw new Error('編集中の内容が変わりました。もう一度お試しください')
+      if (result.strokes.length === 0) throw new Error('新しい軌跡を作れませんでした。元の軌跡はそのままです')
       // まとめて1回の変更にする（「元に戻す」1回で取り消せる）
-      st.commit((p) => ({ ...p, strokes: mode === 'append' ? [...p.strokes, ...result.strokes] : result.strokes }))
+      st.commit((p) => ({ ...p, strokes: mode === 'stroke' ? p.strokes.flatMap((s) => s.id === selectedStroke!.id ? result.strokes : [s]) : mode === 'append' ? [...p.strokes, ...result.strokes] : result.strokes }))
       st.select(null)
+      st.setLivePart(null)
       st.setViewMode('edit')
       st.setTime(0)
       notify(
@@ -137,7 +145,7 @@ export function AutoTraceDialog(): React.JSX.Element {
               <button role="radio" aria-checked={!fill && pathMode === 'natural'} className={`choice ${!fill && pathMode === 'natural' ? 'on' : ''}`} onClick={() => { setFill(false); setPathMode('natural') }}><strong>自然に書く</strong><small>近い所から・行は左→右</small></button>
               <button role="radio" aria-checked={!fill && pathMode === 'group'} className={`choice ${!fill && pathMode === 'group' ? 'on' : ''}`} onClick={() => { setFill(false); setPathMode('group') }}><strong>かたまりを描く</strong><small>まとまりごとに描く</small></button>
               <button role="radio" aria-checked={!fill && pathMode === 'ink'} className={`choice ${!fill && pathMode === 'ink' ? 'on' : ''}`} onClick={() => { setFill(false); setPathMode('ink') }}><strong>インクの線をたどる</strong><small>試験版・書き順は推定</small></button>
-              <button role="radio" aria-checked={fill} className={`choice ${fill ? 'on' : ''}`} onClick={() => setFill(true)}><strong>選択範囲を塗る</strong><small>選んだ範囲だけ</small></button>
+              <button role="radio" aria-checked={fill} className={`choice ${fill ? 'on' : ''}`} onClick={() => { setFill(true); if (mode === 'stroke') setMode('append') }}><strong>選択範囲を塗る</strong><small>選んだ範囲だけ</small></button>
             </div>
             {fill && <>
               <p>先に画像上で範囲を選択してください。選択範囲の中を順に表示します。</p>
@@ -229,6 +237,7 @@ export function AutoTraceDialog(): React.JSX.Element {
               <>
                 <label>いまの軌跡（{existing} 本）</label>
                 <div className="choice-row" role="radiogroup" aria-label="いまの軌跡の扱い">
+                  {selectedStroke?.clip && !fill && <button role="radio" aria-checked={mode === 'stroke'} className={`choice ${mode === 'stroke' ? 'on' : ''}`} onClick={() => setMode('stroke')}><strong>選択中の軌跡だけ</strong><small>元の位置で作り直す</small></button>}
                   <button role="radio" aria-checked={mode === 'replace'} className={`choice ${mode === 'replace' ? 'on' : ''}`} onClick={() => setMode('replace')}>
                     <strong>置き換える</strong>
                   </button>
@@ -236,6 +245,7 @@ export function AutoTraceDialog(): React.JSX.Element {
                     <strong>後ろに追加</strong>
                   </button>
                 </div>
+                {mode === 'stroke' && <p>選択中の軌跡の表示範囲だけを解析し、同じ順番の位置に置き換えます。ほかの軌跡はそのままです。元の時間は引き継がれません。消した部分は解析範囲から除かれます。</p>}
               </>
             )}
           </div>

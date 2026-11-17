@@ -18,7 +18,7 @@ interface Snapshot {
 
 const HISTORY_LIMIT = 100
 /** ページが変わったら、前のページ用の選択・再生位置などは持ち越さない */
-const PAGE_RESET = { selectedId: null, livePart: null, livePath: null, selection: null, time: 0, playing: false, rerecordId: null, viewMode: 'edit' as const }
+const PAGE_RESET = { selectedId: null, livePart: null, livePath: null, selection: null, time: 0, playing: false, rerecordId: null, rerecordPart: null, insertBefore: null, viewMode: 'edit' as const }
 let lastMerge: { key?: string; at: number } = { at: 0 }
 
 interface EditorState {
@@ -55,12 +55,15 @@ interface EditorState {
   liveUnit: 'stroke' | 'part'
   /** 再生ヘッド (ms) */
   time: number
+  insertBefore: { id: string | null } | null
+  setInsertBefore: (value: { id: string | null } | null) => void
   playing: boolean
   /** プレビュー表示（再生結果）か、編集表示（トレース用）か */
   viewMode: 'edit' | 'preview'
   toast: { id: number; text: string; kind: 'info' | 'error' } | null
   /** 次の録画で置き換える軌跡 */
   rerecordId: string | null
+  rerecordPart: number | null
   dialog: 'html' | 'video' | 'recovery' | 'auto' | null
   /** スマホ表示で開いている下部シート */
   mobileSheet: 'strokes' | 'inspector' | null
@@ -77,6 +80,7 @@ interface EditorState {
   duplicateStroke: (id: string) => void
   /** となりの軌跡と1本にまとめる（dir：前と／次と）。まとめた軌跡を選ぶ */
   mergeStroke: (id: string, dir: 'prev' | 'next') => void
+  mergeSelectedStrokes: (ids: string[]) => boolean
   setSelection: (sel: ClipRegion | null) => void
   // --- ページ（スライド） ---
   /** ページを切り替える（履歴には残さない・未保存扱いにもしない） */
@@ -104,6 +108,7 @@ interface EditorState {
   setViewMode: (v: 'edit' | 'preview') => void
   notify: (text: string, kind?: 'info' | 'error') => void
   setRerecord: (id: string | null) => void
+  setRerecordPart: (id: string, part: number) => void
   openDialog: (d: 'html' | 'video' | 'recovery' | 'auto' | null) => void
   setMobileSheet: (s: 'strokes' | 'inspector' | null) => void
 }
@@ -125,10 +130,13 @@ export const useEditor = create<EditorState>((set, get) => ({
   livePath: null,
   liveUnit: 'stroke',
   time: 0,
+  insertBefore: null,
+  setInsertBefore: (insertBefore) => set({ insertBefore }),
   playing: false,
   viewMode: 'edit',
   toast: null,
   rerecordId: null,
+  rerecordPart: null,
   dialog: null,
   mobileSheet: null,
 
@@ -157,8 +165,14 @@ export const useEditor = create<EditorState>((set, get) => ({
     }, 'settings:' + Object.keys(patch).join(',')),
 
   addStroke: (stroke) => {
-    get().commit((p) => ({ ...p, strokes: [...p.strokes, stroke] }))
-    set({ selectedId: stroke.id })
+    const target = get().insertBefore
+    get().commit((p) => {
+      const strokes = [...p.strokes]
+      const index = target?.id ? strokes.findIndex((s) => s.id === target.id) : -1
+      strokes.splice(index < 0 ? strokes.length : index, 0, stroke)
+      return { ...p, strokes }
+    })
+    set({ selectedId: stroke.id, insertBefore: null })
   },
 
   updateStroke: (id, patch) =>
@@ -233,6 +247,23 @@ export const useEditor = create<EditorState>((set, get) => ({
     set({ selectedId: merged.id, livePart: null })
   },
 
+  mergeSelectedStrokes: (ids) => {
+    const { project } = get()
+    const chosen = new Set(ids)
+    const indices = project.strokes.flatMap((s, i) => chosen.has(s.id) ? [i] : [])
+    if (indices.length < 2 || indices.length !== chosen.size || indices[indices.length - 1] - indices[0] + 1 !== indices.length) return false
+    const strokes = indices.map((i) => project.strokes[i])
+    if (strokes.some((s) => !!s.hidden !== !!strokes[0].hidden || !s.points.length)) return false
+    const merged = strokes.slice(1).reduce((first, second) => mergeStrokes(first, second), strokes[0])
+    get().commit((p) => {
+      const next = [...p.strokes]
+      next.splice(indices[0], indices.length, merged)
+      return { ...p, strokes: next }
+    })
+    set({ selectedId: merged.id, livePart: null, livePath: null })
+    return true
+  },
+
   gotoPage: (index) => {
     const p = get().project
     if (index === p.pageIndex || index < 0 || index >= p.pages.length) return
@@ -292,6 +323,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       livePart: null,
       livePath: null,
       time: 0,
+      insertBefore: null,
       playing: false,
       viewMode: 'edit',
       rerecordId: null
@@ -314,7 +346,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   setPlaying: (playing) => set(playing ? { playing, viewMode: 'preview' } : { playing }),
   setViewMode: (viewMode) => set({ viewMode }),
   notify: (text, kind = 'info') => set({ toast: { id: Date.now(), text, kind } }),
-  setRerecord: (rerecordId) => set(rerecordId ? { rerecordId, tool: 'draw', viewMode: 'edit', playing: false } : { rerecordId }),
+  setRerecord: (rerecordId) => set(rerecordId ? { rerecordId, rerecordPart: null, tool: 'draw', viewMode: 'edit', playing: false } : { rerecordId, rerecordPart: null }),
+  setRerecordPart: (rerecordId, rerecordPart) => set({ rerecordId, rerecordPart, tool: 'draw', viewMode: 'edit', playing: false }),
   openDialog: (dialog) => set({ dialog, playing: false }),
   setMobileSheet: (mobileSheet) => set({ mobileSheet })
 }))

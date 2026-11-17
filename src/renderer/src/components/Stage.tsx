@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { captureImage, importImageDialog, importSampleImage, openAutoTrace } from '../commands'
 import { appendToStroke, simplifyPoints, strokeFromRecording } from '../engine/project'
-import { hitPart, strokeParts, transformPart, transformStroke } from '../engine/strokeParts'
+import { hitPart, replaceStrokePart, strokeParts, transformPart, transformStroke } from '../engine/strokeParts'
 import { fitPath, fitTolerance, insertAnchor, nearestOnPath, partPoints, type PathNode } from '../engine/pathEdit'
 import { updatePathNodes } from '../livePath'
 import { addEraserMark, addRevealMark, combine, flattenShapes, isDegenerate, normalizeBox, type SelectionOp } from '../engine/selection'
@@ -66,6 +66,8 @@ interface Pinch {
   /** 開始時に2本指の中点の下にあった画像上の点 */
   imgPt: Pt
 }
+/** 再生の層の内部解像度の段階（画像の大きさに対する倍率） */
+const RENDER_LEVELS = [0.25, 0.375, 0.5, 0.625, 0.75, 1]
 const DRAG_THRESHOLD = 4 // 画面px。これ未満の移動はクリックとみなす
 const CLOSE_RADIUS = 9 // 画面px。多角形の始点にこれだけ近づいたら閉じる
 
@@ -120,6 +122,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const viewMode = useEditor((s) => s.viewMode)
   const selectedId = useEditor((s) => s.selectedId)
   const rerecordId = useEditor((s) => s.rerecordId)
+  const rerecordPart = useEditor((s) => s.rerecordPart)
   const selection = useEditor((s) => s.selection)
   const livePart = useEditor((s) => s.livePart)
   const liveMode = useEditor((s) => s.liveMode)
@@ -175,6 +178,11 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const selectedClipMask = useMemo(
     () => (selectedStroke?.clip && image ? rasterizeClip(selectedStroke.clip, imgW, imgH) : null),
     [selectedStroke?.clip, image, imgW, imgH]
+  )
+  const liveStroke = project.strokes.find((s) => s.id === livePart?.strokeId)
+  const liveClipMask = useMemo(
+    () => (liveStroke?.clip && image ? rasterizeClip(liveStroke.clip, imgW, imgH) : null),
+    [liveStroke?.clip, image, imgW, imgH]
   )
 
   const liveErasing = tool === 'live' && liveMode === 'erase'
@@ -232,6 +240,13 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   }, [tool])
 
   // ---- レンダラー（プレビュー／カバレッジ表示） ----
+  // 内部の解像度：画面に見える細かさまで下げる（スマホで画像を等倍で描くと、メモリも時間も足りなくなる）。
+  // 拡大すると段階的に上がる。画素密度は2倍までで十分（それ以上は見た目がほぼ変わらない）
+  const renderScale = useMemo(() => {
+    const need = scale * Math.min(2, window.devicePixelRatio || 1)
+    return RENDER_LEVELS.find((l) => l >= need) ?? 1
+  }, [scale])
+
   useEffect(() => {
     const canvas = renderCanvasRef.current
     if (!canvas || !image) {
@@ -239,22 +254,36 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       return
     }
     if (!rendererRef.current || rendererRef.current.canvas !== canvas) {
-      rendererRef.current = new WBRenderer(canvas, project, assets)
+      rendererRef.current = new WBRenderer(canvas, project, assets, { scale: renderScale })
     } else {
       rendererRef.current.setAssets(assets)
+      rendererRef.current.setScale(renderScale)
       rendererRef.current.setProject(project)
     }
-  }, [project, assets, image])
+  }, [project, assets, image, renderScale])
 
+  // 描き直しは1コマに1回まとめる（スライダーやドラッグで続けて変わっても、描くのは最後の状態だけ）
+  const renderFrame = useRef(0)
   useEffect(() => {
+    cancelAnimationFrame(renderFrame.current)
+    renderFrame.current = requestAnimationFrame(() => {
     const r = rendererRef.current
     if (!r || !image) return
     if (viewMode === 'preview') r.renderAt(time)
+    else if (rerecordId && rerecordPart !== null) {
+      const index = project.strokes.findIndex((s) => s.id === rerecordId)
+      const seg = timeline.segments.find((s) => s.index === index)
+      const part = index >= 0 ? strokeParts(project.strokes[index])[rerecordPart] : undefined
+      const start = seg && part ? seg.start + (seg.end - seg.start) * (seg.prep.param[part.start] ?? 0) : 0
+      r.renderAt(Math.max(0, start - 0.01), { hand: false, background: false })
+    }
     // ライブ編集：背景を塗らずに重ね、まだ見えていない（マスクされている）所は下の薄い下絵で見せる＝下絵をなぞりやすい
     else if (live) r.renderAt(liveTime, { hand: false, background: false })
     // 編集表示：なぞった範囲（＝最終的に見える範囲）を全描画して、欠けを確認しやすくする
     else r.renderAt(timeline.total, { hand: false, background: false })
-  }, [project, assets, time, viewMode, image, timeline, live, liveTime])
+    })
+    return () => cancelAnimationFrame(renderFrame.current)
+  }, [project, assets, time, viewMode, image, timeline, live, liveTime, rerecordId, rerecordPart, renderScale])
 
   // ---- 選択範囲の外を暗くする層 ----
   useEffect(() => {
@@ -318,9 +347,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       const part = s ? strokeParts(s)[livePart.part] : undefined
       if (s && liveWhole) {
         // 軌跡まるごと：線ごとの太さで、ペンが通る範囲を重ねる
-        ctx.strokeStyle = 'rgba(255, 122, 26, 0.28)'
-        ctx.lineWidth = s.revealWidth
-        polyline(ctx, s.points, s.revealWidth)
+        drawClippedBand(ctx, s.points, s.revealWidth, 'rgba(255, 122, 26, 0.28)', liveClipMask, true)
         ctx.strokeStyle = 'rgba(255, 122, 26, 0.95)'
         ctx.lineWidth = 2 * px
         polyline(ctx, s.points)
@@ -329,10 +356,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         ctx.arc(s.points[0].x, s.points[0].y, 4.5 * px, 0, Math.PI * 2)
         ctx.fill()
       } else if (s && part) {
-        const pts = s.points.slice(part.start, part.end + 1).map((p, i) => (i === 0 ? { x: p.x, y: p.y } : p))
-        ctx.strokeStyle = 'rgba(255, 122, 26, 0.28)'
-        ctx.lineWidth = part.width
-        polyline(ctx, pts)
+        const pts = s.points.slice(part.start, part.end + 1).map((p, i) => (i === 0 ? { ...p, move: false } : p))
+        drawClippedBand(ctx, pts, part.width, 'rgba(255, 122, 26, 0.28)', liveClipMask)
         ctx.strokeStyle = 'rgba(255, 122, 26, 0.95)'
         ctx.lineWidth = 2 * px
         polyline(ctx, pts)
@@ -388,7 +413,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       })
     }
 
-    if (viewMode === 'edit' && !live) {
+    if (viewMode === 'edit' && !live && !rerecordId) {
       project.strokes.forEach((s, i) => {
         if (s.points.length === 0) return
         const selected = s.id === selectedId
@@ -429,14 +454,33 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
 
     const rec = recording.current
     if (rec && rec.points.length) {
-      const w = useEditor.getState().project.settings.defaultRevealWidth
+      const replacing = rerecordId && rerecordPart !== null ? project.strokes.find((s) => s.id === rerecordId) : undefined
+      const w = replacing ? (strokeParts(replacing)[rerecordPart!]?.width ?? replacing.revealWidth) : useEditor.getState().project.settings.defaultRevealWidth
       const target = rec.appendTo ? project.strokes.find((s) => s.id === rec.appendTo) : undefined
       // 描き足しは、描き足し先の軌跡の色で見せる（範囲の制限も、その軌跡のものを使う）
       // ブラシで足すときは、範囲を広げるので制限なしで見せる
-      drawClippedBand(ctx, rec.points, w, target ? target.color + '55' : 'rgba(31,111,235,0.32)', rec.liveBrush ? null : target ? selectedClipMask : selMask)
-      ctx.strokeStyle = target ? target.color : '#1f6feb'
-      ctx.lineWidth = 2 * px
-      polyline(ctx, rec.points)
+      if (replacing && assets.image) {
+        let sc = scratch.current
+        if (!sc) sc = scratch.current = document.createElement('canvas')
+        if (sc.width !== imgW) sc.width = imgW
+        if (sc.height !== imgH) sc.height = imgH
+        const s = sc.getContext('2d')!
+        s.clearRect(0, 0, imgW, imgH)
+        s.lineCap = 'round'
+        s.lineJoin = 'round'
+        s.strokeStyle = '#000'
+        s.lineWidth = w
+        polyline(s, rec.points)
+        s.globalCompositeOperation = 'source-in'
+        s.drawImage(assets.image, 0, 0, imgW, imgH)
+        s.globalCompositeOperation = 'source-over'
+        ctx.drawImage(sc, 0, 0)
+      } else {
+        drawClippedBand(ctx, rec.points, w, target ? target.color + '55' : 'rgba(31,111,235,0.32)', rec.liveBrush ? null : target ? selectedClipMask : selMask)
+        ctx.strokeStyle = target ? target.color : '#1f6feb'
+        ctx.lineWidth = 2 * px
+        polyline(ctx, rec.points)
+      }
     }
 
     // 消しゴムでなぞっている線
@@ -494,7 +538,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       ctx.stroke()
       ctx.setLineDash([])
     }
-  }, [image, imgW, imgH, scale, viewMode, project, selectedId, rerecordId, tool, selection, selMask, selectedClipMask, drawClippedBand, live, livePart, liveErasing, liveBrushing, liveWhole, livePathing, livePath])
+  }, [image, assets.image, imgW, imgH, scale, viewMode, project, selectedId, rerecordId, rerecordPart, tool, selection, selMask, selectedClipMask, liveClipMask, drawClippedBand, live, livePart, liveErasing, liveBrushing, liveWhole, livePathing, livePath])
 
   useEffect(() => drawOverlay(), [drawOverlay])
 
@@ -617,13 +661,14 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     ctx.clip()
     ctx.fillStyle = project.settings.boardColor
     ctx.fillRect(0, 0, size, size)
-    const layer = (src: CanvasImageSource | null | undefined, alpha = 1): void => {
+    // k：その層の画素数が画像の何倍か（再生の層は内部の解像度を下げている）
+    const layer = (src: CanvasImageSource | null | undefined, alpha = 1, k = 1): void => {
       if (!src) return
       ctx.globalAlpha = alpha
-      ctx.drawImage(src, sx, sy, sw, sw, 0, 0, size, size)
+      ctx.drawImage(src, sx * k, sy * k, sw * k, sw * k, 0, 0, size, size)
     }
     if (viewMode === 'edit') layer(assets.image, 0.22)
-    layer(renderCanvasRef.current)
+    layer(renderCanvasRef.current, 1, rendererRef.current?.scale ?? 1)
     layer(dimRef.current)
     layer(overlayRef.current)
     ctx.globalAlpha = 1
@@ -1045,6 +1090,18 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         const pts = simplifyPoints(rec.points)
         const recorded = pts.length > 1 ? pts[pts.length - 1].t - pts[0].t : 0
         const prev = st.project.strokes.find((s) => s.id === st.rerecordId)
+        if (prev && st.rerecordPart !== null) {
+          const updated = replaceStrokePart(prev, st.rerecordPart, pts)
+          if (updated) {
+            const part = st.rerecordPart
+            st.updateStroke(prev.id, updated)
+            st.setRerecord(null)
+            st.setTool('live')
+            st.setLiveUnit('part')
+            st.setLivePart({ strokeId: prev.id, part })
+            st.notify('選んだ線を描き直しました')
+          } else { st.setRerecord(null); st.notify('線が見つかりませんでした') }
+        } else {
         st.updateStroke(st.rerecordId, {
           points: pts,
           duration: Math.max(300, Math.round(recorded)),
@@ -1054,6 +1111,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         st.select(st.rerecordId)
         st.setRerecord(null)
         st.notify('軌跡を録り直しました')
+        }
       } else if (rec.appendTo) {
         const target = st.project.strokes.find((s) => s.id === rec.appendTo)
         if (target && rec.liveBrush) {
@@ -1197,7 +1255,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       )}
       {image && rerecordId && (
         <div className="stage-banner">
-          録り直し中：{project.strokes.find((s) => s.id === rerecordId)?.name} をなぞってください
+          描き直し中：{project.strokes.find((s) => s.id === rerecordId)?.name}{rerecordPart !== null ? ` の線 ${rerecordPart + 1}` : ' 全体'}をなぞってください
           <button className="btn small" onClick={() => useEditor.getState().setRerecord(null)}>
             キャンセル
           </button>
