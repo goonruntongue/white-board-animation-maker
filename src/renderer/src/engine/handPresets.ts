@@ -93,18 +93,39 @@ export async function initHandPresets(onProgress?: (done: number, total: number)
   })
   let done = 0
   onProgress?.(0, entries.length)
-  const loaded = await Promise.all(
-    entries.map(async ({ id, url }) => {
+  // 読み込みと展開（decode）は並行して、ブラウザの裏側で行う。
+  // ペン先を調べる処理は1枚ずつ、間に画面の書き換えをはさむ（起動中の進捗表示が止まらないように）
+  const images = entries.map(({ url }) =>
+    loadImage(url).then(async (img) => {
       try {
-        const label = presetLabel(id)
-        return { id, label, url, hand: await makeHandAsset(label, url, id) }
+        await img.decode()
       } catch {
-        return null
-      } finally {
-        onProgress?.(++done, entries.length)
+        // decode できなくても、描くときに展開される
       }
+      return img
     })
   )
+  // 裏のタブでは画面の書き換えが止まるので、長くは待たない
+  const nextFrame = (): Promise<void> =>
+    new Promise((r) => {
+      const t = setTimeout(r, 50)
+      requestAnimationFrame(() => setTimeout(() => (clearTimeout(t), r()), 0))
+    })
+  const loaded: (HandPreset | null)[] = []
+  for (let i = 0; i < entries.length; i++) {
+    const { id, url } = entries[i]
+    try {
+      const img = await images[i]
+      await nextFrame()
+      const label = presetLabel(id)
+      const { width, height } = imageSize(img)
+      const tip = detectTip(img, width, height)
+      loaded.push({ id, label, url, hand: { name: label, dataUrl: url, width, height, tipX: tip.x, tipY: tip.y, builtin: false, presetId: id } })
+    } catch {
+      loaded.push(null)
+    }
+    onProgress?.(++done, entries.length)
+  }
   presets = loaded.filter((p): p is HandPreset => !!p).sort((a, b) => sortKey(a.id).localeCompare(sortKey(b.id)))
 }
 

@@ -30,17 +30,25 @@
     }
   }
 
-  function tick() {
+  // 経過時間で進める（画面の書き換えが間引かれる＝重い端末・裏のタブでも、実際の進み具合から遅れない）
+  var last = 0
+  function ease(rate, dt) {
+    return 1 - Math.pow(1 - rate, dt / 16.7)
+  }
+
+  function tick(now) {
+    var dt = last ? Math.min(1000, now - last) : 16.7
+    last = now
     if (finished) {
-      shown += (100 - shown) * 0.35 + 0.5
+      shown += (100 - shown) * ease(0.35, dt) + dt * 0.03
       if (shown >= 100) shown = 100
     } else if (shown < target - 0.5) {
       // 実際に進んだ分へ、すばやく追いつく
-      shown += (target - shown) * 0.12
+      shown += (target - shown) * ease(0.12, dt)
     } else {
       // 次の区切りまで：止まって見えないよう、ゆっくり少しだけ進める（99% は超えない）
       var cap = Math.min(99, target + 7)
-      shown += (cap - shown) * 0.006
+      shown += (cap - shown) * ease(0.006, dt)
     }
     paint()
     if (finished && shown >= 100) {
@@ -62,6 +70,16 @@
       if (finished) return
       finished = true
       if (label) label.textContent = '準備完了'
+      // 画面の書き換えが止まっていても（裏のタブなど）、アプリの上に残り続けないようにする
+      setTimeout(function () {
+        if (!root.parentNode) return
+        shown = 100
+        paint()
+        root.classList.add('boot-done')
+        setTimeout(function () {
+          if (root.parentNode) root.parentNode.removeChild(root)
+        }, 420)
+      }, 600)
     }
   }
 
