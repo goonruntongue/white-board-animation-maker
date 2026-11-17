@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { captureImage, importImageDialog, importSampleImage, openAutoTrace } from '../commands'
+import { captureImage, importImageDialog, importSampleImage, openAutoTrace, togglePlay } from '../commands'
 import { appendToStroke, simplifyPoints, strokeFromRecording } from '../engine/project'
 import { hitPart, replaceStrokePart, strokeParts, transformPart, transformStroke } from '../engine/strokeParts'
 import { fitPath, fitTolerance, insertAnchor, nearestOnPath, partPoints, type PathNode } from '../engine/pathEdit'
@@ -27,7 +27,13 @@ interface Recording {
   appendTo?: string
   /** ライブ編集の「ブラシで足す」：描き足すうえに、なぞった所を軌跡の表示範囲にも加える */
   liveBrush?: boolean
+  /** 何も選ばずにブラシで続けて書いた線：直前に描いたグループへ入れる（選択はしない） */
+  chain?: boolean
 }
+
+/** 続けて書いた線を同じグループにまとめる条件：前の線を書き終えてからの時間と、書き始めの近さ（画像の対角線に対する割合） */
+const CHAIN_MS = 1500
+const CHAIN_DIST = 0.15
 
 interface PanDrag {
   pointerId: number
@@ -159,6 +165,9 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const [hasDraft, setHasDraft] = useState(false)
   /** スマホの「描き順を作る」案内を閉じたか（画像を読み込み直したら、また出す） */
   const [coachClosed, setCoachClosed] = useState(false)
+  /** スマホの手描きのブラシ中（タイムラインを隠している）か */
+  const brushFocus = useEditor((s) => s.tool === 'live' && s.liveMode === 'brush' && s.viewMode === 'edit' && !s.playing)
+  const timelinePeek = useEditor((s) => s.timelinePeek)
 
   const [size, setSize] = useState({ w: 800, h: 600 })
   const [view, setView] = useState<View>({ zoom: 1, x: 0, y: 0 })
@@ -940,9 +949,21 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         // 何も選んでいなければ、なぞった線で新しいグループを作る（なぞった速さで再生。範囲を選んでいれば、その範囲に限る）
         if (st.playing) st.setPlaying(false)
         const targetId = st.livePart?.strokeId
+        const chain = st.drawChain
+        const chainTo =
+          !targetId &&
+          chain &&
+          !st.insertBefore &&
+          st.project.strokes.some((x) => x.id === chain.id) &&
+          performance.now() - chain.at < CHAIN_MS &&
+          Math.hypot(p.x - chain.x, p.y - chain.y) < Math.hypot(imgW, imgH) * CHAIN_DIST
+            ? chain.id
+            : undefined
         recording.current = targetId
           ? { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }], appendTo: targetId, liveBrush: true }
-          : { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }] }
+          : chainTo
+            ? { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }], appendTo: chainTo, chain: true }
+            : { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }] }
         capture(e)
         if (e.pointerType === 'touch') requestAnimationFrame(() => showLoupe(e.clientX, e.clientY))
         drawOverlay()
@@ -1162,15 +1183,26 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
           }
           st.updateStroke(target.id, { ...appendToStroke(target, rec.points, w), clip: addRevealMark(target.clip, marks, w) })
           haptic()
+        } else if (target && rec.chain) {
+          // 続けて書いた線：同じグループに入れ、選ばない（続けて書けば、また同じグループへ）
+          st.updateStroke(target.id, appendToStroke(target, rec.points, st.project.settings.defaultRevealWidth))
+          const last = rec.points[rec.points.length - 1]
+          st.setDrawChain({ id: target.id, at: performance.now(), x: last.x, y: last.y })
+          haptic()
         } else if (target) {
           st.updateStroke(target.id, appendToStroke(target, rec.points, st.project.settings.defaultRevealWidth))
           st.select(target.id)
           haptic()
         }
       } else {
-        st.addStroke(strokeFromRecording(st.project, rec.points, st.project.strokes.length, st.selection))
-        // 直すのブラシで描いたときは、何も選ばない状態に戻す（続けてなぞると、また新しいグループになる）
-        if (st.tool === 'live') st.select(null)
+        const created = strokeFromRecording(st.project, rec.points, st.project.strokes.length, st.selection)
+        st.addStroke(created)
+        // 手描きのブラシで描いたときは、何も選ばない状態に戻す。続けてすぐ近くに書いた線は、このグループに入る
+        if (st.tool === 'live') {
+          st.select(null)
+          const last = rec.points[rec.points.length - 1]
+          st.setDrawChain({ id: created.id, at: performance.now(), x: last.x, y: last.y })
+        }
         haptic()
       }
     }
@@ -1351,8 +1383,36 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
           <button className="btn small primary" data-tour="auto-phone" onClick={openAutoTrace}>
             <Icon name="sparkle" size={13} /> 自動で作る
           </button>
+          <button
+            className="btn small"
+            onClick={() => {
+              const st = useEditor.getState()
+              st.setTool('live')
+              st.setLiveMode('brush')
+              st.setLivePart(null)
+              setCoachClosed(true)
+              st.notify('ブラシで画像をなぞると描けます。続けてすぐ近くに書いた線は1つのグループにまとまります（「区切る」で次のグループへ）。2本指で拡大・移動できます')
+            }}
+          >
+            <Icon name="pen" size={13} /> 自分で描く
+          </button>
           <button className="coach-close" aria-label="この案内を閉じる" onClick={() => setCoachClosed(true)}>
             <Icon name="x" size={14} />
+          </button>
+        </div>
+      )}
+      {image && isPhone && brushFocus && (
+        <div className="stage-quick">
+          <button className="stage-quick-btn" aria-label="再生して確かめる" title="再生して確かめる" onClick={() => togglePlay()}>
+            <Icon name="play" size={18} />
+          </button>
+          <button
+            className={`stage-quick-btn wide ${timelinePeek ? 'on' : ''}`}
+            aria-pressed={timelinePeek}
+            onClick={() => useEditor.getState().setTimelinePeek(!timelinePeek)}
+          >
+            <Icon name={timelinePeek ? 'down' : 'up'} size={16} />
+            <span>{timelinePeek ? 'タイムラインを隠す' : 'タイムライン'}</span>
           </button>
         </div>
       )}

@@ -64,6 +64,18 @@ export function addRevealMark(clip: ClipRegion | undefined, points: { x: number;
   return { shapes: [...clip.shapes, { kind: 'stroke', mode: 'add', points, width }] }
 }
 
+/**
+ * 自動の「通過部分を表示」：なぞった線の範囲を表示範囲に加えるが、消しゴムの跡より下に入れる。
+ * 消しゴムで消した所は、線を動かしたり太くしたりしても消えたまま（見せたいときはブラシでなぞる）
+ */
+export function addRevealMarkUnderErase(clip: ClipRegion | undefined, points: { x: number; y: number }[], width: number): ClipRegion | undefined {
+  if (!clip || clip.shapes.length === 0) return clip
+  const mark: ClipShape = { kind: 'stroke', mode: 'add', points, width }
+  const at = clip.shapes.findIndex(isEraseMark)
+  if (at < 0) return { shapes: [...clip.shapes, mark] }
+  return { shapes: [...clip.shapes.slice(0, at), mark, ...clip.shapes.slice(at)] }
+}
+
 /** 選択範囲の形をそのまま消す（選択範囲＋Delete）。消しゴムの跡と同じく、軌跡の道筋や時間は変えない */
 export function addAreaErase(clip: ClipRegion | undefined, area: ClipRegion): ClipRegion {
   const mark: ClipShape = { kind: 'region', mode: 'subtract', region: structuredClone(area), erase: true }

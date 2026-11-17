@@ -3903,3 +3903,112 @@ button {
 .app.phone.brush-focus .timeline {
   display: none;
 }
+/* タイムラインを一時的に出す */
+.app.phone.brush-focus.peek .timeline {
+  display: grid;
+}
+
+/* 手描きのブラシ中（スマホ）：絵の左下に、再生とタイムラインの出し入れ */
+.stage-quick {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 4;
+  display: flex;
+  gap: 6px;
+}
+.stage-quick-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--key-top), var(--key-bot));
+  box-shadow: var(--key-shadow);
+  color: var(--text-1);
+  font: 600 12px/1 inherit;
+  cursor: pointer;
+}
+.stage-quick-btn.on {
+  color: var(--accent-text);
+}
+
+/* 手描きのオプションバー（スマホ）：2段。上に操作の切り替えと大きさ、下にスライダーや選んだ線の操作 */
+.phone-context:has(.pc-rows) {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.pc-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.pc-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.pc-row::-webkit-scrollbar {
+  display: none;
+}
+.pc-row .pc-range {
+  flex: 1 1 120px;
+  min-width: 100px;
+}
+.pc-select {
+  flex: none;
+  height: 44px;
+  padding: 0 28px 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background:
+    linear-gradient(45deg, transparent 50%, var(--text-2) 50%) right 14px center / 5px 5px no-repeat,
+    linear-gradient(135deg, var(--text-2) 50%, transparent 50%) right 9px center / 5px 5px no-repeat,
+    linear-gradient(180deg, var(--key-top), var(--key-bot));
+  box-shadow: var(--key-shadow);
+  color: var(--text-1);
+  font: 600 13px/1 inherit;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* 手描きのオプションバー（PC）：太さのプリセット */
+.live-presets {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--well-deep);
+  box-shadow: var(--well-shadow);
+}
+.live-preset {
+  min-width: 30px;
+  height: 26px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font: 600 12px/1 inherit;
+  cursor: pointer;
+}
+.live-preset.on {
+  background: linear-gradient(180deg, var(--key-top), var(--key-bot));
+  box-shadow: var(--key-shadow);
+  color: var(--accent-text);
+}
+.pc-row .pc-label,
+.pc-row .pc-value,
+.pc-row .pc-key {
+  flex: none;
+  white-space: nowrap;
+}

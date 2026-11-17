@@ -16,6 +16,7 @@ import {
 import { deleteSelectedAnchor, revealLineSoon } from '../livePath'
 import { addRevealMark } from '../engine/selection'
 import { useEditor } from '../store'
+import { ERASER_PRESETS, PEN_PRESETS } from './PenSizePicker'
 import { Icon } from './Icon'
 
 const MIN = 1
@@ -124,15 +125,46 @@ export function stepLivePart(dir: -1 | 1): void {
   st.setLivePart({ strokeId: strokes[si].id, part })
 }
 
-/** ブラシ・消しゴムの大きさ */
-function ToolSize({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' }): React.JSX.Element {
+/** ブラシ・消しゴムの大きさ：プリセット（細・中・太・極太・特大）。スマホはドロップダウン、PC はボタン */
+function SizePresets({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' }): React.JSX.Element {
+  const key = kind === 'brush' ? 'defaultRevealWidth' : 'eraserWidth'
+  const w = useEditor((s) => s.project.settings[key])
+  const presets = kind === 'brush' ? PEN_PRESETS : ERASER_PRESETS
+  const set = (v: number): void => useEditor.getState().updateSettings({ [key]: Math.max(4, Math.min(MAX, Math.round(v))) })
+  const label = kind === 'brush' ? 'ブラシの太さ' : '消しゴムの大きさ'
+  if (phone) {
+    const match = presets.find((p) => p.width === w)
+    return (
+      <select className="pc-select" aria-label={label} value={match ? String(match.width) : 'custom'} onChange={(e) => e.target.value !== 'custom' && set(Number(e.target.value))}>
+        {presets.map((p) => (
+          <option key={p.width} value={p.width}>
+            {p.label}（{p.width}）
+          </option>
+        ))}
+        {!match && <option value="custom">{w}px</option>}
+      </select>
+    )
+  }
+  return (
+    <div className="live-presets" role="radiogroup" aria-label={label}>
+      {presets.map((p) => (
+        <button key={p.width} role="radio" aria-checked={w === p.width} className={`live-preset ${w === p.width ? 'on' : ''}`} title={`${p.label} ${p.width}px（${p.key} キー）`} onClick={() => set(p.width)}>
+          {p.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** ブラシ・消しゴムの大きさのスライダー（対数目盛り） */
+function SizeSlider({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' }): React.JSX.Element {
   const key = kind === 'brush' ? 'defaultRevealWidth' : 'eraserWidth'
   const w = useEditor((s) => s.project.settings[key])
   const set = (v: number): void => useEditor.getState().updateSettings({ [key]: Math.max(4, Math.min(MAX, Math.round(v))) })
   const label = kind === 'brush' ? 'ブラシ' : '消しゴム'
   return (
     <>
-      <span className={phone ? 'pc-label' : 'tb-label'}>{label}</span>
+      {!phone && <span className="tb-label">{label}</span>}
       <input
         className={phone ? 'pc-range' : 'live-range'}
         type="range"
@@ -145,6 +177,34 @@ function ToolSize({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' })
       />
       <span className={phone ? 'pc-value' : 'live-value'}>{w}</span>
     </>
+  )
+}
+
+/** ブラシ・消しゴムの大きさ（PC：プリセットとスライダーを並べる） */
+function ToolSize({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' }): React.JSX.Element {
+  return (
+    <>
+      <SizePresets phone={phone} kind={kind} />
+      <SizeSlider phone={phone} kind={kind} />
+    </>
+  )
+}
+
+/** 続けて書いた線のまとまりを区切る（次に書く線は、新しいグループになる） */
+function BreakKey({ phone }: { phone: boolean }): React.JSX.Element {
+  const chaining = useEditor((s) => !!s.drawChain)
+  const onClick = (): void => {
+    useEditor.getState().setDrawChain(null)
+    useEditor.getState().notify('次に書く線から、新しいグループになります')
+  }
+  return phone ? (
+    <button className="pc-key text" disabled={!chaining} onClick={onClick} title="次に書く線を、新しいグループにする">
+      区切る
+    </button>
+  ) : (
+    <button className="tool-btn live-redo" disabled={!chaining} onClick={onClick} title="続けて書いた線のまとまりを区切り、次に書く線を新しいグループにする">
+      <span>区切る</span>
+    </button>
   )
 }
 
@@ -253,17 +313,25 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
         : mode === 'erase'
           ? 'なぞった所にあるグループを消します'
           : `絵の上を押して${what}を選びます。ドラッグで動かし、太さ・大きさも変えられます`
+    const brushing = mode === 'brush'
     return phone ? (
-      <>
-        <ModeSwitch phone />
-        {unitSwitch}
-        {size ?? <span className="pc-hint">{hint}</span>}
-      </>
+      // スマホは2段：上に操作の切り替えと大きさ、下にスライダーや案内
+      <div className="pc-rows">
+        <div className="pc-row">
+          <ModeSwitch phone />
+          {(brushing || mode === 'erase') && <SizePresets phone kind={brushing ? 'brush' : 'eraser'} />}
+        </div>
+        <div className="pc-row">
+          {brushing || mode === 'erase' ? <SizeSlider phone kind={brushing ? 'brush' : 'eraser'} /> : <span className="pc-hint">{hint}</span>}
+          {brushing && <BreakKey phone />}
+        </div>
+      </div>
     ) : (
       <div className="tb-group live-bar">
         <ModeSwitch phone={false} />
         {unitSwitch}
         {size ?? <span className="live-hint">{hint}</span>}
+        {brushing && <BreakKey phone={false} />}
       </div>
     )
   }
@@ -272,68 +340,76 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
   const widthTitle = whole ? 'グループの太さ（すべての線を同じ割合で。[ ] キーでも変えられます）' : '選んだ線の太さ（[ ] キーでも変えられます）'
 
   if (phone) {
+    const sized = mode === 'brush' || mode === 'erase'
+    const kind = mode === 'brush' ? 'brush' : 'eraser'
     return (
-      <>
-        <ModeSwitch phone />
-        {unitSwitch}
-        <span className="pc-label">{label}</span>
-        <button className="pc-key" onClick={() => { const st = useEditor.getState(); whole ? st.setRerecord(live.strokeId) : st.setRerecordPart(live.strokeId, live.part) }} title={whole ? 'グループ全体を手で描き直す' : '選んだ線だけを手で描き直す'}>
-          <Icon name="record" size={18} /><small>{whole ? '全体を描き直す' : '線を描き直す'}</small>
-        </button>
-        <button className="pc-key" disabled={!liveHasClip} onClick={() => useEditor.getState().openDialog('auto')} title="選択中のグループの表示範囲を自動で作り直す">
-          <Icon name="sparkle" size={18} /><small>自動で再作成</small>
-        </button>
-        <button className="pc-key" aria-label={`前の${what}を選ぶ`} onClick={() => stepLivePart(-1)}>
-          <Icon name="up" size={18} />
-          <small>前の{what}</small>
-        </button>
-        <button className="pc-key" aria-label={`次の${what}を選ぶ`} onClick={() => stepLivePart(1)}>
-          <Icon name="down" size={18} />
-          <small>次の{what}</small>
-        </button>
-        {pathing && (
-          <>
-            <button className="pc-key danger" aria-label="アンカーを削除" disabled={!hasAnchor} onClick={() => deleteSelectedAnchor()}>
-              <Icon name="trash" size={18} />
-              <small>アンカー削除</small>
-            </button>
-            <span className="pc-hint">アンカー・ハンドルをドラッグ。線の上をダブルタップでアンカー追加</span>
-          </>
-        )}
-        {!pathing && (size ?? (
-          <>
-            <button className="pc-key" aria-label="縮小" onClick={() => scaleLivePart(1 / 1.1)}>
-              <Icon name="zoomOut" size={18} />
-              <small>縮小</small>
-            </button>
-            <button className="pc-key" aria-label="拡大" onClick={() => scaleLivePart(1.1)}>
-              <Icon name="zoomIn" size={18} />
-              <small>拡大</small>
-            </button>
-            <span className="pc-label">太さ</span>
-            <input
-              className="pc-range"
-              type="range"
-              min={0}
-              max={1000}
-              value={toLog(live.width)}
-              style={{ '--fill': `${toLog(live.width) / 10}%` } as React.CSSProperties}
-              aria-label={widthTitle}
-              onChange={(e) => setLiveWidth(fromLog(Number(e.target.value)))}
-            />
-            <span className="pc-value">{live.width}</span>
-            {!whole && (
-              <button className="pc-key text" onClick={applyToStroke}>
-                グループ全体に
+      // スマホは2段：上に操作の切り替え（と大きさ）、下に選んだ線の操作（よく使う順）
+      <div className="pc-rows">
+        <div className="pc-row">
+          <ModeSwitch phone />
+          {sized && <SizePresets phone kind={kind} />}
+        </div>
+        <div className="pc-row">
+          <span className="pc-label">{label}</span>
+          <button className="pc-key" aria-label={`前の${what}を選ぶ`} onClick={() => stepLivePart(-1)}>
+            <Icon name="up" size={18} />
+            <small>前の{what}</small>
+          </button>
+          <button className="pc-key" aria-label={`次の${what}を選ぶ`} onClick={() => stepLivePart(1)}>
+            <Icon name="down" size={18} />
+            <small>次の{what}</small>
+          </button>
+          {pathing && (
+            <>
+              <button className="pc-key danger" aria-label="アンカーを削除" disabled={!hasAnchor} onClick={() => deleteSelectedAnchor()}>
+                <Icon name="trash" size={18} />
+                <small>アンカー削除</small>
               </button>
-            )}
-          </>
-        ))}
-        <StrokeKeys strokeId={live.strokeId} />
-        <button className="pc-key" aria-label="選択を外す" onClick={clear}>
-          <Icon name="x" size={18} />
-        </button>
-      </>
+              <span className="pc-hint">アンカー・ハンドルをドラッグ。線の上をダブルタップでアンカー追加</span>
+            </>
+          )}
+          {sized && <SizeSlider phone kind={kind} />}
+          {!pathing && !sized && (
+            <>
+              <span className="pc-label">太さ</span>
+              <input
+                className="pc-range"
+                type="range"
+                min={0}
+                max={1000}
+                value={toLog(live.width)}
+                style={{ '--fill': `${toLog(live.width) / 10}%` } as React.CSSProperties}
+                aria-label={widthTitle}
+                onChange={(e) => setLiveWidth(fromLog(Number(e.target.value)))}
+              />
+              <span className="pc-value">{live.width}</span>
+              <button className="pc-key" aria-label="縮小" onClick={() => scaleLivePart(1 / 1.1)}>
+                <Icon name="zoomOut" size={18} />
+                <small>縮小</small>
+              </button>
+              <button className="pc-key" aria-label="拡大" onClick={() => scaleLivePart(1.1)}>
+                <Icon name="zoomIn" size={18} />
+                <small>拡大</small>
+              </button>
+              {!whole && (
+                <button className="pc-key text" onClick={applyToStroke}>
+                  グループ全体に
+                </button>
+              )}
+            </>
+          )}
+          <button className="pc-key" onClick={() => { const st = useEditor.getState(); whole ? st.setRerecord(live.strokeId) : st.setRerecordPart(live.strokeId, live.part) }} title={whole ? 'グループ全体を手で描き直す' : '選んだ線だけを手で描き直す'}>
+            <Icon name="record" size={18} /><small>{whole ? '全体を描き直す' : '線を描き直す'}</small>
+          </button>
+          <button className="pc-key" disabled={!liveHasClip} onClick={() => useEditor.getState().openDialog('auto')} title="選択中のグループの表示範囲を自動で作り直す">
+            <Icon name="sparkle" size={18} /><small>自動で再作成</small>
+          </button>
+          <StrokeKeys strokeId={live.strokeId} />
+          <button className="pc-key" aria-label="選択を外す" onClick={clear}>
+            <Icon name="x" size={18} />
+          </button>
+        </div>
+      </div>
     )
   }
   return (

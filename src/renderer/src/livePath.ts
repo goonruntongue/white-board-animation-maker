@@ -1,6 +1,6 @@
 // ライブ編集の「パス編集」の操作（キャンバス・オプションバー・Delete キーから共通で使う）
 import { applyPath, removeAnchor, type PathNode } from './engine/pathEdit'
-import { addRevealMark } from './engine/selection'
+import { addRevealMarkUnderErase } from './engine/selection'
 import { strokeParts } from './engine/strokeParts'
 import { useEditor } from './store'
 
@@ -19,7 +19,8 @@ export function revealLine(strokeId: string, part: number, mergeKey?: string): v
         const parts = strokeParts(s)
         const chosen = part < 0 ? parts : parts.slice(part, part + 1)
         let clip = s.clip
-        for (const q of chosen) clip = addRevealMark(clip, s.points.slice(q.start, q.end + 1), q.width) ?? clip
+        // 消しゴムで消した所は消えたまま（消しゴムの跡より下に加える）
+        for (const q of chosen) clip = addRevealMarkUnderErase(clip, s.points.slice(q.start, q.end + 1), q.width) ?? clip
         return clip === s.clip ? s : { ...s, clip }
       })
     }),
