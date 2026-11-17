@@ -6,6 +6,7 @@ import { useState } from 'react'
 import {
   captureImage,
   deselect,
+  eraseSelection,
   importHandDialog,
   importImageDialog,
   invertSelection,
@@ -197,6 +198,10 @@ function SelectionOptions(): React.JSX.Element {
       <button className="pc-key" aria-label="選択を解除" disabled={!hasSelection} onClick={deselect}>
         <Icon name="deselect" size={18} />
         <small>解除</small>
+      </button>
+      <button className="pc-key danger" aria-label="選択範囲の中を消す" disabled={!hasSelection} onClick={eraseSelection}>
+        <Icon name="eraser" size={18} />
+        <small>中を消す</small>
       </button>
     </>
   )

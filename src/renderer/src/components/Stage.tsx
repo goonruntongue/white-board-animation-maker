@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { captureImage, importImageDialog, importSampleImage, openAutoTrace } from '../commands'
 import { appendToStroke, simplifyPoints, strokeFromRecording } from '../engine/project'
-import { hitPart, strokeParts, transformPart } from '../engine/strokeParts'
-import { addEraserMark, combine, flattenShapes, isDegenerate, normalizeBox, type SelectionOp } from '../engine/selection'
+import { hitPart, strokeParts, transformPart, transformStroke } from '../engine/strokeParts'
+import { addEraserMark, addRevealMark, combine, flattenShapes, isDegenerate, normalizeBox, type SelectionOp } from '../engine/selection'
 import type { ClipShape, Stroke, StrokePoint } from '../engine/types'
 import { buildTimeline, rasterizeClip, traceClipShape, WBRenderer } from '../engine/wb-engine'
 import { CANVAS_FONT_FAMILY } from '../fonts'
@@ -23,6 +23,8 @@ interface Recording {
   points: StrokePoint[]
   /** 描き足し先の軌跡（なければ新しい軌跡になる） */
   appendTo?: string
+  /** ライブ編集の「ブラシで足す」：描き足すうえに、なぞった所を軌跡の表示範囲にも加える */
+  liveBrush?: boolean
 }
 
 interface PanDrag {
@@ -119,6 +121,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const selection = useEditor((s) => s.selection)
   const livePart = useEditor((s) => s.livePart)
   const liveMode = useEditor((s) => s.liveMode)
+  const liveUnit = useEditor((s) => s.liveUnit)
   /** ライブ編集で線をドラッグして動かしている途中（動かす前の軌跡を持っておき、そこからのずれで動かす） */
   const liveDrag = useRef<{ pointerId: number; start: Pt; startClient: Pt; stroke: Stroke; part: number; moved: boolean; key: string } | null>(null)
   const assets = useAssets(project)
@@ -168,6 +171,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   )
 
   const liveErasing = tool === 'live' && liveMode === 'erase'
+  const liveBrushing = tool === 'live' && liveMode === 'brush'
   // ライブ編集：選んだ線を描き終えた瞬間の絵を見せる（線の太さを変えると、その線の見え方がその場で変わる）。
   // 線を選んでいないときは、全部描き終えた直後（最後に全体をふわっと出す前）＝ペンで見える範囲だけの絵
   const live = tool === 'live' && viewMode === 'edit'
@@ -177,8 +181,10 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     const seg = timeline.segments.find((g) => g.index === idx)
     const part = idx >= 0 ? strokeParts(project.strokes[idx])[livePart.part] : undefined
     if (!seg || !part) return timeline.drawEnd
+    // 軌跡ごとのときは、その軌跡を描き終えた瞬間
+    if (liveUnit === 'stroke') return seg.end
     return seg.start + (seg.end - seg.start) * (seg.prep.param[part.end] ?? 1)
-  }, [livePart, project.strokes, timeline])
+  }, [livePart, liveUnit, project.strokes, timeline])
 
   useEffect(() => onZoomChange(scale), [scale, onZoomChange])
 
@@ -284,7 +290,19 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     if (live && livePart) {
       const s = project.strokes.find((x) => x.id === livePart.strokeId)
       const part = s ? strokeParts(s)[livePart.part] : undefined
-      if (s && part) {
+      if (s && liveUnit === 'stroke') {
+        // 軌跡まるごと：線ごとの太さで、ペンが通る範囲を重ねる
+        ctx.strokeStyle = 'rgba(255, 122, 26, 0.28)'
+        ctx.lineWidth = s.revealWidth
+        polyline(ctx, s.points, s.revealWidth)
+        ctx.strokeStyle = 'rgba(255, 122, 26, 0.95)'
+        ctx.lineWidth = 2 * px
+        polyline(ctx, s.points)
+        ctx.fillStyle = '#ff7a1a'
+        ctx.beginPath()
+        ctx.arc(s.points[0].x, s.points[0].y, 4.5 * px, 0, Math.PI * 2)
+        ctx.fill()
+      } else if (s && part) {
         const pts = s.points.slice(part.start, part.end + 1).map((p, i) => (i === 0 ? { x: p.x, y: p.y } : p))
         ctx.strokeStyle = 'rgba(255, 122, 26, 0.28)'
         ctx.lineWidth = part.width
@@ -343,7 +361,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       const w = useEditor.getState().project.settings.defaultRevealWidth
       const target = rec.appendTo ? project.strokes.find((s) => s.id === rec.appendTo) : undefined
       // 描き足しは、描き足し先の軌跡の色で見せる（範囲の制限も、その軌跡のものを使う）
-      drawClippedBand(ctx, rec.points, w, target ? target.color + '55' : 'rgba(31,111,235,0.32)', target ? selectedClipMask : selMask)
+      // ブラシで足すときは、範囲を広げるので制限なしで見せる
+      drawClippedBand(ctx, rec.points, w, target ? target.color + '55' : 'rgba(31,111,235,0.32)', rec.liveBrush ? null : target ? selectedClipMask : selMask)
       ctx.strokeStyle = target ? target.color : '#1f6feb'
       ctx.lineWidth = 2 * px
       polyline(ctx, rec.points)
@@ -389,7 +408,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     }
 
     const cur = cursor.current
-    if (cur && (tool === 'draw' || tool === 'erase' || liveErasing) && viewMode === 'edit') {
+    if (cur && (tool === 'draw' || tool === 'erase' || liveErasing || liveBrushing) && viewMode === 'edit') {
       const erasing = tool === 'erase' || liveErasing
       const w = erasing ? project.settings.eraserWidth : project.settings.defaultRevealWidth
       if (erasing) ctx.setLineDash([4 * px, 3 * px])
@@ -404,7 +423,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       ctx.stroke()
       ctx.setLineDash([])
     }
-  }, [image, imgW, imgH, scale, viewMode, project, selectedId, rerecordId, tool, selection, selMask, selectedClipMask, drawClippedBand, live, livePart, liveErasing])
+  }, [image, imgW, imgH, scale, viewMode, project, selectedId, rerecordId, tool, selection, selMask, selectedClipMask, drawClippedBand, live, livePart, liveErasing, liveBrushing, liveUnit])
 
   useEffect(() => drawOverlay(), [drawOverlay])
 
@@ -705,13 +724,41 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         drawOverlay()
         return
       }
-      // タップした所にある線を選ぶ（何もない所なら選択を外す）。そのままドラッグすると、その線を動かす
+      if (st.liveMode === 'brush') {
+        // ブラシで足す：選んでいる軌跡に、なぞった所を足す（ペンもそこを通り、表示範囲も広がる）
+        let targetId = st.livePart?.strokeId
+        if (!targetId) {
+          const hit = hitPart(project.strokes, p.x, p.y, Math.max(st.project.settings.defaultRevealWidth / 2, (e.pointerType === 'touch' ? 14 : 5) / scale))
+          if (hit) {
+            st.setLivePart(hit)
+            targetId = hit.strokeId
+          }
+        }
+        if (!targetId) {
+          st.notify('先に、足したい軌跡を「選ぶ・動かす」でタップして選んでください', 'error')
+          return
+        }
+        recording.current = { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }], appendTo: targetId, liveBrush: true }
+        capture(e)
+        if (e.pointerType === 'touch') requestAnimationFrame(() => showLoupe(e.clientX, e.clientY))
+        drawOverlay()
+        return
+      }
+      // タップした所にある線（軌跡ごとのときは、その線の軌跡）を選ぶ。何もない所なら選択を外す。そのままドラッグすると動かす
       const hit = hitPart(project.strokes, p.x, p.y, (e.pointerType === 'touch' ? 14 : 5) / scale)
-      st.setLivePart(hit)
+      st.setLivePart(hit && st.liveUnit === 'stroke' ? { strokeId: hit.strokeId, part: 0 } : hit)
       if (hit) {
         haptic()
         const stroke = st.project.strokes.find((x) => x.id === hit.strokeId)!
-        liveDrag.current = { pointerId: e.pointerId, start: p, startClient: { x: e.clientX, y: e.clientY }, stroke, part: hit.part, moved: false, key: `livemove:${Date.now()}` }
+        liveDrag.current = {
+          pointerId: e.pointerId,
+          start: p,
+          startClient: { x: e.clientX, y: e.clientY },
+          stroke,
+          part: st.liveUnit === 'stroke' ? -1 : hit.part,
+          moved: false,
+          key: `livemove:${Date.now()}`
+        }
         capture(e)
       }
     }
@@ -740,7 +787,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       ld.moved = true
       const dx = p.x - ld.start.x
       const dy = p.y - ld.start.y
-      const moved = transformPart(ld.stroke, ld.part, dx, dy)
+      // part が -1 なら軌跡まるごと
+      const moved = ld.part < 0 ? transformStroke(ld.stroke, dx, dy) : transformPart(ld.stroke, ld.part, dx, dy)
       useEditor.getState().commit((proj) => ({ ...proj, strokes: proj.strokes.map((s) => (s.id === ld.stroke.id ? { ...s, points: moved.points } : s)) }), ld.key)
       return
     }
@@ -841,7 +889,17 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         st.notify('軌跡を録り直しました')
       } else if (rec.appendTo) {
         const target = st.project.strokes.find((s) => s.id === rec.appendTo)
-        if (target) {
+        if (target && rec.liveBrush) {
+          // ブラシで足す：ペンの通り道を足し、表示範囲もなぞった所まで広げる
+          const w = st.project.settings.defaultRevealWidth
+          const marks: Pt[] = []
+          for (const q of rec.points) {
+            const last = marks[marks.length - 1]
+            if (!last || Math.hypot(q.x - last.x, q.y - last.y) >= 1.5) marks.push({ x: Math.round(q.x * 10) / 10, y: Math.round(q.y * 10) / 10 })
+          }
+          st.updateStroke(target.id, { ...appendToStroke(target, rec.points, w), clip: addRevealMark(target.clip, marks, w) })
+          haptic()
+        } else if (target) {
           st.updateStroke(target.id, appendToStroke(target, rec.points, st.project.settings.defaultRevealWidth))
           st.select(target.id)
           haptic()
@@ -910,7 +968,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     ? ''
     : tool === 'pan' || panDrag.current
       ? 'cur-grab'
-      : (tool === 'draw' || tool === 'erase' || liveErasing) && viewMode === 'edit'
+      : (tool === 'draw' || tool === 'erase' || liveErasing || liveBrushing) && viewMode === 'edit'
         ? 'cur-none'
         : tool === 'select' || tool === 'live'
           ? 'cur-default'

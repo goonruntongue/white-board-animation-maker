@@ -40,8 +40,10 @@ interface EditorState {
   selectedId: string | null
   /** ライブ編集で選んでいる線（軌跡の中の、ペンを下ろしてから上げるまでの区間） */
   livePart: { strokeId: string; part: number } | null
-  /** ライブ編集の操作：move＝線をタップで選び、ドラッグで動かす / erase＝選んだ軌跡を消しゴムで消す */
-  liveMode: 'move' | 'erase'
+  /** ライブ編集の操作：move＝タップで選び、ドラッグで動かす / brush＝なぞった所を選んだ軌跡に足す / erase＝消しゴムで消す */
+  liveMode: 'move' | 'brush' | 'erase'
+  /** ライブ編集で選ぶ単位：stroke＝軌跡まるごと / part＝軌跡の中の1本の線 */
+  liveUnit: 'stroke' | 'part'
   /** 再生ヘッド (ms) */
   time: number
   playing: boolean
@@ -85,7 +87,8 @@ interface EditorState {
   setTool: (t: Tool) => void
   select: (id: string | null) => void
   setLivePart: (part: { strokeId: string; part: number } | null) => void
-  setLiveMode: (m: 'move' | 'erase') => void
+  setLiveMode: (m: 'move' | 'brush' | 'erase') => void
+  setLiveUnit: (u: 'stroke' | 'part') => void
   setTime: (t: number) => void
   setPlaying: (v: boolean) => void
   setViewMode: (v: 'edit' | 'preview') => void
@@ -109,6 +112,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   selectedId: null,
   livePart: null,
   liveMode: 'move',
+  liveUnit: 'stroke',
   time: 0,
   playing: false,
   viewMode: 'edit',
@@ -291,6 +295,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     ),
   select: (selectedId) => set((s) => ({ selectedId, livePart: s.livePart && s.livePart.strokeId !== selectedId ? null : s.livePart })),
   setLiveMode: (liveMode) => set({ liveMode }),
+  setLiveUnit: (liveUnit) => set((s) => ({ liveUnit, livePart: s.livePart ? { ...s.livePart, part: liveUnit === 'stroke' ? 0 : s.livePart.part } : null })),
   setLivePart: (livePart) => set(livePart ? { livePart, selectedId: livePart.strokeId } : { livePart }),
   setTime: (time) => set({ time }),
   setPlaying: (playing) => set(playing ? { playing, viewMode: 'preview' } : { playing }),

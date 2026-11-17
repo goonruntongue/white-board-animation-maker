@@ -54,15 +54,37 @@ export function addEraserMark(clip: ClipRegion | undefined, points: { x: number;
   return { shapes: [...base.shapes, mark] }
 }
 
+/**
+ * ブラシで足す：なぞった線の範囲を、軌跡の表示範囲に加える（消しゴムの反対）。
+ * 範囲の制限がない軌跡は、もともとどこでも見せられるので何もしない。
+ * 後から加えた形が優先されるので、消しゴムで消した所の上をなぞれば、また見せられる。
+ */
+export function addRevealMark(clip: ClipRegion | undefined, points: { x: number; y: number }[], width: number): ClipRegion | undefined {
+  if (!clip || clip.shapes.length === 0) return clip
+  return { shapes: [...clip.shapes, { kind: 'stroke', mode: 'add', points, width }] }
+}
+
+/** 選択範囲の形をそのまま消す（選択範囲＋Delete）。消しゴムの跡と同じく、軌跡の道筋や時間は変えない */
+export function addAreaErase(clip: ClipRegion | undefined, area: ClipRegion): ClipRegion {
+  const mark: ClipShape = { kind: 'region', mode: 'subtract', region: structuredClone(area), erase: true }
+  const base: ClipRegion = clip && clip.shapes.length ? clip : { shapes: [{ kind: 'all', mode: 'add' }] }
+  return { shapes: [...base.shapes, mark] }
+}
+
+/** 消しゴムの跡（なぞった線・選択範囲で消した所）か */
+function isEraseMark(s: ClipShape): boolean {
+  return (s.kind === 'stroke' && s.mode === 'subtract') || (s.kind === 'region' && s.erase === true)
+}
+
 /** 消しゴムの跡の数 */
 export function countEraserMarks(clip: ClipRegion | undefined): number {
-  return clip ? clip.shapes.filter((s) => s.kind === 'stroke' && s.mode === 'subtract').length : 0
+  return clip ? clip.shapes.filter(isEraseMark).length : 0
 }
 
 /** 消しゴムの跡だけを取り除く。範囲の制限が何も残らなければ undefined（制限なし） */
 export function clearEraserMarks(clip: ClipRegion | undefined): ClipRegion | undefined {
   if (!clip) return undefined
-  const shapes = clip.shapes.filter((s) => !(s.kind === 'stroke' && s.mode === 'subtract'))
+  const shapes = clip.shapes.filter((s) => !isEraseMark(s))
   if (shapes.length === 0 || (shapes.length === 1 && shapes[0].kind === 'all' && shapes[0].mode === 'add')) return undefined
   return { shapes }
 }

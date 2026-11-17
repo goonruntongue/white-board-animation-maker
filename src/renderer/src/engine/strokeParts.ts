@@ -161,3 +161,40 @@ export function mergeStrokes(first: Stroke, second: Stroke): Stroke {
     clip
   }
 }
+
+/** 軌跡全体の中心（外接矩形の中心） */
+export function strokeCenter(stroke: Stroke): { x: number; y: number } {
+  let x0 = Infinity
+  let y0 = Infinity
+  let x1 = -Infinity
+  let y1 = -Infinity
+  for (const p of stroke.points) {
+    x0 = Math.min(x0, p.x)
+    y0 = Math.min(y0, p.y)
+    x1 = Math.max(x1, p.x)
+    y1 = Math.max(y1, p.y)
+  }
+  return { x: (x0 + x1) / 2, y: (y0 + y1) / 2 }
+}
+
+/** 軌跡全体を動かす・拡大縮小する（中心 c を基準に scale 倍してから dx, dy だけずらす） */
+export function transformStroke(stroke: Stroke, dx: number, dy: number, scale = 1, c?: { x: number; y: number }): Stroke {
+  const center = c ?? strokeCenter(stroke)
+  const r1 = (v: number): number => Math.round(v * 10) / 10
+  return {
+    ...stroke,
+    points: stroke.points.map((p) => ({ ...p, x: r1(center.x + (p.x - center.x) * scale + dx), y: r1(center.y + (p.y - center.y) * scale + dy) }))
+  }
+}
+
+/**
+ * 軌跡のすべての線の太さを、同じ割合で変える（自動で作った軌跡の、線ごとの太さの違いは保つ）。
+ * 基準は最初の線の太さ（revealWidth）を width にする倍率。
+ */
+export function setStrokeWidthKeepRatio(stroke: Stroke, width: number): Stroke {
+  const w = Math.max(1, Math.round(width))
+  const f = w / Math.max(1, stroke.revealWidth)
+  if (f === 1) return stroke
+  const points = stroke.points.map((p) => (p.w === undefined ? p : { ...p, w: Math.max(1, Math.round(p.w * f)) }))
+  return { ...stroke, points, revealWidth: w }
+}

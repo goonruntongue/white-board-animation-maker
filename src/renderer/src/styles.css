@@ -477,10 +477,10 @@ kbd {
 /* ライブ編集のオプションバー */
 .live-bar {
   flex: none;
-  gap: 4px;
+  gap: 2px;
 }
 .live-range {
-  width: 110px;
+  width: 96px;
 }
 .live-bar .icon-btn.on {
   background: linear-gradient(180deg, var(--key-pressed-top), var(--key-pressed-bot));
@@ -489,6 +489,30 @@ kbd {
 }
 .live-bar .icon-btn.on svg {
   filter: drop-shadow(var(--accent-glow));
+}
+.live-unit {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--well-deep);
+  box-shadow: var(--well-shadow);
+}
+.live-unit-btn {
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-2);
+  font: 700 11.5px var(--font-ui, inherit);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.live-unit-btn.on {
+  background: linear-gradient(180deg, var(--key-pressed-top), var(--key-pressed-bot));
+  box-shadow: var(--key-shadow-pressed);
+  color: var(--accent-text);
 }
 .live-value {
   min-width: 34px;

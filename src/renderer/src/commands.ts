@@ -2,8 +2,8 @@
 import { builtinHand } from './engine/handAsset'
 import { defaultHand, findPreset } from './engine/handPresets'
 import { allPages, createProject, parseProject, PROJECT_EXT, serializeProject } from './engine/project'
-import { invert } from './engine/selection'
-import { buildTimeline } from './engine/wb-engine'
+import { addAreaErase, invert } from './engine/selection'
+import { buildTimeline, rasterizeClip } from './engine/wb-engine'
 import { setThemePref, type ThemePref } from './lib/theme'
 import { openGuide, startTour } from './lib/tour'
 import { importHand, importImage } from './lib/imageTools'
@@ -188,9 +188,53 @@ export function rewind(): void {
   get().setTime(0)
 }
 
+/** Delete キー：選択範囲があれば、その範囲を消す。なければ選んでいる軌跡を削除する */
 export function deleteSelected(): void {
-  const { selectedId, removeStroke } = get()
+  const { selectedId, removeStroke, selection } = get()
+  if (selection) return eraseSelection()
   if (selectedId) removeStroke(selectedId)
+}
+
+/**
+ * 選択範囲の中を消す（消しゴムと同じく、軌跡の表示範囲から除く）。
+ * 軌跡を選んでいればその軌跡だけ。選んでいなければ、選択範囲の中を通るすべての軌跡から消す。
+ */
+export function eraseSelection(): void {
+  const s = get()
+  const sel = s.selection
+  const img = s.project.image
+  if (!sel || !img) return
+  let targets = s.selectedId ? s.project.strokes.filter((x) => x.id === s.selectedId) : []
+  if (targets.length === 0) {
+    const mask = rasterizeClip(sel, img.width, img.height)
+    const data = (mask.getContext('2d') as CanvasRenderingContext2D).getImageData(0, 0, img.width, img.height).data
+    const inside = (x: number, y: number): boolean => {
+      const xi = Math.round(x)
+      const yi = Math.round(y)
+      return xi >= 0 && yi >= 0 && xi < img.width && yi < img.height && data[(yi * img.width + xi) * 4 + 3] > 0
+    }
+    targets = s.project.strokes.filter((st) => {
+      if (st.hidden) return false
+      const pts = st.points
+      for (let i = 0; i < pts.length; i++) {
+        if (inside(pts[i].x, pts[i].y)) return true
+        // 点と点の間（ペンを上げた区間は除く）も見る
+        if (i > 0 && !pts[i].b && inside((pts[i].x + pts[i - 1].x) / 2, (pts[i].y + pts[i - 1].y) / 2)) return true
+      }
+      return false
+    })
+  }
+  if (targets.length === 0) {
+    s.notify('選択範囲の中を通る軌跡がありません', 'error')
+    return
+  }
+  const ids = new Set(targets.map((t) => t.id))
+  s.commit((p) => ({ ...p, strokes: p.strokes.map((st) => (ids.has(st.id) ? { ...st, clip: addAreaErase(st.clip, sel) } : st)) }))
+  s.notify(
+    targets.length === 1
+      ? `#${s.project.strokes.findIndex((x) => x.id === targets[0].id) + 1} の軌跡から、選択範囲の中を消しました（元に戻す（↶）で取り消せます）`
+      : `${targets.length} 本の軌跡から、選択範囲の中を消しました（元に戻す（↶）で取り消せます）`
+  )
 }
 
 export function openExport(kind: 'html' | 'video'): void {

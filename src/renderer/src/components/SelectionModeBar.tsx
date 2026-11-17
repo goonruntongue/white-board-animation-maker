@@ -1,4 +1,4 @@
-import { deselect, invertSelection } from '../commands'
+import { deselect, eraseSelection, invertSelection } from '../commands'
 import type { SelectionOp } from '../engine/selection'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
@@ -82,6 +82,14 @@ export function SelectionModeBar(): React.JSX.Element {
         </button>
         <button className="tool-btn icon-only" title="選択を解除 (Ctrl+D)" disabled={!hasSelection} onClick={deselect}>
           <Icon name="deselect" />
+        </button>
+        <button
+          className="tool-btn icon-only"
+          title={`選択範囲の中を消す (Delete)。選んでいる軌跡から消します。軌跡を選んでいなければ、範囲を通るすべての軌跡から消します`}
+          disabled={!hasSelection}
+          onClick={eraseSelection}
+        >
+          <Icon name="eraser" />
         </button>
       </div>
     </>

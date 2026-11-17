@@ -30,7 +30,8 @@ export type ClipShape =
    */
   | { kind: 'rle'; mode: ClipMode; gw: number; gh: number; runs: number[]; box: [number, number, number, number] }
   /** 別の選択範囲をまるごと1つの図形として扱う（反転などで使う） */
-  | { kind: 'region'; mode: ClipMode; region: ClipRegion }
+  /** erase：選択範囲を Delete で消した跡（消しゴムの跡と同じ扱い。「消しゴムの跡をすべて戻す」で消える） */
+  | { kind: 'region'; mode: ClipMode; region: ClipRegion; erase?: true }
 
 /** 選択範囲。図形を先頭から順に「追加」「除外」して作る */
 export interface ClipRegion {
