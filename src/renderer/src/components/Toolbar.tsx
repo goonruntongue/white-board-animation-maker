@@ -2,7 +2,7 @@ import { importImageDialog, openAutoTrace, newProject, openExport, openProject, 
 import { isDesktop } from '../lib/platform'
 import { SELECTION_TOOLS, useEditor, type Tool } from '../store'
 import { Icon, type IconName } from './Icon'
-import { AppendToggle, PenSizePicker } from './PenSizePicker'
+import { PenSizePicker } from './PenSizePicker'
 import { SelectionModeBar } from './SelectionModeBar'
 import { ThemeSwitch } from './ThemeSwitch'
 import { HelpMenu } from './HelpMenu'
@@ -117,10 +117,7 @@ Shift+ドラッグで追加 / Alt+ドラッグで除外`}
       ) : tool === 'live' ? (
         <LiveEditBar />
       ) : (
-        <>
-          <PenSizePicker disabled={!hasImage} kind={tool === 'erase' ? 'eraser' : 'pen'} />
-          {tool === 'draw' && <AppendToggle disabled={!hasImage} />}
-        </>
+        <PenSizePicker disabled={!hasImage} kind={tool === 'erase' ? 'eraser' : 'pen'} />
       )}
 
       <div className="doc-title">

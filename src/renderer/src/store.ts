@@ -32,8 +32,6 @@ interface EditorState {
   selection: ClipRegion | null
   /** 選択ツールの合成モード（オプションバーで切り替え。Shift / Alt はこれより優先） */
   selectionMode: SelectionOp
-  /** 「描き足す」：オンのあいだ、描くツールの線は選んでいる軌跡に追加される */
-  appendMode: boolean
 
   tool: Tool
   /** 最後に使った選択ツール（スマホのドックの「範囲」ボタン用） */
@@ -90,7 +88,6 @@ interface EditorState {
   movePage: (from: number, to: number) => void
   duplicatePage: (index: number) => void
   setSelectionMode: (m: SelectionOp) => void
-  setAppendMode: (v: boolean) => void
   undo: () => void
   redo: () => void
 
@@ -121,7 +118,6 @@ export const useEditor = create<EditorState>((set, get) => ({
   future: [],
   selection: null,
   selectionMode: 'new',
-  appendMode: false,
   tool: 'draw',
   lastSelTool: 'rect',
   selectedId: null,
@@ -216,7 +212,6 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
 
   setSelectionMode: (selectionMode) => set({ selectionMode }),
-  setAppendMode: (appendMode) => set({ appendMode }),
 
   duplicateStroke: (id) => {
     const { project } = get()

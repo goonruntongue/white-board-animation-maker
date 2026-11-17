@@ -58,7 +58,6 @@ export function Timeline(): React.JSX.Element {
     st.setPlaying(false)
     st.setViewMode('edit')
     st.setRerecord(null)
-    st.setAppendMode(false)
     st.setTool('draw')
     st.notify('再生位置に近い軌跡の境目へ追加します。画像をなぞってください')
   }

@@ -847,13 +847,9 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     if (tool === 'draw') {
       if (st.playing) st.setPlaying(false)
       if (st.viewMode !== 'edit') st.setViewMode('edit')
-      // Shift＋ドラッグ、または「描き足す」がオンのときは、選んでいる軌跡に描き足す
-      const wantAppend = !st.rerecordId && (e.shiftKey || st.appendMode)
+      // PC：Shift＋ドラッグで、選んでいる軌跡に描き足す（軌跡に線を足すのは、ふだんは「直す」の「ブラシで足す」で行う）
+      const wantAppend = !st.rerecordId && e.shiftKey
       const appendTo = wantAppend ? st.project.strokes.find((s) => s.id === st.selectedId)?.id : undefined
-      if (st.appendMode && !e.shiftKey && !appendTo && !st.rerecordId) {
-        st.notify('描き足す軌跡を選んでください（描き順・タイムライン・「直す（ライブ編集）」から）', 'error')
-        return
-      }
       recording.current = { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }], appendTo }
       if (e.pointerType === 'touch') requestAnimationFrame(() => showLoupe(e.clientX, e.clientY))
       capture(e)
