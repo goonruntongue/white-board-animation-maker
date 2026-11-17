@@ -3844,3 +3844,24 @@ button {
 .artboard.moving {
   will-change: transform;
 }
+
+/* 再生位置のつまみ・目盛り：なぞると再生位置が動く（タイムラインの横スクロールにはしない） */
+.ruler.scrub {
+  touch-action: none;
+  cursor: ew-resize;
+}
+.playhead-grip {
+  position: absolute;
+  top: -4px;
+  bottom: 0;
+  left: -14px;
+  width: 30px;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: ew-resize;
+  z-index: 3;
+}
+.app.phone .playhead-grip {
+  left: -18px;
+  width: 38px;
+}

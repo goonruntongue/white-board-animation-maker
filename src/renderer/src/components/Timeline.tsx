@@ -83,6 +83,54 @@ export function Timeline(): React.JSX.Element {
     st.setTime(t)
   }
 
+  /**
+   * 再生位置のつまみ・目盛りをなぞって、再生位置を連続的に動かす（スクラブ）。
+   * タイムラインは横スクロールするので、ここだけはスクロールさせずに指の動きを再生位置にする。
+   * 端まで来たら、タイムラインを少しずつ送る
+   */
+  const scrub = useRef<{ pointerId: number; x: number; raf: number } | null>(null)
+  const scrubStep = (): void => {
+    const s = scrub.current
+    const vp = scrollRef.current
+    if (!s || !vp) return
+    const r = vp.getBoundingClientRect()
+    const edge = 32
+    const dx = s.x < r.left + edge ? -(r.left + edge - s.x) : s.x > r.right - edge ? s.x - (r.right - edge) : 0
+    if (dx !== 0) {
+      vp.scrollLeft += Math.max(-24, Math.min(24, dx * 0.5))
+      seekTo(Math.max(r.left, Math.min(r.right, s.x)))
+    }
+    s.raf = requestAnimationFrame(scrubStep)
+  }
+  const scrubHandlers = {
+    onPointerDown: (e: React.PointerEvent): void => {
+      e.stopPropagation()
+      e.preventDefault()
+      try {
+        ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+      } catch {
+        // 捕捉できなくても、なぞる操作は続けられる
+      }
+      if (scrub.current) cancelAnimationFrame(scrub.current.raf)
+      scrub.current = { pointerId: e.pointerId, x: e.clientX, raf: requestAnimationFrame(scrubStep) }
+      seekTo(e.clientX)
+    },
+    onPointerMove: (e: React.PointerEvent): void => {
+      const s = scrub.current
+      if (!s || s.pointerId !== e.pointerId) return
+      e.stopPropagation()
+      s.x = e.clientX
+      seekTo(e.clientX)
+    },
+    onPointerUp: (e: React.PointerEvent): void => {
+      const s = scrub.current
+      if (!s || s.pointerId !== e.pointerId) return
+      cancelAnimationFrame(s.raf)
+      scrub.current = null
+    }
+  }
+  useEffect(() => () => { if (scrub.current) cancelAnimationFrame(scrub.current.raf) }, [])
+
   // 目盛り
   const ticks = useMemo(() => {
     const sec = total / 1000
@@ -127,7 +175,7 @@ export function Timeline(): React.JSX.Element {
           if (e.buttons & 1) seekTo(e.clientX)
         }}
       >
-        <div className="ruler">
+        <div className="ruler scrub" title="なぞって再生位置を動かす" {...scrubHandlers} onPointerCancel={scrubHandlers.onPointerUp}>
           {ticks.map((s) => (
             <span key={s} className="tick" style={{ left: `${((s * 1000) / total) * 100}%` }}>
               {s}s
@@ -184,7 +232,9 @@ export function Timeline(): React.JSX.Element {
           {timeline.segments.length === 0 && <div className="track-empty">軌跡を追加するとここに並びます</div>}
           {drop && <div className="timeline-drop-marker" style={{ left: `${drop.x}%` }} />}
         </div>
-        <div className="playhead" style={{ left: `${(time / total) * 100}%` }} />
+        <div className="playhead" style={{ left: `${(time / total) * 100}%` }}>
+          <div className="playhead-grip" aria-label="再生位置（なぞって動かす）" {...scrubHandlers} onPointerCancel={scrubHandlers.onPointerUp} />
+        </div>
         </div>
         </div>
         {selectedId && multiIds.length < 2 && (() => {
