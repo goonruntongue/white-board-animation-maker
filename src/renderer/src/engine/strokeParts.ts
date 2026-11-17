@@ -3,9 +3,9 @@
 //   ・最初の線の太さ … 軌跡の revealWidth
 //   ・2本目以降の線  … その線の書き始め（b: 1 の点）の w。なければ revealWidth
 // レンダラー（wb-engine の partWidth）と同じ決まりで読む。
-import type { ClipRegion, Stroke, StrokePoint } from './types'
-import { prepareStroke } from './wb-engine'
-import { addRevealMark } from './selection'
+import type { ClipRegion, ClipShape, Stroke, StrokePoint } from './types'
+import { hasLineClips, prepareStroke } from './wb-engine'
+import { addRevealMark, remapClipLines } from './selection'
 
 export interface StrokePart {
   /** 線の書き始めの点の番号（最初の線は 0、ほかは b: 1 の点） */
@@ -70,7 +70,9 @@ export function removeStrokePart(stroke: Stroke, partIndex: number): Stroke | nu
     points,
     revealWidth,
     duration: Math.max(50, points[points.length - 1].t),
-    useRecordedTiming: true
+    useRecordedTiming: true,
+    // 消した線だけに効いていた範囲は外し、後ろの線の番号を1つ詰める
+    clip: remapClipLines(stroke.clip, (l) => (l === partIndex ? null : l > partIndex ? l - 1 : l))
   }
 }
 
@@ -95,7 +97,8 @@ export function splitStrokeAt(stroke: Stroke, partIndex: number, secondId: strin
     points: firstPoints,
     duration: Math.max(50, Math.round(prevEnd)),
     delayAfter: Math.max(0, Math.round(cut - prevEnd)),
-    useRecordedTiming: true
+    useRecordedTiming: true,
+    clip: remapClipLines(stroke.clip, (l) => (l < partIndex ? l : null))
   }
   const second: Stroke = {
     ...stroke,
@@ -105,7 +108,8 @@ export function splitStrokeAt(stroke: Stroke, partIndex: number, secondId: strin
     revealWidth: part.width,
     duration: Math.max(50, Math.round(Math.max(50, stroke.duration) - cut)),
     delayAfter: stroke.delayAfter,
-    useRecordedTiming: true
+    useRecordedTiming: true,
+    clip: remapClipLines(stroke.clip, (l) => (l >= partIndex ? l - partIndex : null))
   }
   return [first, second]
 }
@@ -131,7 +135,7 @@ export function replaceStrokePart(stroke: Stroke, partIndex: number, recording: 
     ...stroke,
     points: [...timed.slice(0, part.start), ...replacement, ...timed.slice(part.end + 1)],
     useRecordedTiming: true,
-    clip: addRevealMark(stroke.clip, recording, part.width)
+    clip: addRevealMark(stroke.clip, recording, part.width, partIndex)
   }
 }
 
@@ -235,8 +239,7 @@ export function transformPart(stroke: Stroke, partIndex: number, dx: number, dy:
  * 2本の軌跡を1本にまとめる（first の後ろに second をつなぐ。並び順は first → second）。
  *  ・描くタイミングはそのまま：first を描く → first の待ち時間（この間にペンを上げて移動）→ second を描く
  *  ・second の書き始めはペンを上げた点になり、線ごとの太さもそのまま引き継ぐ
- *  ・表示範囲：どちらかが「制限なし」なら制限なし。両方にあれば、2つを合わせた範囲
- *    （1本の軌跡は範囲を1つしか持てないので、first の線が second の範囲も見せられるようになる）
+ *  ・表示範囲：同じなら共有。違えば、それぞれの線に元のグループの範囲だけが効くよう、線の番号を付けて並べる
  */
 export function mergeStrokes(first: Stroke, second: Stroke): Stroke {
   const timed = (s: Stroke, offset: number): StrokePoint[] => {
@@ -252,11 +255,19 @@ export function mergeStrokes(first: Stroke, second: Stroke): Stroke {
     return p
   })
   let clip: ClipRegion | undefined
-  if (first.clip && second.clip) {
-    clip =
-      JSON.stringify(first.clip) === JSON.stringify(second.clip)
-        ? first.clip
-        : { shapes: [{ kind: 'region', mode: 'add', region: first.clip }, { kind: 'region', mode: 'add', region: second.clip }] }
+  const tagged = hasLineClips(first.clip) || hasLineClips(second.clip)
+  if (!tagged && !first.clip && !second.clip) clip = undefined
+  else if (!tagged && first.clip && second.clip && JSON.stringify(first.clip) === JSON.stringify(second.clip)) clip = first.clip
+  else {
+    // 範囲が違う：それぞれの線には、元のグループの範囲だけが効くよう線の番号を付ける
+    const nA = strokeParts(first).length
+    const nB = strokeParts(second).length
+    const own = (c: ClipRegion | undefined, n: number, offset: number): ClipShape[] => {
+      const all = Array.from({ length: n }, (_, i) => offset + i)
+      if (!c || c.shapes.length === 0) return [{ kind: 'all', mode: 'add', lines: all }]
+      return c.shapes.map((s) => ({ ...s, lines: s.lines ? s.lines.map((l) => l + offset) : all }))
+    }
+    clip = { shapes: [...own(first.clip, nA, 0), ...own(second.clip, nB, nA)] }
   }
   return {
     ...first,

@@ -48,7 +48,47 @@ export function prepareStroke(stroke) {
   }
   // 時刻が単調増加でないデータへの保険
   for (let i = 1; i < n; i++) if (param[i] < param[i - 1]) param[i] = param[i - 1]
-  return { stroke, pts, param, length }
+  // 線（ペンを下ろしてから上げるまで）の区切り
+  const parts = []
+  let start = 0
+  for (let i = 1; i <= n; i++) {
+    if (i === n || pts[i].b) {
+      parts.push({ start: start, end: i - 1 })
+      start = i
+    }
+  }
+  return { stroke, pts, param, length, parts }
+}
+
+// ----------------------------------------------------------------------------
+// 線ごとの範囲
+//   範囲の図形に lines（線の番号の配列）があれば、その線を描くときだけ効く（手描きの消しゴム・通過部分の表示）。
+//   lines のない図形は、グループのすべての線に効く。
+// ----------------------------------------------------------------------------
+
+/** 範囲に、線ごとの図形があるか */
+export function hasLineClips(clip) {
+  return !!(clip && clip.shapes && clip.shapes.some((s) => s.lines))
+}
+
+const lineClipCache = new WeakMap()
+/**
+ * line 番目の線に効く範囲（線ごとの図形のうち、ほかの線のものを除いたもの）。
+ * 線ごとの図形がなければ clip そのもの。同じ clip・同じ線なら同じオブジェクトを返す（キャッシュが効くように）
+ */
+export function clipForLine(clip, line) {
+  if (!hasLineClips(clip)) return clip
+  let byLine = lineClipCache.get(clip)
+  if (!byLine) {
+    byLine = new Map()
+    lineClipCache.set(clip, byLine)
+  }
+  let c = byLine.get(line)
+  if (!c) {
+    c = { shapes: clip.shapes.filter((s) => !s.lines || s.lines.indexOf(line) >= 0) }
+    byLine.set(line, c)
+  }
+  return c
 }
 
 /** 進捗 u における (x, y) と、そのときの点インデックス */
@@ -380,35 +420,52 @@ export class WBRenderer {
       const dur = seg.end - seg.start
       const u0 = from <= seg.start ? 0 : (from - seg.start) / dur
       const u1 = t >= seg.end ? 1 : (t - seg.start) / dur
-      const clip = this.clipFor(seg.prep.stroke)
-      if (!clip) {
-        m.setTransform(k, 0, 0, k, 0, 0)
-        this.strokePortion(m, seg.prep, u0, u1)
+      const clip = seg.prep.stroke.clip
+      if (hasLineClips(clip)) {
+        // 線ごとの範囲がある：線ごとに、その線の範囲で切り抜いて描く
+        const { parts, param } = seg.prep
+        for (let p = 0; p < parts.length; p++) {
+          const ps = param[parts[p].start]
+          const pe = param[parts[p].end]
+          if (pe < u0 || ps > u1) continue
+          this.drawPortion(seg.prep, Math.max(u0, ps), Math.min(u1, pe), this.clipFor(clipForLine(clip, p)), parts[p])
+        }
         continue
       }
-      // 選択範囲あり：作業用キャンバスに描き、範囲で切り抜いてからマスクへ足す（範囲の矩形の中だけで行う）
-      const b = clip.px
-      if (b.w <= 0 || b.h <= 0) continue
-      const sc = this.sctx
-      sc.setTransform(1, 0, 0, 1, 0, 0)
-      sc.clearRect(b.x, b.y, b.w, b.h)
-      sc.setTransform(k, 0, 0, k, 0, 0)
-      this.strokePortion(sc, seg.prep, u0, u1)
-      sc.setTransform(1, 0, 0, 1, 0, 0)
-      sc.globalCompositeOperation = 'destination-in'
-      sc.drawImage(clip.canvas, b.x, b.y)
-      sc.globalCompositeOperation = 'source-over'
-      m.setTransform(1, 0, 0, 1, 0, 0)
-      m.drawImage(this.scratch, b.x, b.y, b.w, b.h, b.x, b.y, b.w, b.h)
+      this.drawPortion(seg.prep, u0, u1, this.clipFor(clip), null)
     }
     m.setTransform(1, 0, 0, 1, 0, 0)
     this.maskTime = t
     this.revealDirty = true
   }
 
-  /** 軌跡の選択範囲マスク（同じ範囲はキャッシュして使い回す） */
-  clipFor(stroke) {
-    const clip = stroke.clip
+  /** 軌跡の u0〜u1 の部分をマスクへ足す。clip があれば、その範囲で切り抜く。range があれば、その線の点だけを描く */
+  drawPortion(prep, u0, u1, clip, range) {
+    const m = this.mctx
+    const k = this.scale
+    if (!clip) {
+      m.setTransform(k, 0, 0, k, 0, 0)
+      this.strokePortion(m, prep, u0, u1, range)
+      return
+    }
+    // 選択範囲あり：作業用キャンバスに描き、範囲で切り抜いてからマスクへ足す（範囲の矩形の中だけで行う）
+    const b = clip.px
+    if (b.w <= 0 || b.h <= 0) return
+    const sc = this.sctx
+    sc.setTransform(1, 0, 0, 1, 0, 0)
+    sc.clearRect(b.x, b.y, b.w, b.h)
+    sc.setTransform(k, 0, 0, k, 0, 0)
+    this.strokePortion(sc, prep, u0, u1, range)
+    sc.setTransform(1, 0, 0, 1, 0, 0)
+    sc.globalCompositeOperation = 'destination-in'
+    sc.drawImage(clip.canvas, b.x, b.y)
+    sc.globalCompositeOperation = 'source-over'
+    m.setTransform(1, 0, 0, 1, 0, 0)
+    m.drawImage(this.scratch, b.x, b.y, b.w, b.h, b.x, b.y, b.w, b.h)
+  }
+
+  /** 範囲のマスク（同じ範囲はキャッシュして使い回す） */
+  clipFor(clip) {
     if (!clip || !clip.shapes || clip.shapes.length === 0) return null
     // 同じ範囲オブジェクトなら作り直さない（範囲は書き換えずに作り直す決まりなので、同一性で判定できる）
     let hit = this.clipCache.get(clip)
@@ -436,15 +493,23 @@ export class WBRenderer {
    * 点に b（ペンを上げる）が付いていたら、そこで線を切る：直前の点からその点までは手が移動するだけで描かない。
    * b の点に w があれば、そこから先はその太さで描く（描き足した部分だけ太さを変えられる）。
    */
-  strokePortion(m, prep, u0, u1) {
+  strokePortion(m, prep, u0, u1, range) {
     const pts = prep.pts
     const base = prep.stroke.revealWidth
     m.lineCap = 'round'
     m.lineJoin = 'round'
     m.strokeStyle = '#000'
     m.fillStyle = '#000'
-    const a = pointAt(prep, u0)
-    const b = pointAt(prep, u1)
+    let a = pointAt(prep, u0)
+    let b = pointAt(prep, u1)
+    if (range) {
+      // 1本の線だけを描く：線の外（前後の線や、ペンを上げて移動している間）にはみ出さない
+      const at = (i) => ({ x: pts[i].x, y: pts[i].y, i: i })
+      if (a.i < range.start) a = at(range.start)
+      if (a.i > range.end) a = at(range.end)
+      if (b.i >= range.end) b = at(range.end)
+      if (b.i < range.start) b = at(range.start)
+    }
     const widthAt = (i) => {
       for (let k = i; k >= 0; k--) if (pts[k].b) return pts[k].w || base
       return base

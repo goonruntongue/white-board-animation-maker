@@ -211,7 +211,7 @@ function BreakKey({ phone }: { phone: boolean }): React.JSX.Element {
 const MODES = [
   { id: 'move', icon: 'move', label: '選ぶ・動かす', hint: '選ぶ・動かす：タップで選び、ドラッグで動かす。太さ・大きさも変えられます' },
   { id: 'brush', icon: 'plusPen', label: 'ブラシ', hint: 'ブラシ：何も選んでいなければ、なぞって新しいグループを描く。線を選んでいれば、そのグループに線を足す（ペンもそこを通り、表示範囲も広がる）' },
-  { id: 'erase', icon: 'eraser', label: '消しゴム', hint: '消しゴム：なぞった所を、選んだグループでは見せない' },
+  { id: 'erase', icon: 'eraser', label: '消しゴム', hint: '消しゴム：なぞった所を、選んでいる線でだけ見せない（同じグループのほかの線には効かない）' },
   { id: 'path', icon: 'pathPen', label: 'パス編集', hint: 'パス編集：線をアンカーとハンドルの曲線として編集する' }
 ] as const
 

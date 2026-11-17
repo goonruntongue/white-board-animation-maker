@@ -17,7 +17,15 @@ export interface StrokePoint {
 export type ClipMode = 'add' | 'subtract' | 'intersect'
 
 /** 選択範囲を構成する図形。rect / ellipse は外接矩形、poly は頂点列、all は画像全体 */
-export type ClipShape =
+export type ClipShape = ClipShapeBody & {
+  /**
+   * この図形が効く線（グループの中の何本目か、0 始まり）。省略時はグループのすべての線に効く。
+   * 手描きの消しゴム・通過部分の表示は、その線だけに効くよう番号を付ける（グループの一番上の図形だけで使う）
+   */
+  lines?: number[]
+}
+
+type ClipShapeBody =
   | { kind: 'rect' | 'ellipse'; mode: ClipMode; x: number; y: number; w: number; h: number }
   | { kind: 'poly'; mode: ClipMode; points: { x: number; y: number }[] }
   | { kind: 'all'; mode: ClipMode }

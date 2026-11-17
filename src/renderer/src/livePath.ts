@@ -17,10 +17,10 @@ export function revealLine(strokeId: string, part: number, mergeKey?: string): v
       strokes: p.strokes.map((s) => {
         if (s.id !== strokeId || !s.clip) return s
         const parts = strokeParts(s)
-        const chosen = part < 0 ? parts : parts.slice(part, part + 1)
+        const chosen = part < 0 ? parts.map((q, i) => ({ q, i })) : parts.slice(part, part + 1).map((q) => ({ q, i: part }))
         let clip = s.clip
-        // 消しゴムで消した所は消えたまま（消しゴムの跡より下に加える）
-        for (const q of chosen) clip = addRevealMarkUnderErase(clip, s.points.slice(q.start, q.end + 1), q.width) ?? clip
+        // その線だけに効く。消しゴムで消した所は消えたまま（消しゴムの跡より下に加える）
+        for (const { q, i } of chosen) clip = addRevealMarkUnderErase(clip, s.points.slice(q.start, q.end + 1), q.width, i) ?? clip
         return clip === s.clip ? s : { ...s, clip }
       })
     }),

@@ -7,7 +7,14 @@ export interface PreparedStroke {
   pts: StrokePoint[]
   param: number[]
   length: number
+  /** 線（ペンを下ろしてから上げるまで）ごとの点の範囲 */
+  parts: { start: number; end: number }[]
 }
+
+/** 範囲に、線ごとの図形（lines 付き）があるか */
+export function hasLineClips(clip: ClipRegion | undefined | null): boolean
+/** line 番目の線に効く範囲（ほかの線だけに効く図形を除いたもの）。同じ clip・同じ線なら同じオブジェクト */
+export function clipForLine(clip: ClipRegion, line: number): ClipRegion
 
 export interface TimelineSegment {
   index: number

@@ -48,8 +48,8 @@ export function flattenShapes(clip: ClipRegion): ClipShape[] {
 // ---------------------------------------------------------------------------
 
 /** 軌跡の表示範囲に消しゴムの跡を加える。範囲がまだなければ「全体」から始める */
-export function addEraserMark(clip: ClipRegion | undefined, points: { x: number; y: number }[], width: number): ClipRegion {
-  const mark: ClipShape = { kind: 'stroke', mode: 'subtract', points, width }
+export function addEraserMark(clip: ClipRegion | undefined, points: { x: number; y: number }[], width: number, line?: number): ClipRegion {
+  const mark: ClipShape = { kind: 'stroke', mode: 'subtract', points, width, ...lineTag(line) }
   const base: ClipRegion = clip && clip.shapes.length ? clip : { shapes: [{ kind: 'all', mode: 'add' }] }
   return { shapes: [...base.shapes, mark] }
 }
@@ -59,18 +59,53 @@ export function addEraserMark(clip: ClipRegion | undefined, points: { x: number;
  * 範囲の制限がない軌跡は、もともとどこでも見せられるので何もしない。
  * 後から加えた形が優先されるので、消しゴムで消した所の上をなぞれば、また見せられる。
  */
-export function addRevealMark(clip: ClipRegion | undefined, points: { x: number; y: number }[], width: number): ClipRegion | undefined {
+export function addRevealMark(clip: ClipRegion | undefined, points: { x: number; y: number }[], width: number, line?: number): ClipRegion | undefined {
   if (!clip || clip.shapes.length === 0) return clip
-  return { shapes: [...clip.shapes, { kind: 'stroke', mode: 'add', points, width }] }
+  return { shapes: [...clip.shapes, { kind: 'stroke', mode: 'add', points, width, ...lineTag(line) }] }
+}
+
+/** 線の番号の印（番号がなければ、グループのすべての線に効く） */
+function lineTag(line: number | undefined): { lines?: number[] } {
+  return line === undefined || line < 0 ? {} : { lines: [line] }
+}
+
+/**
+ * 線ごとの図形の番号を付け替える（線を消す・グループを分けるときに使う）。
+ * map が null を返した番号は外し、どの線にも効かなくなった図形は取り除く。番号のない図形はそのまま
+ */
+export function remapClipLines(clip: ClipRegion | undefined, map: (line: number) => number | null): ClipRegion | undefined {
+  if (!clip || !clip.shapes.some((s) => s.lines)) return clip
+  const shapes: ClipShape[] = []
+  for (const s of clip.shapes) {
+    if (!s.lines) {
+      shapes.push(s)
+      continue
+    }
+    const lines = s.lines.map(map).filter((l): l is number => l !== null)
+    if (lines.length) shapes.push({ ...s, lines })
+  }
+  return { shapes }
+}
+
+/** 線ごとの番号を外し、すべての線に効く範囲にする（グループ全体を描き直したとき・選択範囲として読み込むとき） */
+export function untagClipLines(clip: ClipRegion | undefined): ClipRegion | undefined {
+  if (!clip || !clip.shapes.some((s) => s.lines)) return clip
+  return {
+    shapes: clip.shapes.map((s) => {
+      if (!s.lines) return s
+      const { lines: _l, ...rest } = s
+      return rest as ClipShape
+    })
+  }
 }
 
 /**
  * 自動の「通過部分を表示」：なぞった線の範囲を表示範囲に加えるが、消しゴムの跡より下に入れる。
  * 消しゴムで消した所は、線を動かしたり太くしたりしても消えたまま（見せたいときはブラシでなぞる）
  */
-export function addRevealMarkUnderErase(clip: ClipRegion | undefined, points: { x: number; y: number }[], width: number): ClipRegion | undefined {
+export function addRevealMarkUnderErase(clip: ClipRegion | undefined, points: { x: number; y: number }[], width: number, line?: number): ClipRegion | undefined {
   if (!clip || clip.shapes.length === 0) return clip
-  const mark: ClipShape = { kind: 'stroke', mode: 'add', points, width }
+  const mark: ClipShape = { kind: 'stroke', mode: 'add', points, width, ...lineTag(line) }
   const at = clip.shapes.findIndex(isEraseMark)
   if (at < 0) return { shapes: [...clip.shapes, mark] }
   return { shapes: [...clip.shapes.slice(0, at), mark, ...clip.shapes.slice(at)] }

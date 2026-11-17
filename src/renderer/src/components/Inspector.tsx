@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { importHandDialog, importImageDialog, replaceImageDialog, selectHandPreset } from '../commands'
 import { builtinHand } from '../engine/handAsset'
-import { clearEraserMarks, countEraserMarks } from '../engine/selection'
+import { clearEraserMarks, countEraserMarks, untagClipLines } from '../engine/selection'
 import { countParts } from '../engine/project'
 import { getHandPresets } from '../engine/handPresets'
 import { dataUrlBytes, formatBytes } from '../lib/imageTools'
@@ -143,7 +143,7 @@ function StrokeInspector(): React.JSX.Element | null {
           )}
           {stroke.clip && (
             <>
-              <button className="btn" title="このグループの範囲を選択範囲として読み込む" onClick={() => setSelection(stroke.clip ?? null)}>
+              <button className="btn" title="このグループの範囲を選択範囲として読み込む" onClick={() => setSelection(untagClipLines(stroke.clip) ?? null)}>
                 範囲を選択に読み込む
               </button>
               <button className="btn" onClick={() => set({ clip: undefined })}>

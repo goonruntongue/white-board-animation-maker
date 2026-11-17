@@ -4,9 +4,9 @@ import { appendToStroke, simplifyPoints, strokeFromRecording } from '../engine/p
 import { hitPart, replaceStrokePart, strokeParts, transformPart, transformStroke } from '../engine/strokeParts'
 import { fitPath, fitTolerance, insertAnchor, nearestOnPath, partPoints, type PathNode } from '../engine/pathEdit'
 import { revealLine, updatePathNodes } from '../livePath'
-import { addEraserMark, addRevealMark, combine, flattenShapes, isDegenerate, normalizeBox, type SelectionOp } from '../engine/selection'
+import { addEraserMark, addRevealMark, combine, flattenShapes, isDegenerate, normalizeBox, untagClipLines, type SelectionOp } from '../engine/selection'
 import type { ClipShape, Stroke, StrokePoint } from '../engine/types'
-import { buildTimeline, rasterizeClip, traceClipShape, WBRenderer } from '../engine/wb-engine'
+import { buildTimeline, clipForLine, hasLineClips, rasterizeClip, traceClipShape, WBRenderer } from '../engine/wb-engine'
 import { CANVAS_FONT_FAMILY } from '../fonts'
 import { useAssets } from '../lib/useAssets'
 import { haptic, useIsPhone } from '../lib/useMedia'
@@ -203,13 +203,14 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const selMask = useMemo(() => (selection && image ? rasterizeClip(selection, imgW, imgH) : null), [selection, image, imgW, imgH])
   const selectedStroke = project.strokes.find((s) => s.id === selectedId)
   const selectedClipMask = useMemo(
-    () => (selectedStroke?.clip && image ? rasterizeClip(selectedStroke.clip, imgW, imgH) : null),
-    [selectedStroke?.clip, image, imgW, imgH]
+    () => (selectedStroke?.clip && image ? rasterizeGroupClip(selectedStroke, imgW, imgH) : null),
+    [selectedStroke?.clip, selectedStroke?.points, image, imgW, imgH]
   )
   const liveStroke = project.strokes.find((s) => s.id === livePart?.strokeId)
+  // 手描きでは、選んでいる線に効く範囲を見せる（線ごとの消しゴムの跡を含む）
   const liveClipMask = useMemo(
-    () => (liveStroke?.clip && image ? rasterizeClip(liveStroke.clip, imgW, imgH) : null),
-    [liveStroke?.clip, image, imgW, imgH]
+    () => (liveStroke?.clip && image ? rasterizeClip(clipForLine(liveStroke.clip, livePart?.part ?? 0), imgW, imgH) : null),
+    [liveStroke?.clip, livePart?.part, image, imgW, imgH]
   )
 
   const liveErasing = tool === 'live' && liveMode === 'erase'
@@ -1165,7 +1166,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
           points: pts,
           duration: Math.max(300, Math.round(recorded)),
           // 選択範囲があればそれを使い、なければ元の範囲を残す
-          clip: st.selection ?? prev?.clip
+          // 線の数が変わるので、線ごとの範囲はグループ全体に効くものに戻す
+          clip: st.selection ?? untagClipLines(prev?.clip)
         })
         st.select(st.rerecordId)
         st.setRerecord(null)
@@ -1181,7 +1183,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
             const last = marks[marks.length - 1]
             if (!last || Math.hypot(q.x - last.x, q.y - last.y) >= 1.5) marks.push({ x: Math.round(q.x * 10) / 10, y: Math.round(q.y * 10) / 10 })
           }
-          st.updateStroke(target.id, { ...appendToStroke(target, rec.points, w), clip: addRevealMark(target.clip, marks, w) })
+          // 足した線（グループの最後の線）だけに効く表示範囲にする
+          st.updateStroke(target.id, { ...appendToStroke(target, rec.points, w), clip: addRevealMark(target.clip, marks, w, strokeParts(target).length) })
           haptic()
         } else if (target && rec.chain) {
           // 続けて書いた線：同じグループに入れ、選ばない（続けて書けば、また同じグループへ）
@@ -1225,7 +1228,9 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       const last = pts[pts.length - 1]
       if (!last || Math.hypot(p.x - last.x, p.y - last.y) >= 1.5) pts.push({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 })
     }
-    st.updateStroke(target.id, { clip: addEraserMark(target.clip, pts, w) })
+    // 手描きの消しゴムは、選んでいる線だけに効く（「範囲」の消しゴムは、グループのすべての線に効く）
+    const line = st.tool === 'live' && st.livePart?.strokeId === target.id ? st.livePart.part : undefined
+    st.updateStroke(target.id, { clip: addEraserMark(target.clip, pts, w, line) })
     st.select(target.id)
     haptic()
   }
@@ -1475,6 +1480,24 @@ function drawAntsPath(ctx: CanvasRenderingContext2D, pts: Pt[], close: boolean, 
   if (close) ctx.closePath()
   strokeAnts(ctx, px, offset, false)
   ctx.restore()
+}
+
+/** グループの範囲のマスク。線ごとの範囲があれば、すべての線の範囲を合わせたもの */
+function rasterizeGroupClip(stroke: Stroke, w: number, h: number): HTMLCanvasElement | OffscreenCanvas {
+  const clip = stroke.clip!
+  if (!hasLineClips(clip)) return rasterizeClip(clip, w, h)
+  const out = rasterizeClip({ shapes: [] }, w, h)
+  const ctx = out.getContext('2d') as CanvasRenderingContext2D
+  const n = strokeParts(stroke).length
+  // 同じ図形の組み合わせになる線は、1回だけ描く（線の多いグループでも重くしない）
+  const seen = new Set<string>()
+  for (let i = 0; i < n; i++) {
+    const key = clip.shapes.map((s, k) => (!s.lines || s.lines.includes(i) ? k : '')).join(',')
+    if (seen.has(key)) continue
+    seen.add(key)
+    ctx.drawImage(rasterizeClip(clipForLine(clip, i), w, h) as CanvasImageSource, 0, 0)
+  }
+  return out
 }
 
 function strokeAnts(ctx: CanvasRenderingContext2D, px: number, offset: number, subtract: boolean): void {
