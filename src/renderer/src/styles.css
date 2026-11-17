@@ -1572,12 +1572,20 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   cursor: pointer;
 }
 .timeline-actions {
-  position: relative;
-  z-index: 5;
   display: flex;
-  justify-content: flex-end;
-  flex-wrap: wrap;
   gap: 6px;
+  padding: 2px;
+}
+/* 右寄せ（はみ出したときに左端が切れないよう、justify-content ではなく余白で寄せる） */
+.timeline-actions > :first-child {
+  margin-left: auto;
+}
+.timeline-actions > button {
+  flex: none;
+  white-space: nowrap;
+}
+.hscroll:has(> .timeline-actions) {
+  z-index: 5;
   margin-top: 5px;
 }
 .timeline-insert, .timeline-delete {
@@ -1603,7 +1611,71 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   margin-top: 6px;
 }
 .timeline-parts-label { flex: none; color: var(--text-2); font-size: 12px; }
-.timeline-parts-list { display: flex; gap: 4px; overflow-x: auto; min-width: 0; padding: 3px; }
+.timeline-parts-list { display: flex; gap: 4px; padding: 3px; }
+.hscroll:has(> .timeline-parts-list) { flex: 1 1 auto; }
+
+/*
+ * 横スクロールする行（ScrollRow）：はみ出している側の端をぼかし、山形の矢印を出す
+ */
+.hscroll {
+  position: relative;
+  min-width: 0;
+}
+.hscroll-track {
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.hscroll-track::-webkit-scrollbar {
+  display: none;
+}
+.hscroll.more-right .hscroll-track {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent);
+}
+.hscroll.more-left .hscroll-track {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 44px);
+  mask-image: linear-gradient(90deg, transparent, #000 44px);
+}
+.hscroll.more-left.more-right .hscroll-track {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 44px, #000 calc(100% - 44px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 44px, #000 calc(100% - 44px), transparent);
+}
+.hscroll-more {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  width: 26px;
+  height: 34px;
+  margin-top: -17px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--key-top), var(--key-bot));
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+  color: var(--accent, #ff7a1a);
+  cursor: pointer;
+}
+.hscroll-more.left {
+  left: -2px;
+}
+.hscroll-more.right {
+  right: -2px;
+  animation: hscroll-nudge 1.6s ease-in-out 2;
+}
+/* 続きがあることに気づきやすいよう、最初に2回だけ右へ小さく揺れる */
+@keyframes hscroll-nudge {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hscroll-more.right { animation: none; }
+}
 .timeline-parts-list button {
   flex: none;
   min-width: 32px;

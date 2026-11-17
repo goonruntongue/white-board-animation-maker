@@ -5,6 +5,7 @@ import { buildTimeline } from '../engine/wb-engine'
 import { strokeParts } from '../engine/strokeParts'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
+import { ScrollRow } from './ScrollRow'
 import { StrokeActions } from './phone/StrokeActions'
 import { useLongPress } from '../lib/useLongPress'
 
@@ -397,7 +398,7 @@ export function Timeline(): React.JSX.Element {
           if (!parts.length) return null
           return <div className="timeline-parts" onPointerDown={(e) => e.stopPropagation()} onPointerMove={(e) => e.stopPropagation()}>
             <span className="timeline-parts-label">線 ({parts.length})</span>
-            <div className="timeline-parts-list" aria-label={`${stroke.name} の線`}>
+            <ScrollRow className="timeline-parts-list" label={`${stroke.name} の線`}>
               {parts.map((_, part) => <button key={part} className={livePart?.strokeId === stroke.id && livePart.part === part ? 'on' : ''} onClick={() => {
                 const st = useEditor.getState()
                 st.setPlaying(false)
@@ -405,10 +406,11 @@ export function Timeline(): React.JSX.Element {
                 st.setTool('live')
                 st.setLivePart({ strokeId: stroke.id, part })
               }} aria-label={`${stroke.name} の線 ${part + 1}`} title={`線 ${part + 1} を選ぶ`}>{part + 1}</button>)}
-            </div>
+            </ScrollRow>
           </div>
         })()}
-        <div className="timeline-actions" onPointerDown={(e) => e.stopPropagation()} onPointerMove={(e) => e.stopPropagation()}>
+        {/* はみ出したら横にスクロール（端に矢印が出る） */}
+        <ScrollRow className="timeline-actions" label="タイムラインの操作" onPointerDown={(e) => e.stopPropagation()} onPointerMove={(e) => e.stopPropagation()}>
           {multiIds.length < 2 && selectedLine && selectedLine.part > 0 && <button className="timeline-insert" title="選んだ線の手前で、グループを2つに分ける（描くタイミングはそのまま）" onClick={() => {
             const st = useEditor.getState()
             st.splitGroup(selectedLine.strokeId, selectedLine.part)
@@ -429,7 +431,7 @@ export function Timeline(): React.JSX.Element {
           <button className="timeline-delete" disabled={!selectedLine || multiIds.length > 1} onClick={deleteLine} title="選択した線を削除（元に戻せます）">
             <Icon name="trash" size={16} /> 選択した線を削除
           </button>
-        </div>
+        </ScrollRow>
       </div>
       {menuFor && <StrokeActions strokeId={menuFor} onClose={() => setMenuFor(null)} />}
       {confirmLast && (
