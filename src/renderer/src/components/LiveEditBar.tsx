@@ -365,7 +365,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
                 <Icon name="trash" size={18} />
                 <small>アンカー削除</small>
               </button>
-              <span className="pc-hint">アンカー・ハンドルをドラッグ。線の上をダブルタップでアンカー追加</span>
+              <span className="pc-hint">アンカーをドラッグで調整。線をダブルタップで追加</span>
             </>
           )}
           {sized && <SizeSlider phone kind={kind} />}

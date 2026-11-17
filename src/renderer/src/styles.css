@@ -4016,6 +4016,12 @@ button {
   flex: 1 1 120px;
   min-width: 100px;
 }
+/* 案内文は、ボタンに押されて縦に細長く折り返さないよう、一定の幅を保つ（はみ出したら行ごと横にスクロール） */
+.pc-row .pc-hint {
+  flex: 1 0 170px;
+  min-width: 170px;
+  line-height: 1.35;
+}
 .pc-select {
   flex: none;
   height: 44px;

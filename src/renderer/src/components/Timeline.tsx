@@ -140,6 +140,38 @@ export function Timeline(): React.JSX.Element {
       viewport.scrollLeft = Math.max(0, x - viewport.clientWidth * 0.2)
     }
   }, [playing, time, total])
+  // 線を選んだら（絵の上で選ぶ・前／次の線・線の番号・グループのタップ）、その線を描き始める時刻へ再生位置を移し、
+  // タイムラインもその線が見える所まで送る（選んでいる線とタイムラインの表示を連動させる）
+  const latest = useRef({ timeline, total })
+  latest.current = { timeline, total }
+  const lineKey = livePart ? `${livePart.strokeId}:${livePart.part}` : ''
+  useEffect(() => {
+    if (!livePart) return
+    const st = useEditor.getState()
+    if (st.playing) return
+    const { timeline: tl, total: tot } = latest.current
+    const index = st.project.strokes.findIndex((s) => s.id === livePart.strokeId)
+    const seg = tl.segments.find((s) => s.index === index)
+    if (!seg) return
+    const part = seg.prep.parts[livePart.part]
+    if (!part) return
+    const dur = seg.end - seg.start
+    const start = seg.start + dur * (seg.prep.param[part.start] ?? 0)
+    const end = seg.start + dur * (seg.prep.param[part.end] ?? 1)
+    st.setTime(start)
+    const viewport = scrollRef.current
+    const track = trackRef.current
+    if (!viewport || !track) return
+    const x0 = (start / tot) * track.offsetWidth
+    const x1 = (end / tot) * track.offsetWidth
+    const left = viewport.scrollLeft
+    const right = left + viewport.clientWidth
+    // すでに見えていれば動かさない。見えていなければ、線の書き始めが左から2割の所に来るように送る
+    if (x0 < left + 8 || x1 > right - 8) {
+      viewport.scrollTo({ left: Math.max(0, x0 - viewport.clientWidth * 0.2), behavior: 'smooth' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineKey])
   const insertBefore = useEditor((s) => s.insertBefore)
   /** 選んでいる線（選んでいるグループの中の線だけ） */
   const selectedLine = livePart && livePart.strokeId === selectedId ? livePart : null
