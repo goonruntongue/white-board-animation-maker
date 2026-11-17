@@ -743,6 +743,17 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const hideLoupe = (): void => {
     if (loupeRef.current) loupeRef.current.style.display = 'none'
   }
+  /**
+   * パス編集のドラッグ中：動かしたアンカーが描き直されてから拡大鏡を更新する（1フレームに1回）。
+   * 指を離したあとに遅れて出ないよう、まだつまんでいるときだけ出す
+   */
+  const loupeFrame = useRef(0)
+  const loupeSoon = (pointerId: number, clientX: number, clientY: number): void => {
+    cancelAnimationFrame(loupeFrame.current)
+    loupeFrame.current = requestAnimationFrame(() => {
+      if (pathDrag.current?.pointerId === pointerId) showLoupe(clientX, clientY)
+    })
+  }
 
   const startPinch = (): void => {
     hideLoupe()
@@ -923,6 +934,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
             st.setLivePath({ ...lp, selected: grab.kind === 'anchor' ? grab.index : lp.selected })
             pathDrag.current = { pointerId: e.pointerId, kind: grab.kind, index: grab.index, start: p, nodes, alt: e.altKey, key: `path:${Date.now()}` }
             capture(e)
+            // 指でつまんだアンカー・ハンドルは指に隠れるので、拡大鏡で見せる
+            if (e.pointerType === 'touch') loupeSoon(e.pointerId, e.clientX, e.clientY)
             return
           }
           // 線の上をダブルクリック（ダブルタップ）：アンカーを足す
@@ -1034,6 +1047,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         }
       }
       updatePathNodes(nodes, pd.key)
+      if (e.pointerType === 'touch') loupeSoon(e.pointerId, e.clientX, e.clientY)
       return
     }
     const ld = liveDrag.current
