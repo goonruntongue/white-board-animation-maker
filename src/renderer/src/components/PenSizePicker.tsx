@@ -37,7 +37,7 @@ export function PenSizePicker({ disabled, kind = 'pen' }: { disabled: boolean; k
   return (
     <div
       className={`tb-group pen-size ${kind === 'eraser' ? 'eraser' : ''}`}
-      title={kind === 'eraser' ? '消しゴムの大きさ' : 'ペン先のサイズ（これから描く軌跡の幅）'}
+      title={kind === 'eraser' ? '消しゴムの大きさ' : 'ペン先のサイズ（これから描く線の幅）'}
     >
       <span className="tb-label">{kind === 'eraser' ? '消しゴム' : 'ペン先'}</span>
       {presets.map((p) => {

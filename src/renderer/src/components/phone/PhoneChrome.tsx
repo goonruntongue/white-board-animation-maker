@@ -57,7 +57,7 @@ export function PhoneAppBar(): React.JSX.Element {
   const appActions: SheetAction[] = [
     { icon: 'image', label: '画像を選ぶ', note: 'カメラロール・ファイルから', onSelect: () => void importImageDialog() },
     { icon: 'camera', label: '写真を撮る', note: 'カメラで撮影して読み込む', onSelect: () => void captureImage() },
-    { icon: 'sparkle', label: '描き順を自動で作る', note: '画像を解析して軌跡の下書きを作る', onSelect: openAutoTrace, disabled: !hasImage },
+    { icon: 'sparkle', label: '描き順を自動で作る', note: '画像を解析してグループの下書きを作る', onSelect: openAutoTrace, disabled: !hasImage },
     { icon: 'save', label: 'プロジェクトを保存', note: '.wbanim（あとで続きを編集できる）', onSelect: () => void saveProject() },
     { icon: 'folder', label: 'プロジェクトを開く', onSelect: () => void openProject() },
     { icon: 'history', label: '自動バックアップから復元', note: '数分前の状態に戻す', onSelect: () => useEditor.getState().openDialog('recovery') },
@@ -132,7 +132,7 @@ function PenOptions({ kind = 'pen' }: { kind?: 'pen' | 'eraser' }): React.JSX.El
   return (
     <>
       {kind === 'eraser' && (
-        <span className={`pc-target ${target < 0 ? 'none' : ''}`}>{target < 0 ? '軌跡を選択' : `#${target + 1} を消す`}</span>
+        <span className={`pc-target ${target < 0 ? 'none' : ''}`}>{target < 0 ? 'グループを選択' : `#${target + 1} を消す`}</span>
       )}
       <span className="pc-label">{kind === 'eraser' ? '大きさ' : 'ペン先'}</span>
       {presets.map((p) => (
@@ -195,7 +195,7 @@ function StrokeOptions(): React.JSX.Element {
   const index = useEditor((s) => s.project.strokes.findIndex((x) => x.id === s.selectedId))
   const count = useEditor((s) => s.project.strokes.length)
   const { moveStroke, removeStroke, setRerecord, updateStroke, setMobileSheet } = useEditor.getState()
-  if (!stroke) return <span className="pc-hint">軌跡をタップして選びます</span>
+  if (!stroke) return <span className="pc-hint">グループをタップして選びます</span>
   return (
     <>
       <span className="pc-label">#{index + 1}</span>

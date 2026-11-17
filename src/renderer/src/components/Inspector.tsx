@@ -25,7 +25,7 @@ export function Inspector(): React.JSX.Element {
       <SheetBar title="設定" />
       <div className="tabs">
         <button className={active === 'stroke' ? 'on' : ''} disabled={!selectedId} onClick={() => setTab('stroke')}>
-          軌跡
+          グループ
         </button>
         <button className={active === 'project' ? 'on' : ''} onClick={() => setTab('project')}>
           再生
@@ -89,15 +89,15 @@ function StrokeInspector(): React.JSX.Element | null {
           ))}
           <button
             className="btn small"
-            title="この軌跡の再生時間を、このページのすべての軌跡に使う（元に戻す（↶）で取り消せます）"
+            title="このグループの再生時間を、このページのすべてのグループに使う（元に戻す（↶）で取り消せます）"
             onClick={() => {
               const st = useEditor.getState()
               const ms = stroke.duration
               st.commit((p) => ({ ...p, strokes: p.strokes.map((x) => (x.duration === ms ? x : { ...x, duration: ms })) }))
-              st.notify(`すべての軌跡の再生時間を ${(ms / 1000).toFixed(2).replace(/\.?0+$/, '')} 秒にしました`)
+              st.notify(`すべてのグループの再生時間を ${(ms / 1000).toFixed(2).replace(/\.?0+$/, '')} 秒にしました`)
             }}
           >
-            すべての軌跡に適用
+            すべてのグループに適用
           </button>
         </div>
         <SliderField
@@ -125,13 +125,13 @@ function StrokeInspector(): React.JSX.Element | null {
             ? '制限なし。なぞった幅の分だけ表示されます。'
             : erased > 0 && erased === stroke.clip.shapes.length - 1
               ? `消しゴムで ${erased} か所を消しています。`
-              : `選択範囲で制限されています${erased > 0 ? `（うち消しゴム ${erased} か所）` : ''}。範囲の外はこの軌跡では表示されません。`}
+              : `選択範囲で制限されています${erased > 0 ? `（うち消しゴム ${erased} か所）` : ''}。範囲の外はこのグループでは表示されません。`}
         </p>
         <div className="btn-row wrap">
           <button
             className="btn"
             disabled={!selection}
-            title="いまの選択範囲を、この軌跡の表示範囲にする"
+            title="いまの選択範囲を、このグループの表示範囲にする"
             onClick={() => set({ clip: selection ?? undefined })}
           >
             いまの選択範囲を適用
@@ -143,7 +143,7 @@ function StrokeInspector(): React.JSX.Element | null {
           )}
           {stroke.clip && (
             <>
-              <button className="btn" title="この軌跡の範囲を選択範囲として読み込む" onClick={() => setSelection(stroke.clip ?? null)}>
+              <button className="btn" title="このグループの範囲を選択範囲として読み込む" onClick={() => setSelection(stroke.clip ?? null)}>
                 範囲を選択に読み込む
               </button>
               <button className="btn" onClick={() => set({ clip: undefined })}>
@@ -231,7 +231,7 @@ function ProjectInspector(): React.JSX.Element {
           onChange={(v) => updateSettings({ finishFull: v })}
         />
       </Section>
-      <Section title="新しい軌跡の既定値">
+      <Section title="新しいグループの既定値">
         <SliderField
           label="見せる幅"
           hint="ショートカット: [ と ] で調整"
@@ -260,14 +260,14 @@ function ProjectInspector(): React.JSX.Element {
             disabled={project.strokes.length === 0}
             onClick={() => commit((p) => ({ ...p, strokes: p.strokes.map((s) => ({ ...s, revealWidth: st.defaultRevealWidth })) }))}
           >
-            全軌跡の幅を既定値に
+            全グループの幅を既定値に
           </button>
           <button
             className="btn"
             disabled={project.strokes.length === 0}
             onClick={() => commit((p) => ({ ...p, strokes: p.strokes.map((s) => ({ ...s, delayAfter: st.defaultDelayAfter })) }))}
           >
-            全軌跡の待機を既定値に
+            全グループの待機を既定値に
           </button>
         </div>
       </Section>

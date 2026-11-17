@@ -86,11 +86,13 @@ export async function makeHandAsset(name: string, src: string, presetId?: string
 let presets: HandPreset[] = []
 
 /** 起動時に一度だけ呼ぶ（画像サイズとペン先位置を調べる） */
-export async function initHandPresets(): Promise<void> {
+export async function initHandPresets(onProgress?: (done: number, total: number) => void): Promise<void> {
   const entries = Object.entries(FILES).map(([path, url]) => {
     const id = path.split('/').pop()!.replace(/\.[^.]+$/, '')
     return { id, url }
   })
+  let done = 0
+  onProgress?.(0, entries.length)
   const loaded = await Promise.all(
     entries.map(async ({ id, url }) => {
       try {
@@ -98,6 +100,8 @@ export async function initHandPresets(): Promise<void> {
         return { id, label, url, hand: await makeHandAsset(label, url, id) }
       } catch {
         return null
+      } finally {
+        onProgress?.(++done, entries.length)
       }
     })
   )

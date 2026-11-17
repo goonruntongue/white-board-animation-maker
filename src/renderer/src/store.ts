@@ -124,7 +124,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   livePart: null,
   liveMode: 'move',
   livePath: null,
-  liveUnit: 'stroke',
+  liveUnit: 'part', // 直すは、いつも1本の線ごと（グループをまとめて扱うのは、タイムライン・描き順・設定）
   time: 0,
   insertBefore: null,
   setInsertBefore: (insertBefore) => set({ insertBefore }),

@@ -946,7 +946,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
           }
         }
         if (!targetId) {
-          st.notify('先に、足したい軌跡を「選ぶ・動かす」でタップして選んでください', 'error')
+          st.notify('先に、足したいグループを「選ぶ・動かす」でタップして選んでください', 'error')
           return
         }
         recording.current = { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }], appendTo: targetId, liveBrush: true }
@@ -1147,7 +1147,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         })
         st.select(st.rerecordId)
         st.setRerecord(null)
-        st.notify('軌跡を録り直しました')
+        st.notify('グループを録り直しました')
         }
       } else if (rec.appendTo) {
         const target = st.project.strokes.find((s) => s.id === rec.appendTo)
@@ -1181,7 +1181,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     const target =
       st.project.strokes.find((s) => s.id === st.selectedId) ?? hitStroke(st.project.strokes, raw[0].x, raw[0].y, w / 2)
     if (!target) {
-      st.notify('消しゴムをかける軌跡を選んでください（「直す（ライブ編集）」・描き順・タイムラインから）', 'error')
+      st.notify('消しゴムをかけるグループを選んでください（「直す（ライブ編集）」・描き順・タイムラインから）', 'error')
       return
     }
     // 近すぎる点を間引く
@@ -1328,7 +1328,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         </div>
       )}
       {image && !rerecordId && !lassoPolyActive && selection && viewMode === 'edit' && (
-        <div className="stage-banner info" title="この状態で描いた軌跡に、選択範囲が記録されます">
+        <div className="stage-banner info" title="この状態で描いた線に、選択範囲が記録されます">
           <span>{isPhone ? '範囲を選択中' : '選択範囲の中だけ表示されます'}</span>
           <button className="btn small primary" data-tour={isPhone ? 'auto-phone' : undefined} onClick={openAutoTrace}>
             <Icon name="sparkle" size={13} /> 自動で作る

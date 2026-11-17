@@ -4,9 +4,9 @@ import { buildTimeline } from '../engine/wb-engine'
 import { useEditor } from '../store'
 
 const HINTS: Record<string, string> = {
-  draw: 'ドラッグで描き順をなぞる ・ Shift＋ドラッグで選んでいる軌跡に描き足す ・ 1〜5 / [ ] でペン先サイズ（最大 600px） ・ ホイールでズーム ・ Alt+ドラッグで移動',
-  erase: 'ドラッグで、選んでいる軌跡の表示を消す（道筋と時間はそのまま） ・ 1〜4 / [ ] で大きさ ・ 元に戻すで取り消し',
-  select: 'クリックで軌跡を選択 ・ ↑↓ で前後の軌跡 ・ Delete で削除',
+  draw: 'ドラッグで描き順をなぞる ・ Shift＋ドラッグで選んでいるグループに描き足す ・ 1〜5 / [ ] でペン先サイズ（最大 600px） ・ ホイールでズーム ・ Alt+ドラッグで移動',
+  erase: 'ドラッグで、選んでいるグループの表示を消す（道筋と時間はそのまま） ・ 1〜4 / [ ] で大きさ ・ 元に戻すで取り消し',
+  select: 'クリックでグループを選択 ・ ↑↓ で前後のグループ ・ Delete で削除',
   pan: 'ドラッグで表示位置を移動 ・ ホイールでズーム',
   rect: 'ドラッグで長方形の範囲 ・ 合成モードはツールバーで切替（Shift 追加 / Alt 除外 / Shift+Alt 交差） ・ Ctrl+A 全体 / Ctrl+D 解除',
   ellipse: 'ドラッグで楕円の範囲 ・ 合成モードはツールバーで切替（Shift 追加 / Alt 除外 / Shift+Alt 交差） ・ Ctrl+A 全体 / Ctrl+D 解除',
@@ -29,7 +29,7 @@ export function StatusBar({ zoom }: { zoom: number }): React.JSX.Element {
           ページ {project.pageIndex + 1}/{project.pages.length}
         </span>
       )}
-      <span>軌跡 {project.strokes.length}</span>
+      <span>グループ {project.strokes.length}</span>
       <span>全長 {formatTime(total)}</span>
       <span>ペン先 {project.settings.defaultRevealWidth}px</span>
       <span className="led-item" title="選択範囲">

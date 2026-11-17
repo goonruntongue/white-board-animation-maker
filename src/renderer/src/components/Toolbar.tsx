@@ -11,7 +11,7 @@ import { LiveEditBar } from './LiveEditBar'
 const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
   { id: 'draw', icon: 'pen', label: '描く', key: 'D' },
   { id: 'erase', icon: 'eraser', label: '消す', key: 'E' },
-  { id: 'select', icon: 'cursor', label: '軌跡を選ぶ', key: 'V' },
+  { id: 'select', icon: 'cursor', label: 'グループを選ぶ', key: 'V' },
   { id: 'live', icon: 'liveEdit', label: 'ライブ編集', key: 'W' },
   { id: 'pan', icon: 'hand', label: '移動', key: 'H' }
 ]
@@ -87,7 +87,7 @@ export function Toolbar(): React.JSX.Element {
         <button
           className="tool-btn"
           data-tour="auto"
-          title="描き順を自動で作る：画像を解析して、手が順番に書いていく軌跡の下書きを作ります"
+          title="描き順を自動で作る：画像を解析して、手が順番に書いていくグループの下書きを作ります"
           disabled={!hasImage}
           onClick={openAutoTrace}
         >

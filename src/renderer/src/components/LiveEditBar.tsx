@@ -97,7 +97,7 @@ function revealAlongLive(): void {
       return { ...stroke, clip }
     })
   }))
-  st.notify(`${whole ? '軌跡' : '線'}が通る範囲を表示できるようにしました`)
+  st.notify(`${whole ? 'グループ' : '線'}が通る範囲を表示できるようにしました`)
 }
 
 /** 選んでいる軌跡（線）を、その中心を基準に拡大・縮小する（続けて押した分は、元に戻す1回分にまとめる） */
@@ -169,8 +169,8 @@ function ToolSize({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' })
 
 const MODES = [
   { id: 'move', icon: 'move', label: '選ぶ・動かす', hint: '選ぶ・動かす：タップで選び、ドラッグで動かす。太さ・大きさも変えられます' },
-  { id: 'brush', icon: 'plusPen', label: 'ブラシで足す', hint: 'ブラシで足す：なぞった所を、選んだ軌跡に足す（ペンもそこを通り、表示範囲も広がる）' },
-  { id: 'erase', icon: 'eraser', label: '消しゴム', hint: '消しゴム：なぞった所を、選んだ軌跡では見せない' },
+  { id: 'brush', icon: 'plusPen', label: 'ブラシで足す', hint: 'ブラシで足す：なぞった所を、選んだグループに足す（ペンもそこを通り、表示範囲も広がる）' },
+  { id: 'erase', icon: 'eraser', label: '消しゴム', hint: '消しゴム：なぞった所を、選んだグループでは見せない' },
   { id: 'path', icon: 'pathPen', label: 'パス編集', hint: 'パス編集：線をアンカーとハンドルの曲線として編集する' }
 ] as const
 
@@ -198,32 +198,6 @@ function ModeSwitch({ phone }: { phone: boolean }): React.JSX.Element {
         </button>
       ))}
     </>
-  )
-}
-
-/** 選ぶ単位の切り替え：軌跡ごと ／ 線ごと */
-function UnitSwitch({ phone }: { phone: boolean }): React.JSX.Element {
-  const unit = useEditor((s) => s.liveUnit)
-  const setUnit = useEditor.getState().setLiveUnit
-  const units = [
-    { id: 'stroke', label: '軌跡ごと', short: '軌跡', hint: '軌跡ごと：タップした所の軌跡をまるごと選ぶ' },
-    { id: 'part', label: '線ごと', short: '線', hint: '線ごと：軌跡の中の1本の線（ペンを下ろしてから上げるまで）だけを選ぶ' }
-  ] as const
-  return (
-    <div className={phone ? 'pc-seg' : 'live-unit'} role="radiogroup" aria-label="選ぶ単位">
-      {units.map((u) => (
-        <button
-          key={u.id}
-          role="radio"
-          aria-checked={unit === u.id}
-          className={phone ? `pc-key text ${unit === u.id ? 'on' : ''}` : `live-unit-btn ${unit === u.id ? 'on' : ''}`}
-          title={u.hint}
-          onClick={() => setUnit(u.id)}
-        >
-          {phone ? u.label : u.short}
-        </button>
-      ))}
-    </div>
   )
 }
 
@@ -255,7 +229,7 @@ function StrokeKeys({ strokeId }: { strokeId: string }): React.JSX.Element | nul
       </button>
       <button
         className="pc-key danger"
-        aria-label="軌跡を削除"
+        aria-label="グループを削除"
         onClick={() => {
           setLivePart(null)
           removeStroke(strokeId)
@@ -277,9 +251,9 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
   const clear = (): void => useEditor.getState().setLivePart(null)
   const pathing = mode === 'path'
   const whole = unit === 'stroke' && !pathing
-  // パス編集はいつも1本の線ごとなので、単位の切り替えは出さない
-  const unitSwitch = pathing ? null : <UnitSwitch phone={phone} />
-  const what = whole ? '軌跡' : '線'
+  // 直すは、いつも1本の線ごと（単位の切り替えはない）
+  const unitSwitch = null
+  const what = whole ? 'グループ' : '線'
   const size = mode === 'brush' ? <ToolSize phone={phone} kind="brush" /> : mode === 'erase' ? <ToolSize phone={phone} kind="eraser" /> : null
 
   if (!live) {
@@ -287,9 +261,9 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
       mode === 'path'
         ? '編集したい線を押して選びます'
         : mode === 'brush'
-        ? '足したい軌跡の上からなぞり始めます'
+        ? '足したいグループの上からなぞり始めます'
         : mode === 'erase'
-          ? 'なぞった所にある軌跡を消します'
+          ? 'なぞった所にあるグループを消します'
           : `絵の上を押して${what}を選びます。ドラッグで動かし、太さ・大きさも変えられます`
     return phone ? (
       <>
@@ -307,7 +281,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
   }
 
   const label = whole ? (phone ? `#${live.index + 1}（線 ${live.parts} 本）` : `#${live.index + 1}（${live.parts}本）`) : phone ? `#${live.index + 1} の線 ${live.part + 1}/${live.parts}` : `#${live.index + 1}・線 ${live.part + 1}/${live.parts}`
-  const widthTitle = whole ? '軌跡の太さ（すべての線を同じ割合で。[ ] キーでも変えられます）' : '選んだ線の太さ（[ ] キーでも変えられます）'
+  const widthTitle = whole ? 'グループの太さ（すべての線を同じ割合で。[ ] キーでも変えられます）' : '選んだ線の太さ（[ ] キーでも変えられます）'
 
   if (phone) {
     return (
@@ -318,10 +292,10 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
         <button className="pc-key" disabled={!liveHasClip} onClick={revealAlongLive} title="選択した線が通る範囲を表示します。近くの絵も表示されることがあります">
           <Icon name="layers" size={18} /><small>通過部分を表示</small>
         </button>
-        <button className="pc-key" onClick={() => { const st = useEditor.getState(); whole ? st.setRerecord(live.strokeId) : st.setRerecordPart(live.strokeId, live.part) }} title={whole ? '軌跡全体を手で描き直す' : '選んだ線だけを手で描き直す'}>
+        <button className="pc-key" onClick={() => { const st = useEditor.getState(); whole ? st.setRerecord(live.strokeId) : st.setRerecordPart(live.strokeId, live.part) }} title={whole ? 'グループ全体を手で描き直す' : '選んだ線だけを手で描き直す'}>
           <Icon name="record" size={18} /><small>{whole ? '全体を描き直す' : '線を描き直す'}</small>
         </button>
-        <button className="pc-key" disabled={!liveHasClip} onClick={() => useEditor.getState().openDialog('auto')} title="選択中の軌跡の表示範囲を自動で作り直す">
+        <button className="pc-key" disabled={!liveHasClip} onClick={() => useEditor.getState().openDialog('auto')} title="選択中のグループの表示範囲を自動で作り直す">
           <Icon name="sparkle" size={18} /><small>自動で再作成</small>
         </button>
         <button className="pc-key" aria-label={`前の${what}を選ぶ`} onClick={() => stepLivePart(-1)}>
@@ -365,7 +339,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
             <span className="pc-value">{live.width}</span>
             {!whole && (
               <button className="pc-key text" onClick={applyToStroke}>
-                軌跡全体に
+                グループ全体に
               </button>
             )}
           </>
@@ -383,8 +357,8 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
       {unitSwitch}
       <span className="tb-label">{label}</span>
       <button className="tool-btn live-redo" disabled={!liveHasClip} onClick={revealAlongLive} title="選択した線が通る範囲を表示します。近くの絵も表示されることがあります"><Icon name="layers" /><span>通過部分を表示</span></button>
-      <button className="tool-btn live-redo" title={whole ? '軌跡全体を手で描き直す' : '選んだ線だけを手で描き直す'} onClick={() => { const st = useEditor.getState(); whole ? st.setRerecord(live.strokeId) : st.setRerecordPart(live.strokeId, live.part) }}><Icon name="record" /><span>{whole ? '全体を描き直す' : '線を描き直す'}</span></button>
-      <button className="tool-btn live-redo" disabled={!liveHasClip} title={liveHasClip ? '選択中の軌跡の表示範囲を自動で作り直す' : '自動で再作成するには、軌跡に表示範囲が必要です'} onClick={() => useEditor.getState().openDialog('auto')}><Icon name="sparkle" /><span>自動で再作成</span></button>
+      <button className="tool-btn live-redo" title={whole ? 'グループ全体を手で描き直す' : '選んだ線だけを手で描き直す'} onClick={() => { const st = useEditor.getState(); whole ? st.setRerecord(live.strokeId) : st.setRerecordPart(live.strokeId, live.part) }}><Icon name="record" /><span>{whole ? '全体を描き直す' : '線を描き直す'}</span></button>
+      <button className="tool-btn live-redo" disabled={!liveHasClip} title={liveHasClip ? '選択中のグループの表示範囲を自動で作り直す' : '自動で再作成するには、グループに表示範囲が必要です'} onClick={() => useEditor.getState().openDialog('auto')}><Icon name="sparkle" /><span>自動で再作成</span></button>
       <button className="icon-btn" title={`前の${what} (,)`} onClick={() => stepLivePart(-1)}>
         <Icon name="up" />
       </button>
@@ -422,7 +396,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
             {live.width}
           </span>
           {!whole && (
-            <button className="icon-btn" title="この太さを、同じ軌跡のすべての線に使う" onClick={applyToStroke}>
+            <button className="icon-btn" title="この太さを、同じグループのすべての線に使う" onClick={applyToStroke}>
               <Icon name="layers" />
             </button>
           )}

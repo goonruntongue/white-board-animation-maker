@@ -76,7 +76,7 @@ export function RecoveryDialog(): React.JSX.Element {
                   <div className="rec-what">
                     <span className="rec-name">{s.name}</span>
                     <span className="muted-text small">
-                      軌跡 {s.strokes} 本{i === 0 ? ' ・ いちばん新しい' : ''}
+                      グループ {s.strokes} 個{i === 0 ? ' ・ いちばん新しい' : ''}
                     </span>
                   </div>
                   <button className={`btn ${i === 0 ? 'primary' : ''}`} disabled={busy !== null} onClick={() => void restore(s)}>

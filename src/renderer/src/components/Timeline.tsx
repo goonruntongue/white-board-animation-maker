@@ -59,7 +59,7 @@ export function Timeline(): React.JSX.Element {
     st.setViewMode('edit')
     st.setRerecord(null)
     st.setTool('draw')
-    st.notify('再生位置に近い軌跡の境目へ追加します。画像をなぞってください')
+    st.notify('再生位置に近いグループの境目へ追加します。画像をなぞってください')
   }
 
   const finishDrag = (id: string, clientX: number): void => {
@@ -212,12 +212,8 @@ export function Timeline(): React.JSX.Element {
                     return
                   }
                   setMultiIds([])
+                  // グループを選ぶ（線は、下の線の番号か、直すで絵の上をタップして選ぶ）
                   select(stroke.id)
-                  const st = useEditor.getState()
-                  if (st.tool === 'live' && st.viewMode === 'edit') {
-                    if (st.liveMode !== 'path') st.setLiveUnit('stroke')
-                    st.setLivePart({ strokeId: stroke.id, part: 0 })
-                  }
                 }}
                 onDelete={() => { if (multiIds.length > 1) useEditor.getState().notify('複数選択を解除してから削除してください'); else useEditor.getState().removeStroke(stroke.id) }}
                 onDoubleClick={() => seekTo(clientXAt(trackRef.current, seg.start / total))}
@@ -228,7 +224,7 @@ export function Timeline(): React.JSX.Element {
               />
             )
           })}
-          {timeline.segments.length === 0 && <div className="track-empty">軌跡を追加するとここに並びます</div>}
+          {timeline.segments.length === 0 && <div className="track-empty">グループを追加するとここに並びます</div>}
           {drop && <div className="timeline-drop-marker" style={{ left: `${drop.x}%` }} />}
         </div>
         <div className="playhead" style={{ left: `${(time / total) * 100}%` }}>
@@ -260,21 +256,21 @@ export function Timeline(): React.JSX.Element {
             const st = useEditor.getState()
             if (st.tool === 'live' && (st.liveUnit === 'part' || st.liveMode === 'path') && st.livePart?.strokeId === selectedId) st.setRerecordPart(selectedId, st.livePart.part)
             else st.setRerecord(selectedId)
-          }}>{tool === 'live' && (liveUnit === 'part' || liveMode === 'path') && livePart?.strokeId === selectedId ? '選んだ線を描き直す' : 'ブロック全体を描き直す'}</button>}
+          }}>{tool === 'live' && (liveUnit === 'part' || liveMode === 'path') && livePart?.strokeId === selectedId ? '選んだ線を描き直す' : 'グループ全体を描き直す'}</button>}
           <button className={`timeline-insert ${multiMode ? 'on' : ''}`} onClick={() => {
             if (multiMode) { setMultiMode(false); setMultiIds([]) }
             else { setMultiMode(true); setMultiIds(selectedId ? [selectedId] : []) }
           }}>{multiMode ? '複数選択を終了' : '複数選択'}</button>
           {multiIds.length > 1 && <button className="timeline-insert" onClick={() => {
             const st = useEditor.getState()
-            if (st.mergeSelectedStrokes(multiIds)) { setMultiIds([]); setMultiMode(false); st.notify('選択した軌跡を結合しました') }
-            else st.notify('連続した軌跡を選択してください。再生の有無が異なる軌跡は結合できません')
+            if (st.mergeSelectedStrokes(multiIds)) { setMultiIds([]); setMultiMode(false); st.notify('選択したグループを結合しました') }
+            else st.notify('連続したグループを選択してください。再生の有無が異なるグループは結合できません')
           }}>{multiIds.length}件を結合</button>}
-          <button className={`timeline-insert ${insertBefore ? 'on' : ''}`} onClick={beginInsert} title="再生位置に近い軌跡の境目に、次の手描き軌跡を追加">
+          <button className={`timeline-insert ${insertBefore ? 'on' : ''}`} onClick={beginInsert} title="再生位置に近いグループの境目に、手描きの新しいグループを追加">
             {insertBefore ? '挿入を取消' : '＋ この位置に描く'}
           </button>
-          <button className="timeline-delete" disabled={!selectedId || multiIds.length > 1} onClick={() => { if (selectedId) useEditor.getState().removeStroke(selectedId) }} title="選択した軌跡を削除（元に戻せます）">
-            <Icon name="trash" size={16} /> 選択した軌跡を削除
+          <button className="timeline-delete" disabled={!selectedId || multiIds.length > 1} onClick={() => { if (selectedId) useEditor.getState().removeStroke(selectedId) }} title="選択したグループを削除（元に戻せます）">
+            <Icon name="trash" size={16} /> 選択したグループを削除
           </button>
         </div>
       </div>

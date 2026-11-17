@@ -103,7 +103,7 @@ export function AutoTraceDialog(): React.JSX.Element {
         : autoTrace(await loadImage(project.image.dataUrl), project.image, project.settings.boardColor, { detail, pathMode, speed, scrubV, scrubH, scrubCycles, scrubTilt, revealWidth }, start)
       const st = useEditor.getState()
       if (st.project !== project || (mode === 'stroke' && !selectedStroke?.clip)) throw new Error('編集中の内容が変わりました。もう一度お試しください')
-      if (result.strokes.length === 0) throw new Error('新しい軌跡を作れませんでした。元の軌跡はそのままです')
+      if (result.strokes.length === 0) throw new Error('新しいグループを作れませんでした。元のグループはそのままです')
       // まとめて1回の変更にする（「元に戻す」1回で取り消せる）
       st.commit((p) => ({ ...p, strokes: mode === 'stroke' ? p.strokes.flatMap((s) => s.id === selectedStroke!.id ? result.strokes : [s]) : mode === 'append' ? [...p.strokes, ...result.strokes] : result.strokes }))
       st.select(null)
@@ -112,8 +112,8 @@ export function AutoTraceDialog(): React.JSX.Element {
       st.setTime(0)
       notify(
         result.fallback
-          ? '文字や図をうまく分けられなかったため、画像全体を1本の軌跡にしました'
-          : `${result.blocks} 本の軌跡を作りました。再生して確かめ、順番や速さは描き順リストで直せます`
+          ? '文字や図をうまく分けられなかったため、画像全体を1つのグループにしました'
+          : `${result.blocks} 個のグループを作りました。再生して確かめ、順番や速さは描き順リストで直せます`
       )
       close()
     } catch (e) {
@@ -137,7 +137,7 @@ export function AutoTraceDialog(): React.JSX.Element {
         </header>
         <div className="modal-body">
           <p className="lead">
-            画像の文字や図をかたまりごとに見つけ、上から順に手が書いていく軌跡を作ります。できた軌跡は下書きです。順番の入れ替え・録り直し・描き足し・削除で、あとから自由に直せます。
+            画像の文字や図をかたまりごとに見つけ、上から順に手が書いていくグループを作ります。できたグループは下書きです。順番の入れ替え・録り直し・描き足し・削除で、あとから自由に直せます。
           </p>
           <div className="form-grid">
             <label>描き方</label>
@@ -235,9 +235,9 @@ export function AutoTraceDialog(): React.JSX.Element {
             </div>
             {existing > 0 && (
               <>
-                <label>いまの軌跡（{existing} 本）</label>
-                <div className="choice-row" role="radiogroup" aria-label="いまの軌跡の扱い">
-                  {selectedStroke?.clip && !fill && <button role="radio" aria-checked={mode === 'stroke'} className={`choice ${mode === 'stroke' ? 'on' : ''}`} onClick={() => setMode('stroke')}><strong>選択中の軌跡だけ</strong><small>元の位置で作り直す</small></button>}
+                <label>いまのグループ（{existing} 個）</label>
+                <div className="choice-row" role="radiogroup" aria-label="いまのグループの扱い">
+                  {selectedStroke?.clip && !fill && <button role="radio" aria-checked={mode === 'stroke'} className={`choice ${mode === 'stroke' ? 'on' : ''}`} onClick={() => setMode('stroke')}><strong>選択中のグループだけ</strong><small>元の位置で作り直す</small></button>}
                   <button role="radio" aria-checked={mode === 'replace'} className={`choice ${mode === 'replace' ? 'on' : ''}`} onClick={() => setMode('replace')}>
                     <strong>置き換える</strong>
                   </button>
@@ -245,7 +245,7 @@ export function AutoTraceDialog(): React.JSX.Element {
                     <strong>後ろに追加</strong>
                   </button>
                 </div>
-                {mode === 'stroke' && <p>選択中の軌跡の表示範囲だけを解析し、同じ順番の位置に置き換えます。ほかの軌跡はそのままです。元の時間は引き継がれません。消した部分は解析範囲から除かれます。</p>}
+                {mode === 'stroke' && <p>選択中のグループの表示範囲だけを解析し、同じ順番の位置に置き換えます。ほかのグループはそのままです。元の時間は引き継がれません。消した部分は解析範囲から除かれます。</p>}
               </>
             )}
           </div>
@@ -306,7 +306,7 @@ function FillPreview({ image, selection, width, direction, motion, v, h, cycles,
             else ctx.lineTo((p.x - x) * scale, (p.y - y) * scale)
           }
           ctx.strokeStyle = '#ff8a32'; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke()
-          setMessage('青：選択範囲　オレンジ：軌跡（線の間はペンを上げます）')
+          setMessage('青：選択範囲　オレンジ：線（線の間はペンを上げます）')
         } catch (error) {
           if (!cancelled) setMessage('プレビューできません: ' + (error instanceof Error ? error.message : String(error)))
         }
@@ -314,7 +314,7 @@ function FillPreview({ image, selection, width, direction, motion, v, h, cycles,
     }, 250)
     return () => { cancelled = true; window.clearTimeout(timer) }
   }, [image, selection, width, direction, motion, v, h, cycles, tilt, zoomSelection])
-  return <div className="fill-preview"><div className="fill-preview-heading"><strong>作成前のプレビュー</strong><button type="button" className="btn" onClick={() => setZoomSelection(!zoomSelection)}>{zoomSelection ? '画像全体' : '範囲を拡大'}</button></div><canvas ref={canvas} aria-label="選択範囲と生成される軌跡のプレビュー" /><p aria-live="polite">{message}{zoomSelection ? '（範囲周辺を拡大中）' : ''}</p></div>
+  return <div className="fill-preview"><div className="fill-preview-heading"><strong>作成前のプレビュー</strong><button type="button" className="btn" onClick={() => setZoomSelection(!zoomSelection)}>{zoomSelection ? '画像全体' : '範囲を拡大'}</button></div><canvas ref={canvas} aria-label="選択範囲と生成されるグループのプレビュー" /><p aria-live="polite">{message}{zoomSelection ? '（範囲周辺を拡大中）' : ''}</p></div>
 }
 
 /** 手の動きの小さな図（プリセットのボタン用） */

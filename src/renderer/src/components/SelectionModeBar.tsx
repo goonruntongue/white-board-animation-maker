@@ -85,7 +85,7 @@ export function SelectionModeBar(): React.JSX.Element {
         </button>
         <button
           className="tool-btn icon-only"
-          title={`選択範囲の中を消す (Delete)。選んでいる軌跡から消します。軌跡を選んでいなければ、範囲を通るすべての軌跡から消します`}
+          title={`選択範囲の中を消す (Delete)。選んでいるグループから消します。グループを選んでいなければ、範囲を通るすべてのグループから消します`}
           disabled={!hasSelection}
           onClick={eraseSelection}
         >

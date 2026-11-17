@@ -91,7 +91,7 @@ export async function setImageFromDataUrl(name: string, dataUrl: string, replace
         : resized
           ? `画像を読み込みました（大きいため ${asset.width}×${asset.height} に縮小）`
           : replace
-            ? '画像を差し替えました（軌跡はそのまま残っています）'
+            ? '画像を差し替えました（グループはそのまま残っています）'
             : '画像を読み込みました。「自動」で描き順を作るか、「描く」ツールでなぞってください'
     )
   } catch (e) {
@@ -174,7 +174,7 @@ export function totalDuration(): number {
 export function togglePlay(): void {
   const s = get()
   if (!s.project.image || s.project.strokes.length === 0) {
-    s.notify('再生するには画像と軌跡が必要です', 'error')
+    s.notify('再生するには画像とグループが必要です', 'error')
     return
   }
   if (s.playing) {
@@ -231,15 +231,15 @@ export function eraseSelection(): void {
     })
   }
   if (targets.length === 0) {
-    s.notify('選択範囲の中を通る軌跡がありません', 'error')
+    s.notify('選択範囲の中を通るグループがありません', 'error')
     return
   }
   const ids = new Set(targets.map((t) => t.id))
   s.commit((p) => ({ ...p, strokes: p.strokes.map((st) => (ids.has(st.id) ? { ...st, clip: addAreaErase(st.clip, sel) } : st)) }))
   s.notify(
     targets.length === 1
-      ? `#${s.project.strokes.findIndex((x) => x.id === targets[0].id) + 1} の軌跡から、選択範囲の中を消しました（元に戻す（↶）で取り消せます）`
-      : `${targets.length} 本の軌跡から、選択範囲の中を消しました（元に戻す（↶）で取り消せます）`
+      ? `#${s.project.strokes.findIndex((x) => x.id === targets[0].id) + 1} のグループから、選択範囲の中を消しました（元に戻す（↶）で取り消せます）`
+      : `${targets.length} 個のグループから、選択範囲の中を消しました（元に戻す（↶）で取り消せます）`
   )
 }
 
@@ -251,7 +251,7 @@ export function openExport(kind: 'html' | 'video'): void {
     return
   }
   if (!pages.some((pg) => pg.image && pg.strokes.length > 0)) {
-    s.notify('軌跡がありません。「自動」で作るか、「描く」ツールで描き順をなぞってください', 'error')
+    s.notify('グループがありません。「自動」で作るか、「描く」ツールで描き順をなぞってください', 'error')
     return
   }
   s.openDialog(kind)
