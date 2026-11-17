@@ -815,7 +815,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       const wantAppend = !st.rerecordId && (e.shiftKey || st.appendMode)
       const appendTo = wantAppend ? st.project.strokes.find((s) => s.id === st.selectedId)?.id : undefined
       if (st.appendMode && !e.shiftKey && !appendTo && !st.rerecordId) {
-        st.notify('描き足す軌跡を選んでください（描き順・タイムライン・「選ぶ」ツールから）', 'error')
+        st.notify('描き足す軌跡を選んでください（描き順・タイムライン・「直す（ライブ編集）」から）', 'error')
         return
       }
       recording.current = { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }], appendTo }
@@ -1144,7 +1144,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     const target =
       st.project.strokes.find((s) => s.id === st.selectedId) ?? hitStroke(st.project.strokes, raw[0].x, raw[0].y, w / 2)
     if (!target) {
-      st.notify('消しゴムをかける軌跡を選んでください（「選ぶ」ツール・描き順・タイムラインから）', 'error')
+      st.notify('消しゴムをかける軌跡を選んでください（「直す（ライブ編集）」・描き順・タイムラインから）', 'error')
       return
     }
     // 近すぎる点を間引く

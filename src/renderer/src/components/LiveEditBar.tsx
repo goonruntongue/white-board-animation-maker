@@ -227,6 +227,47 @@ function UnitSwitch({ phone }: { phone: boolean }): React.JSX.Element {
   )
 }
 
+/** スマホ：選んでいる軌跡そのものの操作（描き順の入れ替え・表示・詳しい設定・削除）。以前の「選ぶ」道具にあったもの */
+function StrokeKeys({ strokeId }: { strokeId: string }): React.JSX.Element | null {
+  const index = useEditor((s) => s.project.strokes.findIndex((x) => x.id === strokeId))
+  const count = useEditor((s) => s.project.strokes.length)
+  const hidden = useEditor((s) => !!s.project.strokes.find((x) => x.id === strokeId)?.hidden)
+  if (index < 0) return null
+  const { moveStroke, removeStroke, updateStroke, setMobileSheet, setLivePart } = useEditor.getState()
+  return (
+    <>
+      <span className="pc-label">描き順</span>
+      <button className="pc-key" aria-label="描き順を1つ前へ" disabled={index === 0} onClick={() => moveStroke(strokeId, index - 1)}>
+        <Icon name="up" size={18} />
+        <small>順を前へ</small>
+      </button>
+      <button className="pc-key" aria-label="描き順を1つ後ろへ" disabled={index === count - 1} onClick={() => moveStroke(strokeId, index + 1)}>
+        <Icon name="down" size={18} />
+        <small>順を後へ</small>
+      </button>
+      <button className="pc-key" aria-label={hidden ? '再生に含める' : '再生から外す'} onClick={() => updateStroke(strokeId, { hidden: !hidden })}>
+        <Icon name={hidden ? 'eyeOff' : 'eye'} size={18} />
+        <small>{hidden ? '非表示' : '表示'}</small>
+      </button>
+      <button className="pc-key" aria-label="詳しい設定" onClick={() => setMobileSheet('inspector')}>
+        <Icon name="sliders" size={18} />
+        <small>設定</small>
+      </button>
+      <button
+        className="pc-key danger"
+        aria-label="軌跡を削除"
+        onClick={() => {
+          setLivePart(null)
+          removeStroke(strokeId)
+        }}
+      >
+        <Icon name="trash" size={18} />
+        <small>削除</small>
+      </button>
+    </>
+  )
+}
+
 export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.Element {
   const live = useLive()
   const liveHasClip = useEditor((s) => !!s.project.strokes.find((stroke) => stroke.id === s.livePart?.strokeId)?.clip)
@@ -283,11 +324,11 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
         <button className="pc-key" disabled={!liveHasClip} onClick={() => useEditor.getState().openDialog('auto')} title="選択中の軌跡の表示範囲を自動で作り直す">
           <Icon name="sparkle" size={18} /><small>自動で再作成</small>
         </button>
-        <button className="pc-key" aria-label={`前の${what}`} onClick={() => stepLivePart(-1)}>
+        <button className="pc-key" aria-label={`前の${what}を選ぶ`} onClick={() => stepLivePart(-1)}>
           <Icon name="up" size={18} />
           <small>前の{what}</small>
         </button>
-        <button className="pc-key" aria-label={`次の${what}`} onClick={() => stepLivePart(1)}>
+        <button className="pc-key" aria-label={`次の${what}を選ぶ`} onClick={() => stepLivePart(1)}>
           <Icon name="down" size={18} />
           <small>次の{what}</small>
         </button>
@@ -329,6 +370,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
             )}
           </>
         ))}
+        <StrokeKeys strokeId={live.strokeId} />
         <button className="pc-key" aria-label="選択を外す" onClick={clear}>
           <Icon name="x" size={18} />
         </button>

@@ -1,7 +1,8 @@
 // スマホ用の操作部品。
 //   上部バー     … メニュー・作品名・元に戻す／やり直す（よく使うものだけ）
 //   オプションバー … いま選んでいる道具の設定（ペン先／範囲の合成モード／選んだ軌跡の操作）
-//   ドック       … 親指が届く画面下に、道具と「描き順」「設定」「書き出し」
+//   ドック       … 親指が届く画面下に、作業の順番どおり「自動｜描く｜直す｜範囲」と「描き順」「設定」「書き出し」
+//                  （「選ぶ」「消す」は「直す」＝ライブ編集にまとめた）
 import { useState } from 'react'
 import {
   captureImage,
@@ -264,6 +265,15 @@ export function PhoneDock(): React.JSX.Element {
     if (sheet) setMobileSheet(null)
   }
 
+  /** 直す：タイムラインなどで選んでいた軌跡があれば、そのまま選んだ状態で始める */
+  const openFix = (): void => {
+    const st = useEditor.getState()
+    pick('live')
+    if (!st.livePart && st.selectedId && st.project.strokes.some((s) => s.id === st.selectedId)) {
+      st.setLivePart({ strokeId: st.selectedId, part: 0 })
+    }
+  }
+
   const exportActions: SheetAction[] = [
     { icon: 'code', label: 'HTML として書き出す', note: '1ファイルでオフライン再生（スライドにも埋め込める）', onSelect: () => openExport('html') },
     { icon: 'film', label: '動画・GIFとして書き出す', note: 'MP4・WebM・GIF（端末により異なります）', onSelect: () => openExport('video') },
@@ -299,8 +309,17 @@ export function PhoneDock(): React.JSX.Element {
 
   return (
     <nav className="phone-dock" aria-label="道具とメニュー">
+      {/* やる順番に並べる：自動で作る → 自分で描く → 直す（選ぶ・消す・足す・パス編集をまとめた） → 範囲 */}
+      {key({ id: 'auto', icon: 'sparkle', label: '自動', on: false, disabled: !hasImage, onClick: () => { haptic(); openAutoTrace() } })}
       {key({ id: 'draw', icon: 'pen', label: '描く', on: tool === 'draw', disabled: !hasImage, onClick: () => pick('draw') })}
-      {key({ id: 'erase', icon: 'eraser', label: '消す', on: tool === 'erase', disabled: !hasImage, onClick: () => pick('erase') })}
+      {key({
+        id: 'live',
+        icon: 'liveEdit',
+        label: '直す',
+        on: tool === 'live' || tool === 'select' || tool === 'erase',
+        disabled: !hasImage,
+        onClick: openFix
+      })}
       {key({
         id: 'sel',
         icon: shape.icon,
@@ -311,8 +330,6 @@ export function PhoneDock(): React.JSX.Element {
         // 範囲ツールを使っているときにもう一度押すと、形を選べる
         onClick: () => (isSel ? setMenu('shape') : pick(lastSel))
       })}
-      {key({ id: 'select', icon: 'cursor', label: '選ぶ', on: tool === 'select', disabled: !hasImage, onClick: () => pick('select') })}
-      {key({ id: 'live', icon: 'liveEdit', label: 'ライブ', on: tool === 'live', disabled: !hasImage, onClick: () => pick('live') })}
       <span className="dock-sep" aria-hidden />
       {key({
         id: 'strokes',
