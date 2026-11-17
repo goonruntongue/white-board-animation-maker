@@ -44,8 +44,8 @@ interface EditorState {
    * 少し間に（近くから）次の線を書き始めると、同じグループに入る。区切る・時間が空く・離れた所から書くと、新しいグループ
    */
   drawChain: { id: string; at: number; x: number; y: number } | null
-  /** スマホ：ブラシ中に隠しているタイムラインを、一時的に出しているか */
-  timelinePeek: boolean
+  /** スマホ：下のタイムラインを隠しているか（手描きのブラシに入ると隠し、ほかの操作に移ると出す。ボタンでいつでも切り替え） */
+  timelineHidden: boolean
   /**
    * ライブ編集の操作：move＝タップで選び、ドラッグで動かす / brush＝なぞった所を選んだ軌跡に足す / erase＝消しゴムで消す /
    * path＝線をアンカーとハンドルの曲線として編集する
@@ -111,7 +111,7 @@ interface EditorState {
   setLiveMode: (m: 'move' | 'brush' | 'erase' | 'path') => void
   setLivePath: (p: EditorState['livePath']) => void
   setDrawChain: (c: EditorState['drawChain']) => void
-  setTimelinePeek: (v: boolean) => void
+  setTimelineHidden: (v: boolean) => void
   setLiveUnit: (u: 'stroke' | 'part') => void
   setTime: (t: number) => void
   setPlaying: (v: boolean) => void
@@ -138,7 +138,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   liveMode: 'brush',
   livePath: null,
   drawChain: null,
-  timelinePeek: false,
+  timelineHidden: false,
   liveUnit: 'part', // 直すは、いつも1本の線ごと（グループをまとめて扱うのは、タイムライン・描き順・設定）
   time: 0,
   insertBefore: null,
@@ -385,7 +385,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   setLiveMode: (liveMode) => set({ liveMode, livePath: null }),
   setLivePath: (livePath) => set({ livePath }),
   setDrawChain: (drawChain) => set({ drawChain }),
-  setTimelinePeek: (timelinePeek) => set({ timelinePeek }),
+  setTimelineHidden: (timelineHidden) => set({ timelineHidden }),
   setLiveUnit: (liveUnit) => set((s) => ({ liveUnit, livePart: s.livePart ? { ...s.livePart, part: liveUnit === 'stroke' ? 0 : s.livePart.part } : null })),
   setLivePart: (livePart) => set(livePart ? { livePart, selectedId: livePart.strokeId } : { livePart }),
   setTime: (time) => set({ time }),

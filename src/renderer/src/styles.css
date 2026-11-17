@@ -2077,6 +2077,30 @@ body {
 #root {
   height: 100%;
 }
+/*
+ * ホーム画面から開いたとき（PWA）：iPhone では 100dvh が画面より短くなり（上のステータスバーの分）、
+ * 下に隙間ができる。画面いっぱいに固定して、高さの単位に頼らない（下の余白はドックの safe-area で取る）
+ */
+@media (display-mode: standalone) {
+  html,
+  body {
+    height: 100%;
+  }
+  #root {
+    position: fixed;
+    inset: 0;
+    height: auto;
+  }
+}
+html.ios-standalone,
+html.ios-standalone body {
+  height: 100%;
+}
+html.ios-standalone #root {
+  position: fixed;
+  inset: 0;
+  height: auto;
+}
 button {
   touch-action: manipulation;
 }
@@ -3951,16 +3975,12 @@ button {
   color: var(--text-2);
 }
 
-/* 手描きのブラシ（スマホ）：タイムラインのパネルを隠して絵を広く使う（ドックは残すので、ほかの道具へすぐ移れる） */
-.app.phone.brush-focus .timeline {
+/* タイムラインを隠している（スマホ。手描きのブラシに入ると隠れる）：絵を広く使う（ドックは残すので、ほかの道具へすぐ移れる） */
+.app.phone.tl-hidden .timeline {
   display: none;
 }
-/* タイムラインを一時的に出す */
-.app.phone.brush-focus.peek .timeline {
-  display: grid;
-}
 
-/* 手描きのブラシ中（スマホ）：絵の左下に、再生とタイムラインの出し入れ */
+/* スマホ：絵の左下に、タイムラインの出し入れ（隠しているときは再生も） */
 .stage-quick {
   position: absolute;
   left: 14px;

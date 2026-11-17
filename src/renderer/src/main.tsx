@@ -13,6 +13,9 @@ declare global {
 }
 const boot = (value: number, text?: string): void => window.wbBoot?.step(value, text)
 
+// iPhone のホーム画面から開いたとき（PWA）の印。画面いっぱいに固定する CSS に使う（display-mode が効かない版への保険）
+if ((navigator as Navigator & { standalone?: boolean }).standalone) document.documentElement.classList.add('ios-standalone')
+
 // 手素材の一覧（サイズ・ペン先位置）を先に調べてから、状態とUIを作る
 async function start(): Promise<void> {
   boot(20, '起動中')

@@ -54,9 +54,13 @@ export default function App(): React.JSX.Element {
   const isPhone = useIsPhone()
   // 描き直し中は、スマホでは下のパネル（タイムライン・ドック）を隠して絵を広く使う
   const rerecording = useEditor((s) => !!s.rerecordId)
-  // 手描きのブラシで描いているあいだ（スマホ）は、下のタイムラインを隠して絵を広く使う。ドックは残す
-  const brushFocus = useEditor((s) => s.tool === 'live' && s.liveMode === 'brush' && s.viewMode === 'edit' && !s.playing)
-  const timelinePeek = useEditor((s) => s.timelinePeek)
+  // 手描きのブラシに入ったら（スマホ）、下のタイムラインを隠して絵を広く使う。ほかの操作に移ったら出す。
+  // 絵の左下のボタンで、どの操作中でもいつでも出し入れできる。再生中はいつも出す。ドックは残す
+  const brushMode = useEditor((s) => s.tool === 'live' && s.liveMode === 'brush')
+  useEffect(() => {
+    useEditor.getState().setTimelineHidden(brushMode)
+  }, [brushMode])
+  const timelineHidden = useEditor((s) => s.timelineHidden && !s.playing)
   const hasImage = !!project.image
   const [zoom, setZoom] = useState(1)
   const [dragOver, setDragOver] = useState(false)
@@ -271,7 +275,7 @@ export default function App(): React.JSX.Element {
 
   return (
     <div
-      className={`app ${isPhone ? 'phone' : ''} ${hasImage ? 'has-image' : ''} ${rerecording ? 'rerecording' : ''} ${brushFocus ? 'brush-focus' : ''} ${brushFocus && timelinePeek ? 'peek' : ''}`}
+      className={`app ${isPhone ? 'phone' : ''} ${hasImage ? 'has-image' : ''} ${rerecording ? 'rerecording' : ''} ${isPhone && timelineHidden ? 'tl-hidden' : ''}`}
       data-sheet={mobileSheet ?? undefined}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('Files')) {
