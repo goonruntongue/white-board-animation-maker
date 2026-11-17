@@ -24,6 +24,94 @@ function writeSkip(): void {
   }
 }
 
+/**
+ * タイムラインの下に置く、つかみやすいスクロールバー（ブラウザの細いバーの代わり）。
+ * つまみをドラッグすると横に送れる。バーの空いた所をタップすると、そこへ移る。収まっているときは出さない
+ */
+function TimelineScrollbar({ viewport, total }: { viewport: React.RefObject<HTMLDivElement | null>; total: number }): React.JSX.Element | null {
+  const barRef = useRef<HTMLDivElement>(null)
+  const [geo, setGeo] = useState({ ratio: 1, pos: 0 })
+  const drag = useRef<{ pointerId: number; offset: number } | null>(null)
+
+  useEffect(() => {
+    const vp = viewport.current
+    if (!vp) return
+    const update = (): void => {
+      const max = vp.scrollWidth - vp.clientWidth
+      const ratio = vp.scrollWidth > 0 ? vp.clientWidth / vp.scrollWidth : 1
+      const pos = max > 0 ? vp.scrollLeft / max : 0
+      setGeo((g) => (Math.abs(g.ratio - ratio) < 0.001 && Math.abs(g.pos - pos) < 0.001 ? g : { ratio, pos }))
+    }
+    update()
+    vp.addEventListener('scroll', update, { passive: true })
+    const ro = new ResizeObserver(update)
+    ro.observe(vp)
+    if (vp.firstElementChild) ro.observe(vp.firstElementChild)
+    return () => {
+      vp.removeEventListener('scroll', update)
+      ro.disconnect()
+    }
+  }, [viewport, total])
+
+  if (geo.ratio >= 0.995) return null
+  const thumbPct = Math.max(12, geo.ratio * 100)
+  const leftPct = (100 - thumbPct) * geo.pos
+
+  /** バーの上の x（画面座標）から、つまみの左端の位置 0..1 を出してスクロールする */
+  const scrollToX = (clientX: number, offset: number): void => {
+    const vp = viewport.current
+    const bar = barRef.current
+    if (!vp || !bar) return
+    const r = bar.getBoundingClientRect()
+    const thumbW = (r.width * thumbPct) / 100
+    const free = r.width - thumbW
+    const f = free > 0 ? Math.max(0, Math.min(1, (clientX - r.left - offset) / free)) : 0
+    vp.scrollLeft = f * (vp.scrollWidth - vp.clientWidth)
+  }
+
+  return (
+    <div
+      ref={barRef}
+      className="tl-scrollbar"
+      role="scrollbar"
+      aria-orientation="horizontal"
+      aria-label="タイムラインを横に送る"
+      aria-valuenow={Math.round(geo.pos * 100)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      onPointerDown={(e) => {
+        e.stopPropagation()
+        e.preventDefault()
+        const bar = barRef.current!
+        const r = bar.getBoundingClientRect()
+        const thumbW = (r.width * thumbPct) / 100
+        const thumbLeft = r.left + (r.width * leftPct) / 100
+        // つまみをつかんだら、その位置のまま動かす。空いた所なら、つまみの真ん中をそこへ
+        const offset = e.clientX >= thumbLeft && e.clientX <= thumbLeft + thumbW ? e.clientX - thumbLeft : thumbW / 2
+        drag.current = { pointerId: e.pointerId, offset }
+        try {
+          bar.setPointerCapture(e.pointerId)
+        } catch {
+          // 捕捉できなくても動かせる
+        }
+        scrollToX(e.clientX, offset)
+      }}
+      onPointerMove={(e) => {
+        const d = drag.current
+        if (!d || d.pointerId !== e.pointerId) return
+        e.stopPropagation()
+        scrollToX(e.clientX, d.offset)
+      }}
+      onPointerUp={() => (drag.current = null)}
+      onPointerCancel={() => (drag.current = null)}
+    >
+      <div className={`tl-scrollbar-thumb ${drag.current ? 'dragging' : ''}`} style={{ left: `${leftPct}%`, width: `${thumbPct}%` }}>
+        <span className="tl-scrollbar-grip" aria-hidden="true" />
+      </div>
+    </div>
+  )
+}
+
 export function Timeline(): React.JSX.Element {
   const project = useEditor((s) => s.project)
   const time = useEditor((s) => s.time)
@@ -269,6 +357,7 @@ export function Timeline(): React.JSX.Element {
         </div>
         </div>
         </div>
+        <TimelineScrollbar viewport={scrollRef} total={total} />
         {selectedId && multiIds.length < 2 && (() => {
           const stroke = project.strokes.find((s) => s.id === selectedId)
           if (!stroke) return null
