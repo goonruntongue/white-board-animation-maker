@@ -225,7 +225,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     const r = rendererRef.current
     if (!r || !image) return
     if (viewMode === 'preview') r.renderAt(time)
-    else if (live) r.renderAt(liveTime, { hand: false })
+    // ライブ編集：背景を塗らずに重ね、まだ見えていない（マスクされている）所は下の薄い下絵で見せる＝下絵をなぞりやすい
+    else if (live) r.renderAt(liveTime, { hand: false, background: false })
     // 編集表示：なぞった範囲（＝最終的に見える範囲）を全描画して、欠けを確認しやすくする
     else r.renderAt(timeline.total, { hand: false, background: false })
   }, [project, assets, time, viewMode, image, timeline, live, liveTime])
