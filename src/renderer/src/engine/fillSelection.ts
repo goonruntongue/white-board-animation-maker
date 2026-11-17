@@ -37,7 +37,7 @@ export function fillSelection(clip: ClipRegion, size: { width: number; height: n
     }
     if (last < first) continue
     const segments = motion === 'smooth' ? 1 : Math.max(2, Math.min(200, Math.round(cycles * 2)))
-    if (points.length + segments + 1 > 200000) throw new Error('軌跡の点が多すぎます。振動数を減らすか、ペンを太くしてください')
+    if (points.length + segments + 1 > 200000) throw new Error('線の点が多すぎます。振動数を減らすか、ペンを太くしてください')
     for (let i = 0; i <= segments; i++) {
       const a = first + (last - first) * i / segments
       const wave = i === 0 || i === segments || motion === 'smooth' ? 0 : (i % 2 ? 1 : -1)

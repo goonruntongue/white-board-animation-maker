@@ -92,7 +92,7 @@ export async function setImageFromDataUrl(name: string, dataUrl: string, replace
           ? `画像を読み込みました（大きいため ${asset.width}×${asset.height} に縮小）`
           : replace
             ? '画像を差し替えました（グループはそのまま残っています）'
-            : '画像を読み込みました。「自動」で描き順を作るか、「描く」ツールでなぞってください'
+            : '画像を読み込みました。「自動」で描き順を作るか、「手描き」のブラシでなぞってください'
     )
   } catch (e) {
     get().notify('画像を読み込めませんでした: ' + errorText(e), 'error')
@@ -251,7 +251,7 @@ export function openExport(kind: 'html' | 'video'): void {
     return
   }
   if (!pages.some((pg) => pg.image && pg.strokes.length > 0)) {
-    s.notify('グループがありません。「自動」で作るか、「描く」ツールで描き順をなぞってください', 'error')
+    s.notify('グループがありません。「自動」で作るか、「手描き」のブラシで描き順をなぞってください', 'error')
     return
   }
   s.openDialog(kind)

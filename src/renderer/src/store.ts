@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { builtinHand } from './engine/handAsset'
-import { mergeStrokes } from './engine/strokeParts'
+import { mergeStrokes, removeStrokePart, splitStrokeAt, strokeParts } from './engine/strokeParts'
 import { addPage, createProject, duplicatePage, movePage, newId, removePage, switchPage } from './engine/project'
 import type { SelectionOp } from './engine/selection'
 import type { PathNode } from './engine/pathEdit'
@@ -78,6 +78,10 @@ interface EditorState {
   duplicateStroke: (id: string) => void
   /** となりの軌跡と1本にまとめる（dir：前と／次と）。まとめた軌跡を選ぶ */
   mergeStroke: (id: string, dir: 'prev' | 'next') => void
+  /** グループから1本の線を消す（線が1本だけなら、グループごと消す） */
+  removeLine: (id: string, part: number) => void
+  /** グループを、part 番目の線の手前で2つに分ける */
+  splitGroup: (id: string, part: number) => void
   mergeSelectedStrokes: (ids: string[]) => boolean
   setSelection: (sel: ClipRegion | null) => void
   // --- ページ（スライド） ---
@@ -118,11 +122,11 @@ export const useEditor = create<EditorState>((set, get) => ({
   future: [],
   selection: null,
   selectionMode: 'new',
-  tool: 'draw',
+  tool: 'live',
   lastSelTool: 'rect',
   selectedId: null,
   livePart: null,
-  liveMode: 'move',
+  liveMode: 'brush',
   livePath: null,
   liveUnit: 'part', // 直すは、いつも1本の線ごと（グループをまとめて扱うのは、タイムライン・描き順・設定）
   time: 0,
@@ -227,6 +231,34 @@ export const useEditor = create<EditorState>((set, get) => ({
     set({ selectedId: copy.id })
   },
 
+  removeLine: (id, part) => {
+    const stroke = get().project.strokes.find((s) => s.id === id)
+    if (!stroke) return
+    const updated = removeStrokePart(stroke, part)
+    if (!updated) {
+      set({ livePart: null, livePath: null })
+      get().removeStroke(id)
+      return
+    }
+    get().commit((p) => ({ ...p, strokes: p.strokes.map((s) => (s.id === id ? updated : s)) }))
+    const count = strokeParts(updated).length
+    set({ selectedId: id, livePart: { strokeId: id, part: Math.min(part, count - 1) }, livePath: null })
+  },
+
+  splitGroup: (id, part) => {
+    const stroke = get().project.strokes.find((s) => s.id === id)
+    if (!stroke) return
+    const pair = splitStrokeAt(stroke, part, newId())
+    if (!pair) return
+    get().commit((p) => {
+      const strokes = [...p.strokes]
+      const i = strokes.findIndex((s) => s.id === id)
+      strokes.splice(i, 1, pair[0], pair[1])
+      return { ...p, strokes }
+    })
+    set({ selectedId: pair[1].id, livePart: { strokeId: pair[1].id, part: 0 }, livePath: null })
+  },
+
   mergeStroke: (id, dir) => {
     const { project } = get()
     const idx = project.strokes.findIndex((s) => s.id === id)
@@ -329,10 +361,16 @@ export const useEditor = create<EditorState>((set, get) => ({
       tool === 'rect' || tool === 'ellipse' || tool === 'lasso'
         ? { tool, lastSelTool: tool }
         : tool === 'live'
-          ? { tool, playing: false, viewMode: 'edit' } // ライブ編集は、止めた状態の絵の上で行う
+          ? { tool, playing: false, viewMode: 'edit' } // 手描きは、止めた状態の絵の上で行う
           : { tool }
     ),
-  select: (selectedId) => set((s) => ({ selectedId, livePart: s.livePart && s.livePart.strokeId !== selectedId ? null : s.livePart })),
+  // グループを選ぶと、その最初の線も選ばれる（同じグループの線を選んでいれば、そのまま）
+  select: (selectedId) =>
+    set((s) => ({
+      selectedId,
+      livePart: !selectedId ? null : s.livePart?.strokeId === selectedId ? s.livePart : { strokeId: selectedId, part: 0 },
+      livePath: s.livePart?.strokeId === selectedId ? s.livePath : null
+    })),
   setLiveMode: (liveMode) => set({ liveMode, livePath: null }),
   setLivePath: (livePath) => set({ livePath }),
   setLiveUnit: (liveUnit) => set((s) => ({ liveUnit, livePart: s.livePart ? { ...s.livePart, part: liveUnit === 'stroke' ? 0 : s.livePart.part } : null })),

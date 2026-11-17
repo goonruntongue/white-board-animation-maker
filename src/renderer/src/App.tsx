@@ -239,7 +239,11 @@ export default function App(): React.JSX.Element {
       }
       const preset = (st.tool === 'erase' ? ERASER_PRESETS : PEN_PRESETS).find((p) => p.key === e.key)
       if (preset) return st.updateSettings({ [sizeKey]: preset.width })
-      if (k === 'd') st.setTool('draw')
+      if (k === 'd') {
+        // 描く＝直すのブラシ（何も選んでいなければ、新しいグループを描く）
+        st.setTool('live')
+        st.setLiveMode('brush')
+      }
       else if (k === 'e') st.setTool('erase')
       else if (k === 'm') st.setTool(e.shiftKey ? 'ellipse' : 'rect')
       else if (k === 'l') st.setTool('lasso')

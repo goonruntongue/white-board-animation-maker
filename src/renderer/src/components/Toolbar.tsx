@@ -9,10 +9,9 @@ import { HelpMenu } from './HelpMenu'
 import { LiveEditBar } from './LiveEditBar'
 
 const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
-  { id: 'draw', icon: 'pen', label: '描く', key: 'D' },
   { id: 'erase', icon: 'eraser', label: '消す', key: 'E' },
   { id: 'select', icon: 'cursor', label: 'グループを選ぶ', key: 'V' },
-  { id: 'live', icon: 'liveEdit', label: 'ライブ編集', key: 'W' },
+  { id: 'live', icon: 'liveEdit', label: '手描き', key: 'W' },
   { id: 'pan', icon: 'hand', label: '移動', key: 'H' }
 ]
 
@@ -71,8 +70,8 @@ export function Toolbar(): React.JSX.Element {
         {TOOLS.map((t) => (
           <button
             key={t.id}
-            className={`tool-btn ${tool === t.id ? 'on' : ''}`}
-            data-tour={t.id === 'draw' ? 'draw' : undefined}
+            className={`tool-btn ${tool === t.id || (t.id === 'live' && tool === 'draw') ? 'on' : ''}`}
+            data-tour={t.id === 'live' ? 'draw' : undefined}
             title={`${t.label} (${t.key})`}
             disabled={!hasImage}
             onClick={() => setTool(t.id)}
@@ -114,7 +113,7 @@ Shift+ドラッグで追加 / Alt+ドラッグで除外`}
       {/* オプションバー：選択ツールなら合成モード、それ以外はペン先サイズ */}
       {SELECTION_TOOLS.includes(tool) ? (
         <SelectionModeBar />
-      ) : tool === 'live' ? (
+      ) : tool === 'live' || tool === 'draw' ? (
         <LiveEditBar />
       ) : (
         <PenSizePicker disabled={!hasImage} kind={tool === 'erase' ? 'eraser' : 'pen'} />

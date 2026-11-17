@@ -936,20 +936,13 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         return
       }
       if (st.liveMode === 'brush') {
-        // ブラシで足す：選んでいる軌跡に、なぞった所を足す（ペンもそこを通り、表示範囲も広がる）
-        let targetId = st.livePart?.strokeId
-        if (!targetId) {
-          const hit = hitPart(project.strokes, p.x, p.y, Math.max(st.project.settings.defaultRevealWidth / 2, (e.pointerType === 'touch' ? 14 : 5) / scale))
-          if (hit) {
-            st.setLivePart(hit)
-            targetId = hit.strokeId
-          }
-        }
-        if (!targetId) {
-          st.notify('先に、足したいグループを「選ぶ・動かす」でタップして選んでください', 'error')
-          return
-        }
-        recording.current = { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }], appendTo: targetId, liveBrush: true }
+        // ブラシ：線を選んでいれば、そのグループに線を足す（ペンもそこを通り、表示範囲も広がる）。
+        // 何も選んでいなければ、なぞった線で新しいグループを作る（なぞった速さで再生。範囲を選んでいれば、その範囲に限る）
+        if (st.playing) st.setPlaying(false)
+        const targetId = st.livePart?.strokeId
+        recording.current = targetId
+          ? { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }], appendTo: targetId, liveBrush: true }
+          : { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }] }
         capture(e)
         if (e.pointerType === 'touch') requestAnimationFrame(() => showLoupe(e.clientX, e.clientY))
         drawOverlay()
@@ -1168,6 +1161,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         }
       } else {
         st.addStroke(strokeFromRecording(st.project, rec.points, st.project.strokes.length, st.selection))
+        // 直すのブラシで描いたときは、何も選ばない状態に戻す（続けてなぞると、また新しいグループになる）
+        if (st.tool === 'live') st.select(null)
         haptic()
       }
     }
@@ -1181,7 +1176,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     const target =
       st.project.strokes.find((s) => s.id === st.selectedId) ?? hitStroke(st.project.strokes, raw[0].x, raw[0].y, w / 2)
     if (!target) {
-      st.notify('消しゴムをかけるグループを選んでください（「直す（ライブ編集）」・描き順・タイムラインから）', 'error')
+      st.notify('消しゴムをかけるグループを選んでください（「手描き」・描き順・タイムラインから）', 'error')
       return
     }
     // 近すぎる点を間引く
@@ -1273,7 +1268,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
             </div>
             <ol className="steps">
               <li>画像を読み込む</li>
-              <li>「描く」ツールで描き順をなぞる</li>
+              <li>「自動」で作るか、「手描き」のブラシで描き順をなぞる</li>
               <li>再生して確認・調整</li>
               <li>HTML / 動画として書き出す</li>
             </ol>

@@ -1,7 +1,7 @@
 // スマホ用の操作部品。
 //   上部バー     … メニュー・作品名・元に戻す／やり直す（よく使うものだけ）
 //   オプションバー … いま選んでいる道具の設定（ペン先／範囲の合成モード／選んだ軌跡の操作）
-//   ドック       … 親指が届く画面下に、作業の順番どおり「自動｜描く｜直す｜範囲」と「描き順」「設定」「書き出し」
+//   ドック       … 親指が届く画面下に、作業の順番どおり「自動｜直す｜範囲」と「描き順」「設定」「書き出し」
 //                  （「選ぶ」「消す」は「直す」＝ライブ編集にまとめた）
 import { useState } from 'react'
 import {
@@ -112,11 +112,11 @@ export function PhoneContextBar(): React.JSX.Element | null {
   if (!hasImage) return null
   return (
     <div className="phone-context" role="toolbar" aria-label="道具の設定">
-      {tool === 'draw' && <PenOptions />}
       {tool === 'erase' && <PenOptions kind="eraser" />}
       {(tool === 'rect' || tool === 'ellipse' || tool === 'lasso') && <SelectionOptions />}
       {tool === 'select' && <StrokeOptions />}
-      {tool === 'live' && <LiveEditBar phone />}
+      {/* 描き直し中（内部では描くツール）も、直すと同じ操作を出す */}
+      {(tool === 'live' || tool === 'draw') && <LiveEditBar phone />}
       {tool === 'pan' && <span className="pc-hint">ドラッグで表示位置を移動（2本指でも移動・拡大できます）</span>}
     </div>
   )
@@ -274,7 +274,7 @@ export function PhoneDock(): React.JSX.Element {
   }): React.JSX.Element => (
     <button
       key={opts.id}
-      data-tour={opts.id === 'draw' || opts.id === 'strokes' || opts.id === 'export' ? opts.id : undefined}
+      data-tour={opts.id === 'live' ? 'draw' : opts.id === 'strokes' || opts.id === 'export' ? opts.id : undefined}
       className={`dock-key ${opts.on ? 'on' : ''}`}
       aria-pressed={opts.on}
       disabled={opts.disabled}
@@ -291,14 +291,13 @@ export function PhoneDock(): React.JSX.Element {
 
   return (
     <nav className="phone-dock" aria-label="道具とメニュー">
-      {/* やる順番に並べる：自動で作る → 自分で描く → 直す（選ぶ・消す・足す・パス編集をまとめた） → 範囲 */}
+      {/* やる順番に並べる：自動で作る → 直す（描く・選ぶ・消す・足す・パス編集をまとめた） → 範囲 */}
       {key({ id: 'auto', icon: 'sparkle', label: '自動', on: false, disabled: !hasImage, onClick: () => { haptic(); openAutoTrace() } })}
-      {key({ id: 'draw', icon: 'pen', label: '描く', on: tool === 'draw', disabled: !hasImage, onClick: () => pick('draw') })}
       {key({
         id: 'live',
         icon: 'liveEdit',
-        label: '直す',
-        on: tool === 'live' || tool === 'select' || tool === 'erase',
+        label: '手描き',
+        on: tool === 'live' || tool === 'draw' || tool === 'select' || tool === 'erase',
         disabled: !hasImage,
         onClick: openFix
       })}

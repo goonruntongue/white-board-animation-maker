@@ -169,18 +169,25 @@ function ToolSize({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' })
 
 const MODES = [
   { id: 'move', icon: 'move', label: '選ぶ・動かす', hint: '選ぶ・動かす：タップで選び、ドラッグで動かす。太さ・大きさも変えられます' },
-  { id: 'brush', icon: 'plusPen', label: 'ブラシで足す', hint: 'ブラシで足す：なぞった所を、選んだグループに足す（ペンもそこを通り、表示範囲も広がる）' },
+  { id: 'brush', icon: 'plusPen', label: 'ブラシ', hint: 'ブラシ：何も選んでいなければ、なぞって新しいグループを描く。線を選んでいれば、そのグループに線を足す（ペンもそこを通り、表示範囲も広がる）' },
   { id: 'erase', icon: 'eraser', label: '消しゴム', hint: '消しゴム：なぞった所を、選んだグループでは見せない' },
   { id: 'path', icon: 'pathPen', label: 'パス編集', hint: 'パス編集：線をアンカーとハンドルの曲線として編集する' }
 ] as const
 
 /** 操作の切り替え：選ぶ・動かす ／ ブラシで足す ／ 消しゴム */
 function ModeSwitch({ phone }: { phone: boolean }): React.JSX.Element {
-  const mode = useEditor((s) => s.liveMode)
-  const setMode = useEditor.getState().setLiveMode
+  // 描き直し中（内部では描くツール）は、ブラシで描いている扱いで表示する
+  const mode = useEditor((s) => (s.tool === 'draw' ? 'brush' : s.liveMode))
+  const setMode = (m: 'move' | 'brush' | 'erase' | 'path'): void => {
+    const st = useEditor.getState()
+    // 描き直しの途中なら、やめてから切り替える
+    if (st.rerecordId) st.setRerecord(null)
+    if (st.tool !== 'live') st.setTool('live')
+    st.setLiveMode(m)
+  }
   if (phone) {
     return (
-      <div className="pc-seg" role="radiogroup" aria-label="ライブ編集の操作">
+      <div className="pc-seg" role="radiogroup" aria-label="手描きの操作">
         {MODES.map((m) => (
           <button key={m.id} role="radio" aria-checked={mode === m.id} className={`pc-key ${mode === m.id ? 'on' : ''}`} onClick={() => setMode(m.id)}>
             <Icon name={m.icon} size={18} />
@@ -261,7 +268,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
       mode === 'path'
         ? '編集したい線を押して選びます'
         : mode === 'brush'
-        ? '足したいグループの上からなぞり始めます'
+        ? 'なぞると新しいグループになります（線を選んでいれば、そのグループに足します）'
         : mode === 'erase'
           ? 'なぞった所にあるグループを消します'
           : `絵の上を押して${what}を選びます。ドラッグで動かし、太さ・大きさも変えられます`

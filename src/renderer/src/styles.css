@@ -3882,3 +3882,19 @@ button {
 .coach-close:active {
   background: var(--hilite);
 }
+
+/* 線が1本だけのグループを消すときの確認 */
+.confirm-modal {
+  max-width: 420px;
+}
+.confirm-modal p {
+  margin: 0 0 12px;
+  line-height: 1.6;
+}
+.confirm-skip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+}

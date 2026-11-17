@@ -30,6 +30,86 @@ export function strokeParts(stroke: Stroke): StrokePart[] {
   return parts
 }
 
+/** 点ごとの時刻（グループの書き始めからの ms）を付けた点の並び */
+function timedPoints(stroke: Stroke): StrokePoint[] {
+  const prep = prepareStroke(stroke)
+  const duration = Math.max(50, stroke.duration)
+  return stroke.points.map((p, i) => ({ ...p, t: prep.param[i] * duration }))
+}
+
+/** 「基本の太さ」を使っている2本目以降の線に、いまの太さを書き込んで固定する（基本の太さを変える前に使う） */
+function pinWidths(points: StrokePoint[], base: number): StrokePoint[] {
+  return points.map((p, i) => (i > 0 && p.b && p.w === undefined ? { ...p, w: base } : p))
+}
+
+/**
+ * グループから1本の線を消す。ほかの線と、その描くタイミングは保つ（消した線を描いていた時間だけ詰める）。
+ * 線が1本しかないときは null（グループごと消すかどうかは呼び出し側で決める）
+ */
+export function removeStrokePart(stroke: Stroke, partIndex: number): Stroke | null {
+  const parts = strokeParts(stroke)
+  const part = parts[partIndex]
+  if (!part || parts.length < 2) return null
+  const timed = timedPoints(stroke)
+  const before = timed.slice(0, part.start)
+  let after = timed.slice(part.end + 1)
+  let revealWidth = stroke.revealWidth
+  if (after.length) {
+    const shift = after[0].t - timed[part.start].t
+    after = pinWidths(after, stroke.revealWidth).map((p) => ({ ...p, t: Math.round(p.t - shift) }))
+    if (partIndex === 0) {
+      // 2本目の線が最初の線になる：その太さをグループの基本の太さにし、書き始めの印を外す
+      revealWidth = parts[1].width
+      const { b: _b, w: _w, ...head } = after[0]
+      after[0] = head
+    }
+  }
+  const points = [...before, ...after].map((p) => ({ ...p, t: Math.round(p.t) }))
+  return {
+    ...stroke,
+    points,
+    revealWidth,
+    duration: Math.max(50, points[points.length - 1].t),
+    useRecordedTiming: true
+  }
+}
+
+/**
+ * グループを、partIndex 番目の線の手前で2つに分ける（結合の逆）。
+ * 描くタイミングは保つ：前半の最後の線から後半の書き始めまでの移動時間は、前半の「待ち時間」になる。
+ * 表示範囲は、両方とも元のグループの範囲を使う。
+ */
+export function splitStrokeAt(stroke: Stroke, partIndex: number, secondId: string): [Stroke, Stroke] | null {
+  const parts = strokeParts(stroke)
+  const part = parts[partIndex]
+  if (!part || partIndex === 0) return null
+  const timed = timedPoints(stroke)
+  const cut = timed[part.start].t
+  const prevEnd = timed[part.start - 1].t
+  const firstPoints = timed.slice(0, part.start).map((p) => ({ ...p, t: Math.round(p.t) }))
+  const rest = pinWidths(timed.slice(part.start), stroke.revealWidth).map((p) => ({ ...p, t: Math.round(p.t - cut) }))
+  const { b: _b, w: _w, ...head } = rest[0]
+  rest[0] = head
+  const first: Stroke = {
+    ...stroke,
+    points: firstPoints,
+    duration: Math.max(50, Math.round(prevEnd)),
+    delayAfter: Math.max(0, Math.round(cut - prevEnd)),
+    useRecordedTiming: true
+  }
+  const second: Stroke = {
+    ...stroke,
+    id: secondId,
+    name: `${stroke.name} の続き`,
+    points: rest,
+    revealWidth: part.width,
+    duration: Math.max(50, Math.round(Math.max(50, stroke.duration) - cut)),
+    delayAfter: stroke.delayAfter,
+    useRecordedTiming: true
+  }
+  return [first, second]
+}
+
 /** 1本の線だけを手描きで置き換え、他の線と元の再生時間を保つ。 */
 export function replaceStrokePart(stroke: Stroke, partIndex: number, recording: StrokePoint[]): Stroke | null {
   const part = strokeParts(stroke)[partIndex]

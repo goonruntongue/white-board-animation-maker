@@ -49,7 +49,7 @@ export function StrokeList(): React.JSX.Element {
         <div className="panel-empty">
           <Icon name="pen" size={22} />
           <p>
-            「描く」ツール（<kbd>D</kbd>）で
+            「手描き」のブラシ（<kbd>D</kbd>）で
             <br />
             画像の上をなぞると、
             <br />

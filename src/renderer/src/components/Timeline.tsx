@@ -8,6 +8,22 @@ import { Icon } from './Icon'
 import { StrokeActions } from './phone/StrokeActions'
 import { useLongPress } from '../lib/useLongPress'
 
+const SKIP_KEY = 'wbam.skipLastLineConfirm'
+function readSkip(): boolean {
+  try {
+    return localStorage.getItem(SKIP_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+function writeSkip(): void {
+  try {
+    localStorage.setItem(SKIP_KEY, '1')
+  } catch {
+    // 保存できなくても、次回もう一度聞くだけ
+  }
+}
+
 export function Timeline(): React.JSX.Element {
   const project = useEditor((s) => s.project)
   const time = useEditor((s) => s.time)
@@ -37,6 +53,23 @@ export function Timeline(): React.JSX.Element {
     }
   }, [playing, time, total])
   const insertBefore = useEditor((s) => s.insertBefore)
+  /** 選んでいる線（選んでいるグループの中の線だけ） */
+  const selectedLine = livePart && livePart.strokeId === selectedId ? livePart : null
+  /** 線が1本だけのグループを消すときの確認（グループの id） */
+  const [confirmLast, setConfirmLast] = useState<string | null>(null)
+  const [skipNext, setSkipNext] = useState(false)
+  const deleteLine = (): void => {
+    if (!selectedLine) return
+    const st = useEditor.getState()
+    const stroke = st.project.strokes.find((x) => x.id === selectedLine.strokeId)
+    if (!stroke) return
+    if (strokeParts(stroke).length <= 1 && !readSkip()) {
+      setSkipNext(false)
+      setConfirmLast(stroke.id)
+      return
+    }
+    st.removeLine(stroke.id, selectedLine.part)
+  }
 
   const boundaryAt = (clientX: number, excludeId?: string): { beforeId: string | null; x: number } => {
     const rect = trackRef.current!.getBoundingClientRect()
@@ -58,8 +91,11 @@ export function Timeline(): React.JSX.Element {
     st.setPlaying(false)
     st.setViewMode('edit')
     st.setRerecord(null)
-    st.setTool('draw')
-    st.notify('再生位置に近いグループの境目へ追加します。画像をなぞってください')
+    // 直すのブラシで、何も選ばずになぞる＝新しいグループ
+    st.setTool('live')
+    st.setLiveMode('brush')
+    st.setLivePart(null)
+    st.notify('再生位置に近いグループの境目へ、新しいグループを追加します。画像をなぞってください')
   }
 
   const finishDrag = (id: string, clientX: number): void => {
@@ -212,8 +248,9 @@ export function Timeline(): React.JSX.Element {
                     return
                   }
                   setMultiIds([])
-                  // グループを選ぶ（線は、下の線の番号か、直すで絵の上をタップして選ぶ）
+                  // グループを選ぶと、その最初の線も選ばれる（線は、下の番号か、直すで絵の上をタップして選び直せる）
                   select(stroke.id)
+                  useEditor.getState().setLivePart({ strokeId: stroke.id, part: 0 })
                 }}
                 onDelete={() => { if (multiIds.length > 1) useEditor.getState().notify('複数選択を解除してから削除してください'); else useEditor.getState().removeStroke(stroke.id) }}
                 onDoubleClick={() => seekTo(clientXAt(trackRef.current, seg.start / total))}
@@ -240,23 +277,25 @@ export function Timeline(): React.JSX.Element {
           return <div className="timeline-parts" onPointerDown={(e) => e.stopPropagation()} onPointerMove={(e) => e.stopPropagation()}>
             <span className="timeline-parts-label">線 ({parts.length})</span>
             <div className="timeline-parts-list" aria-label={`${stroke.name} の線`}>
-              {parts.map((_, part) => <button key={part} className={tool === 'live' && liveUnit === 'part' && livePart?.strokeId === stroke.id && livePart.part === part ? 'on' : ''} onClick={() => {
+              {parts.map((_, part) => <button key={part} className={livePart?.strokeId === stroke.id && livePart.part === part ? 'on' : ''} onClick={() => {
                 const st = useEditor.getState()
                 st.setPlaying(false)
                 st.setViewMode('edit')
                 st.setTool('live')
-                st.setLiveUnit('part')
                 st.setLivePart({ strokeId: stroke.id, part })
-              }} aria-label={`${stroke.name} の線 ${part + 1}`} title={`線 ${part + 1} をライブ編集`}>{part + 1}</button>)}
+              }} aria-label={`${stroke.name} の線 ${part + 1}`} title={`線 ${part + 1} を選ぶ`}>{part + 1}</button>)}
             </div>
           </div>
         })()}
         <div className="timeline-actions" onPointerDown={(e) => e.stopPropagation()} onPointerMove={(e) => e.stopPropagation()}>
-          {multiIds.length < 2 && selectedId && <button className="timeline-insert" onClick={() => {
+          {multiIds.length < 2 && selectedLine && <button className="timeline-insert" onClick={() => {
+            useEditor.getState().setRerecordPart(selectedLine.strokeId, selectedLine.part)
+          }}>選んだ線を描き直す</button>}
+          {multiIds.length < 2 && selectedLine && selectedLine.part > 0 && <button className="timeline-insert" title="選んだ線の手前で、グループを2つに分ける（描くタイミングはそのまま）" onClick={() => {
             const st = useEditor.getState()
-            if (st.tool === 'live' && (st.liveUnit === 'part' || st.liveMode === 'path') && st.livePart?.strokeId === selectedId) st.setRerecordPart(selectedId, st.livePart.part)
-            else st.setRerecord(selectedId)
-          }}>{tool === 'live' && (liveUnit === 'part' || liveMode === 'path') && livePart?.strokeId === selectedId ? '選んだ線を描き直す' : 'グループ全体を描き直す'}</button>}
+            st.splitGroup(selectedLine.strokeId, selectedLine.part)
+            st.notify('グループを2つに分けました（元に戻す（↶）で取り消せます）')
+          }}>ここで分ける</button>}
           <button className={`timeline-insert ${multiMode ? 'on' : ''}`} onClick={() => {
             if (multiMode) { setMultiMode(false); setMultiIds([]) }
             else { setMultiMode(true); setMultiIds(selectedId ? [selectedId] : []) }
@@ -269,12 +308,40 @@ export function Timeline(): React.JSX.Element {
           <button className={`timeline-insert ${insertBefore ? 'on' : ''}`} onClick={beginInsert} title="再生位置に近いグループの境目に、手描きの新しいグループを追加">
             {insertBefore ? '挿入を取消' : '＋ この位置に描く'}
           </button>
-          <button className="timeline-delete" disabled={!selectedId || multiIds.length > 1} onClick={() => { if (selectedId) useEditor.getState().removeStroke(selectedId) }} title="選択したグループを削除（元に戻せます）">
-            <Icon name="trash" size={16} /> 選択したグループを削除
+          <button className="timeline-delete" disabled={!selectedLine || multiIds.length > 1} onClick={deleteLine} title="選択した線を削除（元に戻せます）">
+            <Icon name="trash" size={16} /> 選択した線を削除
           </button>
         </div>
       </div>
       {menuFor && <StrokeActions strokeId={menuFor} onClose={() => setMenuFor(null)} />}
+      {confirmLast && (
+        <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && setConfirmLast(null)}>
+          <div className="modal confirm-modal" role="dialog" aria-modal aria-label="グループを削除">
+            <header>
+              <h2>グループごと削除します</h2>
+            </header>
+            <div className="modal-body">
+              <p>このグループには線が1本しかないため、線を削除すると、このグループごと削除されます。よろしいですか？（元に戻す（↶）で取り消せます）</p>
+              <label className="confirm-skip">
+                <input type="checkbox" checked={skipNext} onChange={(e) => setSkipNext(e.target.checked)} /> 次回から表示しない
+              </label>
+            </div>
+            <footer className="modal-footer">
+              <button className="btn" onClick={() => setConfirmLast(null)}>キャンセル</button>
+              <button
+                className="btn danger"
+                onClick={() => {
+                  if (skipNext) writeSkip()
+                  useEditor.getState().removeLine(confirmLast, 0)
+                  setConfirmLast(null)
+                }}
+              >
+                削除する
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
     </footer>
   )
 }

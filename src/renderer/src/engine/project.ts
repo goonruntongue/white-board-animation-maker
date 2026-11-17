@@ -135,7 +135,7 @@ export function strokeFromRecording(
   const recorded = pts.length > 1 ? pts[pts.length - 1].t - pts[0].t : 0
   return {
     id: newId(),
-    name: `軌跡 ${index + 1}`,
+    name: `グループ ${index + 1}`,
     points: pts,
     revealWidth: project.settings.defaultRevealWidth,
     duration: Math.max(300, Math.round(recorded)),
