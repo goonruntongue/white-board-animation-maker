@@ -170,6 +170,22 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const dispH = imgH * scale
   const left = (size.w - dispW) / 2 + view.x
   const top = (size.h - dispH) / 2 + view.y
+  // 拡大縮小・移動の途中は、画像の大きさや解像度は作り直さず、決まった表示（settled）を CSS の変形で
+  // 動かすだけにする（大きなキャンバスの作り直し・描き直しを毎コマ行うと、スマホでは固まる）。
+  // 指を離して少し経ったら、いまの表示で作り直す
+  const [settled, setSettled] = useState<View>(view)
+  const gesturing = useRef(false)
+  const sScale = fit * settled.zoom
+  const sLeft = (size.w - imgW * sScale) / 2 + settled.x
+  const sTop = (size.h - imgH * sScale) / 2 + settled.y
+  const viewMoving = settled !== view
+  useEffect(() => {
+    if (settled === view) return
+    const id = window.setTimeout(() => {
+      if (!gesturing.current) setSettled(view)
+    }, 180)
+    return () => window.clearTimeout(id)
+  }, [view, settled])
   const isSelTool = SELECTION_TOOLS.includes(tool)
 
   const timeline = useMemo(() => buildTimeline(project), [project])
@@ -243,9 +259,9 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   // 内部の解像度：画面に見える細かさまで下げる（スマホで画像を等倍で描くと、メモリも時間も足りなくなる）。
   // 拡大すると段階的に上がる。画素密度は2倍までで十分（それ以上は見た目がほぼ変わらない）
   const renderScale = useMemo(() => {
-    const need = scale * Math.min(2, window.devicePixelRatio || 1)
+    const need = sScale * Math.min(2, window.devicePixelRatio || 1)
     return RENDER_LEVELS.find((l) => l >= need) ?? 1
-  }, [scale])
+  }, [sScale])
 
   useEffect(() => {
     const canvas = renderCanvasRef.current
@@ -337,7 +353,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     if (c.height !== imgH) c.height = imgH
     const ctx = c.getContext('2d')!
     ctx.clearRect(0, 0, imgW, imgH)
-    const px = 1 / scale // 画面上の1px
+    const px = 1 / sScale // 画面上の1px（キャンバスを作り直した時点の表示で）
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
 
@@ -538,7 +554,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       ctx.stroke()
       ctx.setLineDash([])
     }
-  }, [image, assets.image, imgW, imgH, scale, viewMode, project, selectedId, rerecordId, rerecordPart, tool, selection, selMask, selectedClipMask, liveClipMask, drawClippedBand, live, livePart, liveErasing, liveBrushing, liveWhole, livePathing, livePath])
+  }, [image, assets.image, imgW, imgH, sScale, viewMode, project, selectedId, rerecordId, rerecordPart, tool, selection, selMask, selectedClipMask, liveClipMask, drawClippedBand, live, livePart, liveErasing, liveBrushing, liveWhole, livePathing, livePath])
 
   useEffect(() => drawOverlay(), [drawOverlay])
 
@@ -716,6 +732,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     }
     panDrag.current = null
     gestureLock.current = true
+    gesturing.current = true
     const mid = containerPoint({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
     const scale0 = fit * view.zoom
     const left0 = (size.w - imgW * scale0) / 2 + view.x
@@ -1042,7 +1059,12 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     hideLoupe()
     if (e.pointerType === 'touch') {
       touches.current.delete(e.pointerId)
-      if (touches.current.size < 2) pinch.current = null
+      if (touches.current.size < 2 && pinch.current) {
+        pinch.current = null
+        gesturing.current = false
+        // 指を離したので、いまの表示で作り直す（少し待ってから。続けてつまみ直しても固まらない）
+        setView((v) => ({ ...v }))
+      }
       if (gestureLock.current) {
         // ピンチの指がすべて離れるまでは描画・選択を再開しない
         if (touches.current.size === 0) gestureLock.current = false
@@ -1244,8 +1266,16 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         </div>
       ) : (
         <div
-          className="artboard"
-          style={{ left, top, width: dispW, height: dispH, background: project.settings.boardColor }}
+          className={`artboard ${viewMoving ? 'moving' : ''}`}
+          style={{
+            left: sLeft,
+            top: sTop,
+            width: imgW * sScale,
+            height: imgH * sScale,
+            background: project.settings.boardColor,
+            // 決まった表示からのずれを変形で見せる（左上を基準に拡大してから移動）
+            transform: viewMoving ? `translate(${left - sLeft}px, ${top - sTop}px) scale(${scale / sScale})` : undefined
+          }}
         >
           {viewMode === 'edit' && <img className="layer trace" src={image.dataUrl} alt="" draggable={false} />}
           <canvas ref={renderCanvasRef} className="layer" />
@@ -1255,7 +1285,10 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       )}
       {image && rerecordId && (
         <div className="stage-banner">
-          描き直し中：{project.strokes.find((s) => s.id === rerecordId)?.name}{rerecordPart !== null ? ` の線 ${rerecordPart + 1}` : ' 全体'}をなぞってください
+          <span>
+            描き直し中：{project.strokes.find((s) => s.id === rerecordId)?.name}{rerecordPart !== null ? ` の線 ${rerecordPart + 1}` : ' 全体'}をなぞってください
+            <small className="stage-banner-sub">2本指でつまむと拡大・移動できます</small>
+          </span>
           <button className="btn small" onClick={() => useEditor.getState().setRerecord(null)}>
             キャンセル
           </button>

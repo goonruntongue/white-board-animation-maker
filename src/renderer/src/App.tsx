@@ -52,6 +52,8 @@ export default function App(): React.JSX.Element {
   const filePath = useEditor((s) => s.filePath)
   const mobileSheet = useEditor((s) => s.mobileSheet)
   const isPhone = useIsPhone()
+  // 描き直し中は、スマホでは下のパネル（タイムライン・ドック）を隠して絵を広く使う
+  const rerecording = useEditor((s) => !!s.rerecordId)
   const hasImage = !!project.image
   const [zoom, setZoom] = useState(1)
   const [dragOver, setDragOver] = useState(false)
@@ -262,7 +264,7 @@ export default function App(): React.JSX.Element {
 
   return (
     <div
-      className={`app ${isPhone ? 'phone' : ''} ${hasImage ? 'has-image' : ''}`}
+      className={`app ${isPhone ? 'phone' : ''} ${hasImage ? 'has-image' : ''} ${rerecording ? 'rerecording' : ''}`}
       data-sheet={mobileSheet ?? undefined}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('Files')) {

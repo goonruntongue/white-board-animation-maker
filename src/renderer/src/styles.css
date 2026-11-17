@@ -1216,6 +1216,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 /* 画面をモニターのベゼルで囲む */
 .artboard {
   position: absolute;
+  transform-origin: 0 0;
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.35),
     0 0 0 9px var(--panel-flat),
@@ -3803,4 +3804,43 @@ button {
     white-space: normal;
     min-width: 88px;
   }
+}
+
+/* 描き直し中（スマホ）：タイムラインとドックを隠し、絵の領域を広げる。指で細かくなぞれるよう、ピンチで拡大して使う */
+.app.phone.rerecording {
+  grid-template-rows: auto auto 1fr;
+  grid-template-areas: 'appbar' 'context' 'main';
+}
+.app.phone.rerecording .timeline,
+.app.phone.rerecording .phone-dock {
+  display: none;
+}
+.app.phone.rerecording .workspace {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.stage-banner-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  opacity: 0.75;
+}
+.app:not(.phone) .stage-banner-sub {
+  display: none;
+}
+@media (orientation: landscape) {
+  .app.phone.rerecording {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas: 'appbar' 'context' 'main';
+  }
+}
+.app.phone .stage-banner {
+  width: max-content;
+  max-width: calc(100% - 24px);
+  border-radius: 14px;
+}
+
+/* 拡大縮小・移動の途中：画像は作り直さず、合成だけで動かす */
+.artboard.moving {
+  will-change: transform;
 }
