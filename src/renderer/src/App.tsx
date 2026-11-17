@@ -20,6 +20,8 @@ import { RecoveryDialog } from './components/RecoveryDialog'
 import { AutoTraceDialog } from './components/AutoTraceDialog'
 import { Inspector } from './components/Inspector'
 import { PhoneAppBar, PhoneContextBar, PhoneDock } from './components/phone/PhoneChrome'
+import { setLiveWidth, stepLivePart } from './components/LiveEditBar'
+import { strokeParts } from './engine/strokeParts'
 import { ERASER_PRESETS, PEN_MAX, PEN_MIN, PEN_PRESETS } from './components/PenSizePicker'
 import { Stage } from './components/Stage'
 import { StatusBar } from './components/StatusBar'
@@ -204,6 +206,7 @@ export default function App(): React.JSX.Element {
           return selectRelative(1)
         case 'Escape':
           if (st.rerecordId) return st.setRerecord(null)
+          if (st.livePart) return st.setLivePart(null)
           return st.select(null)
       }
       // ペン先サイズ: [ で小さく / ] で大きく。
@@ -212,6 +215,20 @@ export default function App(): React.JSX.Element {
       // 消しゴムツールのときは消しゴムの大きさ、それ以外はペン先
       const sizeKey = st.tool === 'erase' ? 'eraserWidth' : 'defaultRevealWidth'
       const bracket = e.key === '[' || e.keyCode === 219 ? -1 : e.key === ']' || e.keyCode === 221 ? 1 : 0
+      // ライブ編集で線を選んでいるときは、[ ] でその線の太さ、 , . で前後の線へ
+      if (st.tool === 'live') {
+        const lp = st.livePart
+        const stroke = lp ? st.project.strokes.find((s) => s.id === lp.strokeId) : undefined
+        const part = stroke && lp ? strokeParts(stroke)[lp.part] : undefined
+        if (bracket !== 0 && part) {
+          e.preventDefault()
+          return setLiveWidth(Math.max(1, Math.round(part.width * (bracket < 0 ? 0.88 : 1.14))) + (bracket > 0 && part.width < 8 ? 1 : 0))
+        }
+        if (e.key === ',' || e.key === '.') {
+          e.preventDefault()
+          return stepLivePart(e.key === ',' ? -1 : 1)
+        }
+      }
       if (bracket !== 0) {
         e.preventDefault()
         const w = st.project.settings[sizeKey]
@@ -226,6 +243,7 @@ export default function App(): React.JSX.Element {
       else if (k === 'l') st.setTool('lasso')
       else if (k === 'v') st.setTool('select')
       else if (k === 'h') st.setTool('pan')
+      else if (k === 'w') st.setTool('live')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

@@ -474,6 +474,42 @@ kbd {
   height: 30px;
 }
 
+/* ライブ編集のオプションバー */
+.live-bar {
+  flex: none;
+  gap: 4px;
+}
+.live-range {
+  width: 110px;
+}
+.live-bar .icon-btn.on {
+  background: linear-gradient(180deg, var(--key-pressed-top), var(--key-pressed-bot));
+  box-shadow: var(--key-shadow-pressed);
+  color: var(--accent-text);
+}
+.live-bar .icon-btn.on svg {
+  filter: drop-shadow(var(--accent-glow));
+}
+.live-value {
+  min-width: 34px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: var(--lcd-bg);
+  color: var(--lcd-fg);
+  text-shadow: var(--lcd-glow);
+  font: 700 13px var(--mono);
+  text-align: center;
+  box-shadow: var(--well-shadow);
+}
+.live-hint {
+  padding: 0 6px;
+  font-size: 12px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* テーマ切り替え：スライドスイッチ */
 .theme-switch {
   position: relative;
@@ -1788,12 +1824,12 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 }
 
 /* ============================== 幅に応じた省略 ============================== */
-@media (max-width: 1760px) {
+@media (max-width: 2000px) {
   .brand-name {
     display: none;
   }
 }
-@media (max-width: 1580px) {
+@media (max-width: 1900px) {
   .tool-btn span {
     display: none;
   }

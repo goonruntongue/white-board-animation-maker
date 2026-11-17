@@ -21,6 +21,7 @@ import { haptic } from '../../lib/useMedia'
 import { setThemePref, useTheme } from '../../lib/theme'
 import { useEditor, type Tool } from '../../store'
 import { Icon, type IconName } from '../Icon'
+import { LiveEditBar } from '../LiveEditBar'
 import { ERASER_PRESETS, PEN_PRESETS, PEN_MAX, PEN_MIN, penDotSize } from '../PenSizePicker'
 
 const toLog = (w: number): number => (Math.log(Math.max(PEN_MIN, Math.min(PEN_MAX, w)) / PEN_MIN) / Math.log(PEN_MAX / PEN_MIN)) * 1000
@@ -113,6 +114,7 @@ export function PhoneContextBar(): React.JSX.Element | null {
       {tool === 'erase' && <PenOptions kind="eraser" />}
       {(tool === 'rect' || tool === 'ellipse' || tool === 'lasso') && <SelectionOptions />}
       {tool === 'select' && <StrokeOptions />}
+      {tool === 'live' && <LiveEditBar phone />}
       {tool === 'pan' && <span className="pc-hint">ドラッグで表示位置を移動（2本指でも移動・拡大できます）</span>}
     </div>
   )
@@ -305,6 +307,7 @@ export function PhoneDock(): React.JSX.Element {
         onClick: () => (isSel ? setMenu('shape') : pick(lastSel))
       })}
       {key({ id: 'select', icon: 'cursor', label: '選ぶ', on: tool === 'select', disabled: !hasImage, onClick: () => pick('select') })}
+      {key({ id: 'live', icon: 'liveEdit', label: 'ライブ', on: tool === 'live', disabled: !hasImage, onClick: () => pick('live') })}
       <span className="dock-sep" aria-hidden />
       {key({
         id: 'strokes',

@@ -4,7 +4,8 @@ import { addPage, createProject, duplicatePage, movePage, newId, removePage, swi
 import type { SelectionOp } from './engine/selection'
 import type { ClipRegion, ImageAsset, Project, ProjectSettings, Stroke } from './engine/types'
 
-export type Tool = 'draw' | 'erase' | 'select' | 'pan' | 'rect' | 'ellipse' | 'lasso'
+/** live：ライブ編集（絵の上の線をタップして選び、太さなどをその場で直す） */
+export type Tool = 'draw' | 'erase' | 'select' | 'pan' | 'rect' | 'ellipse' | 'lasso' | 'live'
 export const SELECTION_TOOLS: Tool[] = ['rect', 'ellipse', 'lasso']
 
 /** 元に戻す単位。選択範囲も含める（Photoshop と同じく、選択の失敗も Ctrl+Z で戻せる） */
@@ -15,7 +16,7 @@ interface Snapshot {
 
 const HISTORY_LIMIT = 100
 /** ページが変わったら、前のページ用の選択・再生位置などは持ち越さない */
-const PAGE_RESET = { selectedId: null, selection: null, time: 0, playing: false, rerecordId: null, viewMode: 'edit' as const }
+const PAGE_RESET = { selectedId: null, livePart: null, selection: null, time: 0, playing: false, rerecordId: null, viewMode: 'edit' as const }
 let lastMerge: { key?: string; at: number } = { at: 0 }
 
 interface EditorState {
@@ -36,6 +37,10 @@ interface EditorState {
   /** 最後に使った選択ツール（スマホのドックの「範囲」ボタン用） */
   lastSelTool: 'rect' | 'ellipse' | 'lasso'
   selectedId: string | null
+  /** ライブ編集で選んでいる線（軌跡の中の、ペンを下ろしてから上げるまでの区間） */
+  livePart: { strokeId: string; part: number } | null
+  /** ライブ編集の操作：move＝線をタップで選び、ドラッグで動かす / erase＝選んだ軌跡を消しゴムで消す */
+  liveMode: 'move' | 'erase'
   /** 再生ヘッド (ms) */
   time: number
   playing: boolean
@@ -76,6 +81,8 @@ interface EditorState {
   markSaved: (filePath: string) => void
   setTool: (t: Tool) => void
   select: (id: string | null) => void
+  setLivePart: (part: { strokeId: string; part: number } | null) => void
+  setLiveMode: (m: 'move' | 'erase') => void
   setTime: (t: number) => void
   setPlaying: (v: boolean) => void
   setViewMode: (v: 'edit' | 'preview') => void
@@ -97,6 +104,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   tool: 'draw',
   lastSelTool: 'rect',
   selectedId: null,
+  livePart: null,
+  liveMode: 'move',
   time: 0,
   playing: false,
   viewMode: 'edit',
@@ -247,6 +256,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       future: [],
       selection: null,
       selectedId: null,
+      livePart: null,
       time: 0,
       playing: false,
       viewMode: 'edit',
@@ -254,8 +264,16 @@ export const useEditor = create<EditorState>((set, get) => ({
     }),
   markSaved: (filePath) => set({ filePath, dirty: false }),
   setTool: (tool) =>
-    set(tool === 'rect' || tool === 'ellipse' || tool === 'lasso' ? { tool, lastSelTool: tool } : { tool }),
-  select: (selectedId) => set({ selectedId }),
+    set(
+      tool === 'rect' || tool === 'ellipse' || tool === 'lasso'
+        ? { tool, lastSelTool: tool }
+        : tool === 'live'
+          ? { tool, playing: false, viewMode: 'edit' } // ライブ編集は、止めた状態の絵の上で行う
+          : { tool }
+    ),
+  select: (selectedId) => set((s) => ({ selectedId, livePart: s.livePart && s.livePart.strokeId !== selectedId ? null : s.livePart })),
+  setLiveMode: (liveMode) => set({ liveMode }),
+  setLivePart: (livePart) => set(livePart ? { livePart, selectedId: livePart.strokeId } : { livePart }),
   setTime: (time) => set({ time }),
   setPlaying: (playing) => set(playing ? { playing, viewMode: 'preview' } : { playing }),
   setViewMode: (viewMode) => set({ viewMode }),

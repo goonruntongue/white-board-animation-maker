@@ -6,11 +6,13 @@ import { AppendToggle, PenSizePicker } from './PenSizePicker'
 import { SelectionModeBar } from './SelectionModeBar'
 import { ThemeSwitch } from './ThemeSwitch'
 import { HelpMenu } from './HelpMenu'
+import { LiveEditBar } from './LiveEditBar'
 
 const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
   { id: 'draw', icon: 'pen', label: '描く', key: 'D' },
   { id: 'erase', icon: 'eraser', label: '消す', key: 'E' },
   { id: 'select', icon: 'cursor', label: '軌跡を選ぶ', key: 'V' },
+  { id: 'live', icon: 'liveEdit', label: 'ライブ編集', key: 'W' },
   { id: 'pan', icon: 'hand', label: '移動', key: 'H' }
 ]
 
@@ -112,6 +114,8 @@ Shift+ドラッグで追加 / Alt+ドラッグで除外`}
       {/* オプションバー：選択ツールなら合成モード、それ以外はペン先サイズ */}
       {SELECTION_TOOLS.includes(tool) ? (
         <SelectionModeBar />
+      ) : tool === 'live' ? (
+        <LiveEditBar />
       ) : (
         <>
           <PenSizePicker disabled={!hasImage} kind={tool === 'erase' ? 'eraser' : 'pen'} />

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { captureImage, importImageDialog, importSampleImage, openAutoTrace } from '../commands'
 import { appendToStroke, simplifyPoints, strokeFromRecording } from '../engine/project'
+import { hitPart, strokeParts, transformPart } from '../engine/strokeParts'
 import { addEraserMark, combine, flattenShapes, isDegenerate, normalizeBox, type SelectionOp } from '../engine/selection'
 import type { ClipShape, Stroke, StrokePoint } from '../engine/types'
 import { buildTimeline, rasterizeClip, traceClipShape, WBRenderer } from '../engine/wb-engine'
@@ -116,6 +117,10 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const selectedId = useEditor((s) => s.selectedId)
   const rerecordId = useEditor((s) => s.rerecordId)
   const selection = useEditor((s) => s.selection)
+  const livePart = useEditor((s) => s.livePart)
+  const liveMode = useEditor((s) => s.liveMode)
+  /** ライブ編集で線をドラッグして動かしている途中（動かす前の軌跡を持っておき、そこからのずれで動かす） */
+  const liveDrag = useRef<{ pointerId: number; start: Pt; startClient: Pt; stroke: Stroke; part: number; moved: boolean; key: string } | null>(null)
   const assets = useAssets(project)
   const image = project.image
 
@@ -162,6 +167,19 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     [selectedStroke?.clip, image, imgW, imgH]
   )
 
+  const liveErasing = tool === 'live' && liveMode === 'erase'
+  // ライブ編集：選んだ線を描き終えた瞬間の絵を見せる（線の太さを変えると、その線の見え方がその場で変わる）。
+  // 線を選んでいないときは、全部描き終えた直後（最後に全体をふわっと出す前）＝ペンで見える範囲だけの絵
+  const live = tool === 'live' && viewMode === 'edit'
+  const liveTime = useMemo(() => {
+    if (!livePart) return timeline.drawEnd
+    const idx = project.strokes.findIndex((s) => s.id === livePart.strokeId)
+    const seg = timeline.segments.find((g) => g.index === idx)
+    const part = idx >= 0 ? strokeParts(project.strokes[idx])[livePart.part] : undefined
+    if (!seg || !part) return timeline.drawEnd
+    return seg.start + (seg.end - seg.start) * (seg.prep.param[part.end] ?? 1)
+  }, [livePart, project.strokes, timeline])
+
   useEffect(() => onZoomChange(scale), [scale, onZoomChange])
 
   // 画像が変わったら表示をリセット
@@ -201,9 +219,10 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     const r = rendererRef.current
     if (!r || !image) return
     if (viewMode === 'preview') r.renderAt(time)
+    else if (live) r.renderAt(liveTime, { hand: false })
     // 編集表示：なぞった範囲（＝最終的に見える範囲）を全描画して、欠けを確認しやすくする
     else r.renderAt(timeline.total, { hand: false, background: false })
-  }, [project, assets, time, viewMode, image, timeline])
+  }, [project, assets, time, viewMode, image, timeline, live, liveTime])
 
   // ---- 選択範囲の外を暗くする層 ----
   useEffect(() => {
@@ -261,7 +280,26 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
 
-    if (viewMode === 'edit') {
+    // ライブ編集：選んだ線のペンの太さ（見える範囲）を薄く重ね、中心線を引く
+    if (live && livePart) {
+      const s = project.strokes.find((x) => x.id === livePart.strokeId)
+      const part = s ? strokeParts(s)[livePart.part] : undefined
+      if (s && part) {
+        const pts = s.points.slice(part.start, part.end + 1).map((p, i) => (i === 0 ? { x: p.x, y: p.y } : p))
+        ctx.strokeStyle = 'rgba(255, 122, 26, 0.28)'
+        ctx.lineWidth = part.width
+        polyline(ctx, pts)
+        ctx.strokeStyle = 'rgba(255, 122, 26, 0.95)'
+        ctx.lineWidth = 2 * px
+        polyline(ctx, pts)
+        ctx.fillStyle = '#ff7a1a'
+        ctx.beginPath()
+        ctx.arc(pts[0].x, pts[0].y, 4.5 * px, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
+
+    if (viewMode === 'edit' && !live) {
       project.strokes.forEach((s, i) => {
         if (s.points.length === 0) return
         const selected = s.id === selectedId
@@ -351,9 +389,10 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     }
 
     const cur = cursor.current
-    if (cur && (tool === 'draw' || tool === 'erase') && viewMode === 'edit') {
-      const w = tool === 'erase' ? project.settings.eraserWidth : project.settings.defaultRevealWidth
-      if (tool === 'erase') ctx.setLineDash([4 * px, 3 * px])
+    if (cur && (tool === 'draw' || tool === 'erase' || liveErasing) && viewMode === 'edit') {
+      const erasing = tool === 'erase' || liveErasing
+      const w = erasing ? project.settings.eraserWidth : project.settings.defaultRevealWidth
+      if (erasing) ctx.setLineDash([4 * px, 3 * px])
       ctx.strokeStyle = 'rgba(0,0,0,0.55)'
       ctx.lineWidth = 1 * px
       ctx.beginPath()
@@ -365,7 +404,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       ctx.stroke()
       ctx.setLineDash([])
     }
-  }, [image, imgW, imgH, scale, viewMode, project, selectedId, rerecordId, tool, selection, selMask, selectedClipMask, drawClippedBand])
+  }, [image, imgW, imgH, scale, viewMode, project, selectedId, rerecordId, tool, selection, selMask, selectedClipMask, drawClippedBand, live, livePart, liveErasing])
 
   useEffect(() => drawOverlay(), [drawOverlay])
 
@@ -652,6 +691,29 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       // 指でのタップは当たり判定を広めにする
       const hit = hitStroke(project.strokes, p.x, p.y, (e.pointerType === 'touch' ? 18 : 8) / scale)
       st.select(hit?.id ?? null)
+    } else if (tool === 'live') {
+      if (st.viewMode !== 'edit') st.setViewMode('edit')
+      if (st.liveMode === 'erase') {
+        // 消しゴム：選んでいる線の軌跡を消す（線を選んでいなければ、消し始めの所にある線の軌跡）
+        if (!st.livePart) {
+          const hit = hitPart(project.strokes, p.x, p.y, Math.max(st.project.settings.eraserWidth / 2, (e.pointerType === 'touch' ? 14 : 5) / scale))
+          if (hit) st.setLivePart(hit)
+        }
+        erasing.current = { pointerId: e.pointerId, points: [p] }
+        capture(e)
+        if (e.pointerType === 'touch') requestAnimationFrame(() => showLoupe(e.clientX, e.clientY))
+        drawOverlay()
+        return
+      }
+      // タップした所にある線を選ぶ（何もない所なら選択を外す）。そのままドラッグすると、その線を動かす
+      const hit = hitPart(project.strokes, p.x, p.y, (e.pointerType === 'touch' ? 14 : 5) / scale)
+      st.setLivePart(hit)
+      if (hit) {
+        haptic()
+        const stroke = st.project.strokes.find((x) => x.id === hit.strokeId)!
+        liveDrag.current = { pointerId: e.pointerId, start: p, startClient: { x: e.clientX, y: e.clientY }, stroke, part: hit.part, moved: false, key: `livemove:${Date.now()}` }
+        capture(e)
+      }
     }
   }
 
@@ -671,6 +733,17 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       return
     }
     const p = toImage(e.clientX, e.clientY)
+    const ld = liveDrag.current
+    if (ld && ld.pointerId === e.pointerId) {
+      // 少し動かしてから（タップのつもりの小さなぶれでは動かさない）
+      if (!ld.moved && Math.hypot(e.clientX - ld.startClient.x, e.clientY - ld.startClient.y) < DRAG_THRESHOLD * 2) return
+      ld.moved = true
+      const dx = p.x - ld.start.x
+      const dy = p.y - ld.start.y
+      const moved = transformPart(ld.stroke, ld.part, dx, dy)
+      useEditor.getState().commit((proj) => ({ ...proj, strokes: proj.strokes.map((s) => (s.id === ld.stroke.id ? { ...s, points: moved.points } : s)) }), ld.key)
+      return
+    }
     const d = draft.current
     if (d) {
       if (d.kind !== 'lasso') {
@@ -733,6 +806,12 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         return
       }
       finishDraft()
+      return
+    }
+    const ld = liveDrag.current
+    if (ld && ld.pointerId === e.pointerId) {
+      liveDrag.current = null
+      if (ld.moved) haptic()
       return
     }
     const er = erasing.current
@@ -831,9 +910,9 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     ? ''
     : tool === 'pan' || panDrag.current
       ? 'cur-grab'
-      : (tool === 'draw' || tool === 'erase') && viewMode === 'edit'
+      : (tool === 'draw' || tool === 'erase' || liveErasing) && viewMode === 'edit'
         ? 'cur-none'
-        : tool === 'select'
+        : tool === 'select' || tool === 'live'
           ? 'cur-default'
           : 'cur-crosshair'
 
