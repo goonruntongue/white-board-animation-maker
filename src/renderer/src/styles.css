@@ -474,6 +474,19 @@ kbd {
   height: 30px;
 }
 
+/* 右パネル：再生時間のプリセット */
+.dur-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -2px 0 12px;
+}
+.dur-presets .btn.small.on {
+  background: linear-gradient(180deg, var(--key-pressed-top), var(--key-pressed-bot));
+  box-shadow: var(--key-shadow-pressed);
+  color: var(--accent-text);
+}
+
 /* ライブ編集のオプションバー */
 .live-bar {
   flex: none;

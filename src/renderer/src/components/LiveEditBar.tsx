@@ -13,6 +13,7 @@ import {
   transformPart,
   transformStroke
 } from '../engine/strokeParts'
+import { deleteSelectedAnchor } from '../livePath'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
 
@@ -21,6 +22,11 @@ const MAX = 600
 /** 対数目盛り：細い太さは細かく、太い太さは一気に動かせる */
 const toLog = (w: number): number => Math.round((Math.log(Math.max(MIN, w) / MIN) / Math.log(MAX / MIN)) * 1000)
 const fromLog = (v: number): number => Math.round(MIN * Math.pow(MAX / MIN, v / 1000))
+
+/** 軌跡まるごとで扱うか（パス編集はいつも1本の線ごと） */
+function isWhole(s: { liveUnit: 'stroke' | 'part'; liveMode: string }): boolean {
+  return s.liveUnit === 'stroke' && s.liveMode !== 'path'
+}
 
 /** 選んでいる軌跡（線）の情報（なければ null）。軌跡ごとのとき width は最初の線の太さ */
 function useLive(): { strokeId: string; part: number; index: number; parts: number; width: number } | null {
@@ -32,7 +38,7 @@ function useLive(): { strokeId: string; part: number; index: number; parts: numb
       const index = s.project.strokes.findIndex((x) => x.id === lp.strokeId)
       if (index < 0) return none
       const parts = strokeParts(s.project.strokes[index])
-      const part = parts[s.liveUnit === 'stroke' ? 0 : lp.part]
+      const part = parts[isWhole(s) ? 0 : lp.part]
       if (!part) return none
       return { strokeId: lp.strokeId, part: lp.part, index, parts: parts.length, width: part.width }
     })
@@ -49,7 +55,7 @@ export function setLiveWidth(width: number): void {
   const lp = st.livePart
   if (!lp) return
   const w = Math.max(MIN, Math.min(MAX, Math.round(width)))
-  const whole = st.liveUnit === 'stroke'
+  const whole = isWhole(st)
   st.commit(
     (p) => ({
       ...p,
@@ -76,7 +82,7 @@ export function scaleLivePart(factor: number): void {
   const st = useEditor.getState()
   const lp = st.livePart
   if (!lp) return
-  const whole = st.liveUnit === 'stroke'
+  const whole = isWhole(st)
   st.commit(
     (p) => ({
       ...p,
@@ -92,7 +98,7 @@ export function stepLivePart(dir: -1 | 1): void {
   const lp = st.livePart
   const strokes = st.project.strokes.filter((s) => !s.hidden && s.points.length > 0)
   if (strokes.length === 0) return
-  const whole = st.liveUnit === 'stroke'
+  const whole = isWhole(st)
   if (!lp) {
     const s = dir > 0 ? strokes[0] : strokes[strokes.length - 1]
     st.setLivePart({ strokeId: s.id, part: whole || dir > 0 ? 0 : strokeParts(s).length - 1 })
@@ -141,7 +147,8 @@ function ToolSize({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' })
 const MODES = [
   { id: 'move', icon: 'move', label: '選ぶ・動かす', hint: '選ぶ・動かす：タップで選び、ドラッグで動かす。太さ・大きさも変えられます' },
   { id: 'brush', icon: 'plusPen', label: 'ブラシで足す', hint: 'ブラシで足す：なぞった所を、選んだ軌跡に足す（ペンもそこを通り、表示範囲も広がる）' },
-  { id: 'erase', icon: 'eraser', label: '消しゴム', hint: '消しゴム：なぞった所を、選んだ軌跡では見せない' }
+  { id: 'erase', icon: 'eraser', label: '消しゴム', hint: '消しゴム：なぞった所を、選んだ軌跡では見せない' },
+  { id: 'path', icon: 'pathPen', label: 'パス編集', hint: 'パス編集：線をアンカーとハンドルの曲線として編集する' }
 ] as const
 
 /** 操作の切り替え：選ぶ・動かす ／ ブラシで足す ／ 消しゴム */
@@ -201,14 +208,20 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
   const live = useLive()
   const mode = useEditor((s) => s.liveMode)
   const unit = useEditor((s) => s.liveUnit)
+  const hasAnchor = useEditor((s) => s.livePath?.selected != null)
   const clear = (): void => useEditor.getState().setLivePart(null)
-  const whole = unit === 'stroke'
+  const pathing = mode === 'path'
+  const whole = unit === 'stroke' && !pathing
+  // パス編集はいつも1本の線ごとなので、単位の切り替えは出さない
+  const unitSwitch = pathing ? null : <UnitSwitch phone={phone} />
   const what = whole ? '軌跡' : '線'
   const size = mode === 'brush' ? <ToolSize phone={phone} kind="brush" /> : mode === 'erase' ? <ToolSize phone={phone} kind="eraser" /> : null
 
   if (!live) {
     const hint =
-      mode === 'brush'
+      mode === 'path'
+        ? '編集したい線を押して選びます'
+        : mode === 'brush'
         ? '足したい軌跡の上からなぞり始めます'
         : mode === 'erase'
           ? 'なぞった所にある軌跡を消します'
@@ -216,13 +229,13 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
     return phone ? (
       <>
         <ModeSwitch phone />
-        <UnitSwitch phone />
+        {unitSwitch}
         {size ?? <span className="pc-hint">{hint}</span>}
       </>
     ) : (
       <div className="tb-group live-bar">
         <ModeSwitch phone={false} />
-        <UnitSwitch phone={false} />
+        {unitSwitch}
         {size ?? <span className="live-hint">{hint}</span>}
       </div>
     )
@@ -235,7 +248,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
     return (
       <>
         <ModeSwitch phone />
-        <UnitSwitch phone />
+        {unitSwitch}
         <span className="pc-label">{label}</span>
         <button className="pc-key" aria-label={`前の${what}`} onClick={() => stepLivePart(-1)}>
           <Icon name="up" size={18} />
@@ -245,7 +258,16 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
           <Icon name="down" size={18} />
           <small>次の{what}</small>
         </button>
-        {size ?? (
+        {pathing && (
+          <>
+            <button className="pc-key danger" aria-label="アンカーを削除" disabled={!hasAnchor} onClick={() => deleteSelectedAnchor()}>
+              <Icon name="trash" size={18} />
+              <small>アンカー削除</small>
+            </button>
+            <span className="pc-hint">アンカー・ハンドルをドラッグ。線の上をダブルタップでアンカー追加</span>
+          </>
+        )}
+        {!pathing && (size ?? (
           <>
             <button className="pc-key" aria-label="縮小" onClick={() => scaleLivePart(1 / 1.1)}>
               <Icon name="zoomOut" size={18} />
@@ -273,7 +295,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
               </button>
             )}
           </>
-        )}
+        ))}
         <button className="pc-key" aria-label="選択を外す" onClick={clear}>
           <Icon name="x" size={18} />
         </button>
@@ -283,7 +305,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
   return (
     <div className="tb-group live-bar" title={`選んだ${what}の編集。絵は、この${what}を描き終えた瞬間を表示しています`}>
       <ModeSwitch phone={false} />
-      <UnitSwitch phone={false} />
+      {unitSwitch}
       <span className="tb-label">{label}</span>
       <button className="icon-btn" title={`前の${what} (,)`} onClick={() => stepLivePart(-1)}>
         <Icon name="up" />
@@ -291,7 +313,15 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
       <button className="icon-btn" title={`次の${what} (.)`} onClick={() => stepLivePart(1)}>
         <Icon name="down" />
       </button>
-      {size ?? (
+      {pathing && (
+        <>
+          <button className="icon-btn" title="選んだアンカーを削除 (Delete)" disabled={!hasAnchor} onClick={() => deleteSelectedAnchor()}>
+            <Icon name="trash" />
+          </button>
+          <span className="live-hint">アンカー・ハンドルをドラッグ／線の上をダブルクリックで追加／Alt＋ドラッグで角に</span>
+        </>
+      )}
+      {!pathing && (size ?? (
         <>
           <button className="icon-btn" title={`${what}を縮小（中心を基準に）`} onClick={() => scaleLivePart(1 / 1.1)}>
             <Icon name="zoomOut" />
@@ -319,7 +349,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
             </button>
           )}
         </>
-      )}
+      ))}
       <button className="icon-btn" title="選択を外す (Esc)" onClick={clear}>
         <Icon name="x" />
       </button>

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { captureImage, importImageDialog, importSampleImage, openAutoTrace } from '../commands'
 import { appendToStroke, simplifyPoints, strokeFromRecording } from '../engine/project'
 import { hitPart, strokeParts, transformPart, transformStroke } from '../engine/strokeParts'
+import { fitPath, fitTolerance, insertAnchor, nearestOnPath, partPoints, type PathNode } from '../engine/pathEdit'
+import { updatePathNodes } from '../livePath'
 import { addEraserMark, addRevealMark, combine, flattenShapes, isDegenerate, normalizeBox, type SelectionOp } from '../engine/selection'
 import type { ClipShape, Stroke, StrokePoint } from '../engine/types'
 import { buildTimeline, rasterizeClip, traceClipShape, WBRenderer } from '../engine/wb-engine'
@@ -122,6 +124,11 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const livePart = useEditor((s) => s.livePart)
   const liveMode = useEditor((s) => s.liveMode)
   const liveUnit = useEditor((s) => s.liveUnit)
+  const livePath = useEditor((s) => s.livePath)
+  /** パス編集でアンカー・ハンドルをドラッグしている途中 */
+  /** パス編集のダブルクリック（ダブルタップ）判定用：前回押した時刻と画面上の位置 */
+  const lastTap = useRef<{ time: number; x: number; y: number }>({ time: 0, x: 0, y: 0 })
+  const pathDrag = useRef<{ pointerId: number; kind: 'anchor' | 'in' | 'out'; index: number; start: Pt; nodes: PathNode[]; alt: boolean; key: string } | null>(null)
   /** ライブ編集で線をドラッグして動かしている途中（動かす前の軌跡を持っておき、そこからのずれで動かす） */
   const liveDrag = useRef<{ pointerId: number; start: Pt; startClient: Pt; stroke: Stroke; part: number; moved: boolean; key: string } | null>(null)
   const assets = useAssets(project)
@@ -172,6 +179,9 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
 
   const liveErasing = tool === 'live' && liveMode === 'erase'
   const liveBrushing = tool === 'live' && liveMode === 'brush'
+  const livePathing = tool === 'live' && liveMode === 'path'
+  /** 軌跡まるごとで扱うか（パス編集はいつも1本の線） */
+  const liveWhole = liveUnit === 'stroke' && liveMode !== 'path'
   // ライブ編集：選んだ線を描き終えた瞬間の絵を見せる（線の太さを変えると、その線の見え方がその場で変わる）。
   // 線を選んでいないときは、全部描き終えた直後（最後に全体をふわっと出す前）＝ペンで見える範囲だけの絵
   const live = tool === 'live' && viewMode === 'edit'
@@ -182,9 +192,24 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     const part = idx >= 0 ? strokeParts(project.strokes[idx])[livePart.part] : undefined
     if (!seg || !part) return timeline.drawEnd
     // 軌跡ごとのときは、その軌跡を描き終えた瞬間
-    if (liveUnit === 'stroke') return seg.end
+    if (liveWhole) return seg.end
     return seg.start + (seg.end - seg.start) * (seg.prep.param[part.end] ?? 1)
-  }, [livePart, liveUnit, project.strokes, timeline])
+  }, [livePart, liveWhole, project.strokes, timeline])
+
+  // パス編集：選んだ線から曲線（アンカーとハンドル）を作る。元に戻すなどで線が変わったときも作り直す
+  useEffect(() => {
+    if (!livePathing || !livePart) return
+    const st = useEditor.getState()
+    const stroke = project.strokes.find((s) => s.id === livePart.strokeId)
+    if (!stroke || !strokeParts(stroke)[livePart.part]) {
+      if (st.livePath) st.setLivePath(null)
+      return
+    }
+    const lp = st.livePath
+    if (lp && lp.strokeId === stroke.id && lp.part === livePart.part && lp.pointsRef === stroke.points) return
+    const nodes = fitPath(partPoints(stroke, livePart.part), fitTolerance(stroke, livePart.part))
+    st.setLivePath({ strokeId: stroke.id, part: livePart.part, nodes, pointsRef: stroke.points, selected: null })
+  }, [livePathing, livePart, project.strokes])
 
   useEffect(() => onZoomChange(scale), [scale, onZoomChange])
 
@@ -291,7 +316,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     if (live && livePart) {
       const s = project.strokes.find((x) => x.id === livePart.strokeId)
       const part = s ? strokeParts(s)[livePart.part] : undefined
-      if (s && liveUnit === 'stroke') {
+      if (s && liveWhole) {
         // 軌跡まるごと：線ごとの太さで、ペンが通る範囲を重ねる
         ctx.strokeStyle = 'rgba(255, 122, 26, 0.28)'
         ctx.lineWidth = s.revealWidth
@@ -316,6 +341,51 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         ctx.arc(pts[0].x, pts[0].y, 4.5 * px, 0, Math.PI * 2)
         ctx.fill()
       }
+    }
+
+    // パス編集：曲線、アンカー（四角）、選んだアンカーと両どなりのハンドル
+    if (live && livePathing && livePath && livePart && livePath.strokeId === livePart.strokeId && livePath.part === livePart.part) {
+      const nodes = livePath.nodes
+      ctx.strokeStyle = '#1f6feb'
+      ctx.lineWidth = 2 * px
+      ctx.beginPath()
+      ctx.moveTo(nodes[0].x, nodes[0].y)
+      for (let i = 0; i + 1 < nodes.length; i++) ctx.bezierCurveTo(nodes[i].outX, nodes[i].outY, nodes[i + 1].inX, nodes[i + 1].inY, nodes[i + 1].x, nodes[i + 1].y)
+      ctx.stroke()
+      const sel = livePath.selected
+      if (sel !== null) {
+        const handles: { n: PathNode; hx: number; hy: number }[] = []
+        const add = (i: number, side: 'in' | 'out'): void => {
+          const n = nodes[i]
+          if (!n || (side === 'in' && i === 0) || (side === 'out' && i === nodes.length - 1)) return
+          handles.push({ n, hx: side === 'in' ? n.inX : n.outX, hy: side === 'in' ? n.inY : n.outY })
+        }
+        add(sel, 'in')
+        add(sel, 'out')
+        add(sel - 1, 'out')
+        add(sel + 1, 'in')
+        for (const h of handles) {
+          ctx.strokeStyle = 'rgba(31,111,235,0.85)'
+          ctx.lineWidth = 1.2 * px
+          ctx.beginPath()
+          ctx.moveTo(h.n.x, h.n.y)
+          ctx.lineTo(h.hx, h.hy)
+          ctx.stroke()
+          ctx.fillStyle = '#fff'
+          ctx.beginPath()
+          ctx.arc(h.hx, h.hy, 4 * px, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.stroke()
+        }
+      }
+      nodes.forEach((n, i) => {
+        const r = (i === sel ? 5 : 4) * px
+        ctx.fillStyle = i === sel ? '#1f6feb' : '#fff'
+        ctx.strokeStyle = '#1f6feb'
+        ctx.lineWidth = 1.5 * px
+        ctx.fillRect(n.x - r, n.y - r, r * 2, r * 2)
+        ctx.strokeRect(n.x - r, n.y - r, r * 2, r * 2)
+      })
     }
 
     if (viewMode === 'edit' && !live) {
@@ -424,7 +494,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       ctx.stroke()
       ctx.setLineDash([])
     }
-  }, [image, imgW, imgH, scale, viewMode, project, selectedId, rerecordId, tool, selection, selMask, selectedClipMask, drawClippedBand, live, livePart, liveErasing, liveBrushing, liveUnit])
+  }, [image, imgW, imgH, scale, viewMode, project, selectedId, rerecordId, tool, selection, selMask, selectedClipMask, drawClippedBand, live, livePart, liveErasing, liveBrushing, liveWhole, livePathing, livePath])
 
   useEffect(() => drawOverlay(), [drawOverlay])
 
@@ -725,6 +795,69 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         drawOverlay()
         return
       }
+      if (st.liveMode === 'path') {
+        const lp = st.livePath
+        const R = (e.pointerType === 'touch' ? 16 : 8) / scale
+        if (lp && st.livePart && lp.strokeId === st.livePart.strokeId && lp.part === st.livePart.part) {
+          // ハンドル（選んだアンカーと両どなり）→ アンカーの順に当たりを調べる
+          const nodes = lp.nodes
+          const sel = lp.selected
+          let grab: { kind: 'anchor' | 'in' | 'out'; index: number } | null = null
+          if (sel !== null) {
+            const cand: { kind: 'in' | 'out'; index: number }[] = [
+              { kind: 'in', index: sel },
+              { kind: 'out', index: sel },
+              { kind: 'out', index: sel - 1 },
+              { kind: 'in', index: sel + 1 }
+            ]
+            for (const c of cand) {
+              const n = nodes[c.index]
+              if (!n || (c.kind === 'in' && c.index === 0) || (c.kind === 'out' && c.index === nodes.length - 1)) continue
+              const hx = c.kind === 'in' ? n.inX : n.outX
+              const hy = c.kind === 'in' ? n.inY : n.outY
+              if (Math.hypot(hx - p.x, hy - p.y) <= R && Math.hypot(hx - n.x, hy - n.y) > 0.5) {
+                grab = c
+                break
+              }
+            }
+          }
+          if (!grab) {
+            let best = R
+            for (let i = 0; i < nodes.length; i++) {
+              const d = Math.hypot(nodes[i].x - p.x, nodes[i].y - p.y)
+              if (d <= best) {
+                best = d
+                grab = { kind: 'anchor', index: i }
+              }
+            }
+          }
+          if (grab) {
+            st.setLivePath({ ...lp, selected: grab.kind === 'anchor' ? grab.index : lp.selected })
+            pathDrag.current = { pointerId: e.pointerId, kind: grab.kind, index: grab.index, start: p, nodes, alt: e.altKey, key: `path:${Date.now()}` }
+            capture(e)
+            return
+          }
+          // 線の上をダブルクリック（ダブルタップ）：アンカーを足す
+          // pointerdown の detail は回数を持たないので、前回押した時刻と位置で判定する
+          const prevTap = lastTap.current
+          const isDouble = e.timeStamp - prevTap.time < 400 && Math.hypot(e.clientX - prevTap.x, e.clientY - prevTap.y) < 12
+          lastTap.current = { time: isDouble ? 0 : e.timeStamp, x: e.clientX, y: e.clientY }
+          const near = nearestOnPath(nodes, p.x, p.y)
+          if (near && near.dist <= R * 1.5) {
+            if (isDouble) {
+              updatePathNodes(insertAnchor(nodes, near.seg, near.t), undefined, near.seg + 1)
+              haptic()
+            } else st.setLivePath({ ...lp, selected: null })
+            return
+          }
+        }
+        // 別の線を選ぶ（パス編集はいつも1本の線ごと）
+        const hit = hitPart(project.strokes, p.x, p.y, (e.pointerType === 'touch' ? 14 : 5) / scale)
+        st.setLivePart(hit)
+        if (!hit) st.setLivePath(null)
+        else haptic()
+        return
+      }
       if (st.liveMode === 'brush') {
         // ブラシで足す：選んでいる軌跡に、なぞった所を足す（ペンもそこを通り、表示範囲も広がる）
         let targetId = st.livePart?.strokeId
@@ -781,6 +914,35 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       return
     }
     const p = toImage(e.clientX, e.clientY)
+    const pd = pathDrag.current
+    if (pd && pd.pointerId === e.pointerId) {
+      const dx = p.x - pd.start.x
+      const dy = p.y - pd.start.y
+      const nodes = pd.nodes.map((n) => ({ ...n }))
+      const n = nodes[pd.index]
+      if (pd.kind === 'anchor') {
+        // アンカーを動かすと、両側のハンドルも一緒に動く
+        Object.assign(n, { x: n.x + dx, y: n.y + dy, inX: n.inX + dx, inY: n.inY + dy, outX: n.outX + dx, outY: n.outY + dy })
+      } else {
+        const o = pd.nodes[pd.index]
+        const hx = (pd.kind === 'in' ? o.inX : o.outX) + dx
+        const hy = (pd.kind === 'in' ? o.inY : o.outY) + dy
+        if (pd.kind === 'in') Object.assign(n, { inX: hx, inY: hy })
+        else Object.assign(n, { outX: hx, outY: hy })
+        // 反対側のハンドルも向きをそろえる（なめらかなまま）。Alt を押しながらなら片側だけ（角にする）
+        const hasOther = pd.kind === 'in' ? pd.index < nodes.length - 1 : pd.index > 0
+        if (!pd.alt && !e.altKey && hasOther) {
+          const len = pd.kind === 'in' ? Math.hypot(o.outX - o.x, o.outY - o.y) : Math.hypot(o.inX - o.x, o.inY - o.y)
+          const vx = n.x - hx
+          const vy = n.y - hy
+          const vl = Math.hypot(vx, vy) || 1
+          if (pd.kind === 'in') Object.assign(n, { outX: n.x + (vx / vl) * len, outY: n.y + (vy / vl) * len })
+          else Object.assign(n, { inX: n.x + (vx / vl) * len, inY: n.y + (vy / vl) * len })
+        }
+      }
+      updatePathNodes(nodes, pd.key)
+      return
+    }
     const ld = liveDrag.current
     if (ld && ld.pointerId === e.pointerId) {
       // 少し動かしてから（タップのつもりの小さなぶれでは動かさない）
@@ -855,6 +1017,10 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         return
       }
       finishDraft()
+      return
+    }
+    if (pathDrag.current?.pointerId === e.pointerId) {
+      pathDrag.current = null
       return
     }
     const ld = liveDrag.current

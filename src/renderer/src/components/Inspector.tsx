@@ -80,6 +80,26 @@ function StrokeInspector(): React.JSX.Element | null {
           unit="秒"
           onChange={(v) => set({ duration: Math.max(50, v) })}
         />
+        {/* 再生時間：よく使う長さをワンタッチで。すべての軌跡に同じ長さを使うこともできる */}
+        <div className="dur-presets" role="group" aria-label="再生時間のプリセット">
+          {[1000, 3000, 5000].map((ms) => (
+            <button key={ms} className={`btn small ${stroke.duration === ms ? 'on' : ''}`} aria-pressed={stroke.duration === ms} onClick={() => set({ duration: ms })}>
+              {ms / 1000}秒
+            </button>
+          ))}
+          <button
+            className="btn small"
+            title="この軌跡の再生時間を、このページのすべての軌跡に使う（元に戻す（↶）で取り消せます）"
+            onClick={() => {
+              const st = useEditor.getState()
+              const ms = stroke.duration
+              st.commit((p) => ({ ...p, strokes: p.strokes.map((x) => (x.duration === ms ? x : { ...x, duration: ms })) }))
+              st.notify(`すべての軌跡の再生時間を ${(ms / 1000).toFixed(2).replace(/\.?0+$/, '')} 秒にしました`)
+            }}
+          >
+            すべての軌跡に適用
+          </button>
+        </div>
         <SliderField
           label="描いた後の待機"
           value={stroke.delayAfter}

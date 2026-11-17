@@ -3,7 +3,8 @@ import { builtinHand } from './engine/handAsset'
 import { mergeStrokes } from './engine/strokeParts'
 import { addPage, createProject, duplicatePage, movePage, newId, removePage, switchPage } from './engine/project'
 import type { SelectionOp } from './engine/selection'
-import type { ClipRegion, ImageAsset, Project, ProjectSettings, Stroke } from './engine/types'
+import type { PathNode } from './engine/pathEdit'
+import type { ClipRegion, ImageAsset, Project, ProjectSettings, Stroke, StrokePoint } from './engine/types'
 
 /** live：ライブ編集（絵の上の線をタップして選び、太さなどをその場で直す） */
 export type Tool = 'draw' | 'erase' | 'select' | 'pan' | 'rect' | 'ellipse' | 'lasso' | 'live'
@@ -17,7 +18,7 @@ interface Snapshot {
 
 const HISTORY_LIMIT = 100
 /** ページが変わったら、前のページ用の選択・再生位置などは持ち越さない */
-const PAGE_RESET = { selectedId: null, livePart: null, selection: null, time: 0, playing: false, rerecordId: null, viewMode: 'edit' as const }
+const PAGE_RESET = { selectedId: null, livePart: null, livePath: null, selection: null, time: 0, playing: false, rerecordId: null, viewMode: 'edit' as const }
 let lastMerge: { key?: string; at: number } = { at: 0 }
 
 interface EditorState {
@@ -40,8 +41,16 @@ interface EditorState {
   selectedId: string | null
   /** ライブ編集で選んでいる線（軌跡の中の、ペンを下ろしてから上げるまでの区間） */
   livePart: { strokeId: string; part: number } | null
-  /** ライブ編集の操作：move＝タップで選び、ドラッグで動かす / brush＝なぞった所を選んだ軌跡に足す / erase＝消しゴムで消す */
-  liveMode: 'move' | 'brush' | 'erase'
+  /**
+   * ライブ編集の操作：move＝タップで選び、ドラッグで動かす / brush＝なぞった所を選んだ軌跡に足す / erase＝消しゴムで消す /
+   * path＝線をアンカーとハンドルの曲線として編集する
+   */
+  liveMode: 'move' | 'brush' | 'erase' | 'path'
+  /**
+   * パス編集中の線の曲線。pointsRef は、この曲線から点を作り直したときの軌跡の点の配列（元に戻すなどで
+   * 軌跡が変わったら、点の並びから曲線を作り直す目印）
+   */
+  livePath: { strokeId: string; part: number; nodes: PathNode[]; pointsRef: StrokePoint[]; selected: number | null } | null
   /** ライブ編集で選ぶ単位：stroke＝軌跡まるごと / part＝軌跡の中の1本の線 */
   liveUnit: 'stroke' | 'part'
   /** 再生ヘッド (ms) */
@@ -87,7 +96,8 @@ interface EditorState {
   setTool: (t: Tool) => void
   select: (id: string | null) => void
   setLivePart: (part: { strokeId: string; part: number } | null) => void
-  setLiveMode: (m: 'move' | 'brush' | 'erase') => void
+  setLiveMode: (m: 'move' | 'brush' | 'erase' | 'path') => void
+  setLivePath: (p: EditorState['livePath']) => void
   setLiveUnit: (u: 'stroke' | 'part') => void
   setTime: (t: number) => void
   setPlaying: (v: boolean) => void
@@ -112,6 +122,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   selectedId: null,
   livePart: null,
   liveMode: 'move',
+  livePath: null,
   liveUnit: 'stroke',
   time: 0,
   playing: false,
@@ -279,6 +290,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       selection: null,
       selectedId: null,
       livePart: null,
+      livePath: null,
       time: 0,
       playing: false,
       viewMode: 'edit',
@@ -294,7 +306,8 @@ export const useEditor = create<EditorState>((set, get) => ({
           : { tool }
     ),
   select: (selectedId) => set((s) => ({ selectedId, livePart: s.livePart && s.livePart.strokeId !== selectedId ? null : s.livePart })),
-  setLiveMode: (liveMode) => set({ liveMode }),
+  setLiveMode: (liveMode) => set({ liveMode, livePath: null }),
+  setLivePath: (livePath) => set({ livePath }),
   setLiveUnit: (liveUnit) => set((s) => ({ liveUnit, livePart: s.livePart ? { ...s.livePart, part: liveUnit === 'stroke' ? 0 : s.livePart.part } : null })),
   setLivePart: (livePart) => set(livePart ? { livePart, selectedId: livePart.strokeId } : { livePart }),
   setTime: (time) => set({ time }),

@@ -8,6 +8,7 @@ import { setThemePref, type ThemePref } from './lib/theme'
 import { openGuide, startTour } from './lib/tour'
 import { importHand, importImage } from './lib/imageTools'
 import { openImageFile, openProjectFile, readFileAsDataUrl, saveTextFile } from './lib/platform'
+import { deleteSelectedAnchor } from './livePath'
 import { useEditor } from './store'
 import sampleGuideUrl from './sample-guide.png'
 
@@ -190,7 +191,12 @@ export function rewind(): void {
 
 /** Delete キー：選択範囲があれば、その範囲を消す。なければ選んでいる軌跡を削除する */
 export function deleteSelected(): void {
-  const { selectedId, removeStroke, selection } = get()
+  const { selectedId, removeStroke, selection, tool, liveMode } = get()
+  // パス編集中は、選んでいるアンカーを消す
+  if (tool === 'live' && liveMode === 'path') {
+    deleteSelectedAnchor()
+    return
+  }
   if (selection) return eraseSelection()
   if (selectedId) removeStroke(selectedId)
 }
