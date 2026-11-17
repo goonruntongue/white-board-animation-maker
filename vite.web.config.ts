@@ -19,7 +19,8 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      injectRegister: 'script',
+      // 登録は public/register-sw.js で行う（新しい版への切り替えを確実にするため）
+      injectRegister: false,
       manifest: {
         // 同じオリジンに別のアプリがあっても混ざらないよう、固有の id を付ける
         id: 'com.goonruntongue.whiteboard-animation-maker',

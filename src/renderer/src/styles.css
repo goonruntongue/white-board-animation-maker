@@ -1643,6 +1643,22 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 .modal-body {
   padding: 18px 26px;
 }
+/* 画面より高いダイアログ：見出しと下のボタンは固定し、中身だけをスクロールする */
+.modal {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 32px);
+}
+.modal > header,
+.modal > .modal-footer {
+  flex: none;
+}
+.modal > .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .lead {
   margin: 0 0 16px;
   color: var(--text-2);
@@ -1658,6 +1674,18 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   color: var(--text-1);
   font-weight: 500;
   text-shadow: var(--engrave);
+}
+/* 説明文・スライダー・プレビューは「見出し｜操作」の2列に入れず、行の幅いっぱいに置く */
+.form-grid > p,
+.form-grid > .field,
+.form-grid > .fill-preview,
+.form-grid > .motion-preview {
+  grid-column: 1 / -1;
+}
+.form-grid > p {
+  margin: 0;
+  color: var(--text-2);
+  line-height: 1.6;
 }
 .inline-range {
   display: flex;

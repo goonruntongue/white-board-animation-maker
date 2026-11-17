@@ -16,6 +16,8 @@ export default defineConfig({
         return html
           .replace(/\s*<meta\s+http-equiv="Content-Security-Policy"[\s\S]*?\/>/, '')
           .replace(/\s*<link rel="(?:apple-touch-icon|icon)"[^>]*\/>/g, '')
+          // 1ファイル版には Service Worker はない（PWA の更新用スクリプトを外す）
+          .replace(/\s*<!--[^>]*PWA[^>]*-->\s*<script src="\.\/register-sw\.js"><\/script>/, '')
       }
     },
     viteSingleFile()
