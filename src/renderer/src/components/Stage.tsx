@@ -165,8 +165,9 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const [hasDraft, setHasDraft] = useState(false)
   /** スマホの「描き順を作る」案内を閉じたか（画像を読み込み直したら、また出す） */
   const [coachClosed, setCoachClosed] = useState(false)
-  /** スマホの絵の左下に、タイムラインの出し入れボタンを出すか（再生中・描き直し中は出さない） */
-  const quickBar = useEditor((s) => !s.playing && !s.rerecordId)
+  /** スマホの絵の左下に、再生ボタンを出すか（描き直し中は出さない） */
+  const quickBar = useEditor((s) => !s.rerecordId)
+  const playingNow = useEditor((s) => s.playing)
   const timelineHidden = useEditor((s) => s.timelineHidden)
 
   const [size, setSize] = useState({ w: 800, h: 600 })
@@ -1406,20 +1407,11 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
           </button>
         </div>
       )}
-      {image && isPhone && quickBar && (
+      {image && isPhone && quickBar && timelineHidden && (
+        // タイムラインを隠しているとき（スマホ）：絵の左下で再生・一時停止（出し入れは境目の取っ手で）
         <div className="stage-quick">
-          {timelineHidden && (
-            <button className="stage-quick-btn" aria-label="再生して確かめる" title="再生して確かめる" onClick={() => togglePlay()}>
-              <Icon name="play" size={18} />
-            </button>
-          )}
-          <button
-            className={`stage-quick-btn wide ${timelineHidden ? '' : 'on'}`}
-            aria-pressed={!timelineHidden}
-            onClick={() => useEditor.getState().setTimelineHidden(!timelineHidden)}
-          >
-            <Icon name={timelineHidden ? 'up' : 'down'} size={16} />
-            <span>{timelineHidden ? 'タイムライン' : 'タイムラインを隠す'}</span>
+          <button className="stage-quick-btn" aria-label={playingNow ? '一時停止' : '再生して確かめる'} title={playingNow ? '一時停止' : '再生して確かめる'} onClick={() => togglePlay()}>
+            <Icon name={playingNow ? 'pause' : 'play'} size={18} />
           </button>
         </div>
       )}

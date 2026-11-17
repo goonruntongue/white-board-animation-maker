@@ -35,6 +35,7 @@ import { getTourPrefs, GUIDE_EVENT, TOUR_EVENT } from './lib/tour'
 import { buildTimeline } from './engine/wb-engine'
 import { isDesktop, setWindowTitle } from './lib/platform'
 import { useIsPhone } from './lib/useMedia'
+import { useBarLayout } from './lib/barLayout'
 import { beginSession, listSnapshots, startAutosave } from './lib/recovery'
 import { SELECTION_TOOLS, useEditor } from './store'
 
@@ -55,12 +56,13 @@ export default function App(): React.JSX.Element {
   // 描き直し中は、スマホでは下のパネル（タイムライン・ドック）を隠して絵を広く使う
   const rerecording = useEditor((s) => !!s.rerecordId)
   // 手描きのブラシに入ったら（スマホ）、下のタイムラインを隠して絵を広く使う。ほかの操作に移ったら出す。
-  // 絵の左下のボタンで、どの操作中でもいつでも出し入れできる。再生中はいつも出す。ドックは残す
+  // 絵と下のパネルの境目の取っ手（山形の矢印）で、どの操作中でもいつでも出し入れできる。ドックは残す
   const brushMode = useEditor((s) => s.tool === 'live' && s.liveMode === 'brush')
   useEffect(() => {
     useEditor.getState().setTimelineHidden(brushMode)
   }, [brushMode])
-  const timelineHidden = useEditor((s) => s.timelineHidden && !s.playing)
+  const timelineHidden = useEditor((s) => s.timelineHidden)
+  const barLayout = useBarLayout()
   const hasImage = !!project.image
   const [zoom, setZoom] = useState(1)
   const [dragOver, setDragOver] = useState(false)
@@ -275,7 +277,7 @@ export default function App(): React.JSX.Element {
 
   return (
     <div
-      className={`app ${isPhone ? 'phone' : ''} ${hasImage ? 'has-image' : ''} ${rerecording ? 'rerecording' : ''} ${isPhone && timelineHidden ? 'tl-hidden' : ''}`}
+      className={`app ${isPhone ? 'phone' : ''} ${hasImage ? 'has-image' : ''} ${rerecording ? 'rerecording' : ''} ${isPhone && timelineHidden ? 'tl-hidden' : ''} ${isPhone && barLayout === 'one' ? 'bar-one' : ''}`}
       data-sheet={mobileSheet ?? undefined}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('Files')) {
@@ -302,6 +304,19 @@ export default function App(): React.JSX.Element {
           <Stage onZoomChange={onZoomChange} />
         </main>
         <Inspector />
+        {isPhone && hasImage && !rerecording && (
+          // 絵と下のパネルの境目に常にある取っ手：押すとタイムラインを出し入れする
+          <button
+            className={`tl-handle ${timelineHidden ? 'closed' : ''}`}
+            aria-label={timelineHidden ? 'タイムラインを出す' : 'タイムラインを隠す'}
+            aria-expanded={!timelineHidden}
+            onClick={() => useEditor.getState().setTimelineHidden(!timelineHidden)}
+          >
+            <svg width="22" height="12" viewBox="0 0 22 12" aria-hidden="true">
+              <path d="M3 3 L11 9 L19 3" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )}
       </div>
       <Timeline />
       {isPhone ? <PhoneDock /> : <StatusBar zoom={zoom} />}

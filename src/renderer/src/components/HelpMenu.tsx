@@ -2,6 +2,7 @@
 // PC はボタンの下に小さなメニュー、スマホは画面下のシートで開く。
 import { useEffect, useRef, useState } from 'react'
 import { importSampleImage } from '../commands'
+import { setBarLayout, useBarLayout } from '../lib/barLayout'
 import { openGuide, setShowTourOnStartup, startTour, useTourPrefs } from '../lib/tour'
 import { Icon } from './Icon'
 import { ActionSheet } from './phone/ActionSheet'
@@ -9,6 +10,7 @@ import { ActionSheet } from './phone/ActionSheet'
 export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const { showOnStartup } = useTourPrefs()
+  const barLayout = useBarLayout()
   const wrap = useRef<HTMLDivElement>(null)
 
   // メニューの外を押したら閉じる
@@ -53,6 +55,12 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
                 note: '押すと切り替わります',
                 active: showOnStartup,
                 onSelect: () => setShowTourOnStartup(!showOnStartup)
+              },
+              {
+                icon: 'layers',
+                label: barLayout === 'two' ? 'オプションバー：2段' : 'オプションバー：1段',
+                note: barLayout === 'two' ? '押すと1段（1列に並べて横にスクロール）に切り替わります' : '押すと2段（操作の切り替えと、選んだ線の操作を分ける）に切り替わります',
+                onSelect: () => setBarLayout(barLayout === 'two' ? 'one' : 'two')
               }
             ]}
           />

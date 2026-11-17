@@ -3980,7 +3980,51 @@ button {
   display: none;
 }
 
-/* スマホ：絵の左下に、タイムラインの出し入れ（隠しているときは再生も） */
+/*
+ * タイムラインの取っ手（スマホ）：絵と下のパネルの境目の真ん中に、いつもある。
+ * 下のパネルから引き出したタブの形。山形の矢印が下向き＝押すと隠す、上向き＝押すと出す
+ */
+.app.phone .workspace {
+  position: relative;
+}
+.tl-handle {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  z-index: 6;
+  width: 76px;
+  height: 22px;
+  padding: 0;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+  background-image: var(--noise), linear-gradient(180deg, var(--panel-top), var(--panel-top));
+  box-shadow: 0 -3px 10px rgba(0, 0, 0, 0.28), inset 0 1px 0 var(--hilite);
+  color: var(--accent, #ff7a1a);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+/* 指で押しやすいよう、見た目より広く反応する */
+.tl-handle::before {
+  content: '';
+  position: absolute;
+  inset: -14px -18px 0;
+}
+.tl-handle svg {
+  transition: transform 0.22s ease;
+}
+.tl-handle.closed svg {
+  transform: rotate(180deg);
+}
+.tl-handle:active {
+  filter: brightness(1.15);
+}
+
+/* スマホ：タイムラインを隠しているとき、絵の左下に再生・一時停止 */
 .stage-quick {
   position: absolute;
   left: 14px;
@@ -4035,6 +4079,25 @@ button {
 .pc-row .pc-range {
   flex: 1 1 120px;
   min-width: 100px;
+}
+/* オプションバーを1段にする（右上の ⚙ で切り替え）：2段の中身を1列に並べ、まとめて横にスクロール */
+.app.bar-one .pc-rows {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.app.bar-one .pc-rows::-webkit-scrollbar {
+  display: none;
+}
+.app.bar-one .pc-row {
+  flex: none;
+  overflow: visible;
+}
+.app.bar-one .pc-row .pc-range {
+  flex: none;
+  width: 140px;
 }
 /* 案内文は、ボタンに押されて縦に細長く折り返さないよう、一定の幅を保つ（はみ出したら行ごと横にスクロール） */
 .pc-row .pc-hint {
