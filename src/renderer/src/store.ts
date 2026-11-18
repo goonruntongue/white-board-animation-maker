@@ -40,10 +40,14 @@ interface EditorState {
   /** ライブ編集で選んでいる線（軌跡の中の、ペンを下ろしてから上げるまでの区間） */
   livePart: { strokeId: string; part: number } | null
   /**
-   * ブラシで続けて書いている最中のグループ（手描きで何も選ばずに描いたとき）。
-   * 少し間に（近くから）次の線を書き始めると、同じグループに入る。区切る・時間が空く・離れた所から書くと、新しいグループ
+   * 手描きのブラシ「同一グループ」：オンの間、何も選ばずに描いた線を同じグループに入れる。オフなら1本ごとに新しいグループ
    */
-  drawChain: { id: string; at: number; x: number; y: number } | null
+  sameGroup: boolean
+  /**
+   * 「同一グループ」で描いている最中のグループ。次に描く線はここに入る。
+   * 同一グループを切り替える・グループを選ぶ・操作を切り替える・プロジェクトを開くと、なくなる（次の線は新しいグループ）
+   */
+  drawChain: { id: string } | null
   /** スマホ：下のタイムラインを隠しているか（手描きのブラシに入ると隠し、ほかの操作に移ると出す。ボタンでいつでも切り替え） */
   timelineHidden: boolean
   /**
@@ -111,6 +115,7 @@ interface EditorState {
   setLiveMode: (m: 'move' | 'brush' | 'erase' | 'path') => void
   setLivePath: (p: EditorState['livePath']) => void
   setDrawChain: (c: EditorState['drawChain']) => void
+  setSameGroup: (on: boolean) => void
   setTimelineHidden: (v: boolean) => void
   setLiveUnit: (u: 'stroke' | 'part') => void
   setTime: (t: number) => void
@@ -137,6 +142,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   livePart: null,
   liveMode: 'brush',
   livePath: null,
+  sameGroup: false,
   drawChain: null,
   timelineHidden: false,
   liveUnit: 'part', // 直すは、いつも1本の線ごと（グループをまとめて扱うのは、タイムライン・描き順・設定）
@@ -364,7 +370,8 @@ export const useEditor = create<EditorState>((set, get) => ({
       insertBefore: null,
       playing: false,
       viewMode: 'edit',
-      rerecordId: null
+      rerecordId: null,
+      drawChain: null
     }),
   markSaved: (filePath) => set({ filePath, dirty: false }),
   setTool: (tool) =>
@@ -379,15 +386,17 @@ export const useEditor = create<EditorState>((set, get) => ({
   select: (selectedId) =>
     set((s) => ({
       selectedId,
+      drawChain: selectedId ? null : s.drawChain,
       livePart: !selectedId ? null : s.livePart?.strokeId === selectedId ? s.livePart : { strokeId: selectedId, part: 0 },
       livePath: s.livePart?.strokeId === selectedId ? s.livePath : null
     })),
-  setLiveMode: (liveMode) => set({ liveMode, livePath: null }),
+  setLiveMode: (liveMode) => set((s) => ({ liveMode, livePath: null, drawChain: liveMode === s.liveMode ? s.drawChain : null })),
   setLivePath: (livePath) => set({ livePath }),
   setDrawChain: (drawChain) => set({ drawChain }),
+  setSameGroup: (sameGroup) => set({ sameGroup, drawChain: null }),
   setTimelineHidden: (timelineHidden) => set({ timelineHidden }),
   setLiveUnit: (liveUnit) => set((s) => ({ liveUnit, livePart: s.livePart ? { ...s.livePart, part: liveUnit === 'stroke' ? 0 : s.livePart.part } : null })),
-  setLivePart: (livePart) => set(livePart ? { livePart, selectedId: livePart.strokeId } : { livePart }),
+  setLivePart: (livePart) => set(livePart ? { livePart, selectedId: livePart.strokeId, drawChain: null } : { livePart }),
   setTime: (time) => set({ time }),
   setPlaying: (playing) => set(playing ? { playing, viewMode: 'preview' } : { playing }),
   setViewMode: (viewMode) => set({ viewMode }),

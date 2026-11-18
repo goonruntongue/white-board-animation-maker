@@ -39,8 +39,6 @@ interface Recording {
 }
 
 /** 続けて書いた線を同じグループにまとめる条件：前の線を書き終えてからの時間と、書き始めの近さ（画像の対角線に対する割合） */
-const CHAIN_MS = 1500
-const CHAIN_DIST = 0.15
 
 interface PanDrag {
   pointerId: number
@@ -1035,12 +1033,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         const targetId = st.livePart?.strokeId
         const chain = st.drawChain
         const chainTo =
-          !targetId &&
-          chain &&
-          !st.insertBefore &&
-          st.project.strokes.some((x) => x.id === chain.id) &&
-          performance.now() - chain.at < CHAIN_MS &&
-          Math.hypot(p.x - chain.x, p.y - chain.y) < Math.hypot(imgW, imgH) * CHAIN_DIST
+          !targetId && st.sameGroup && chain && !st.insertBefore && st.project.strokes.some((x) => x.id === chain.id)
             ? chain.id
             : undefined
         // 線を選んでいて「描き直す」なら、その線を置き換える。「追加」なら、グループの最後に足す
@@ -1304,10 +1297,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
           st.updateStroke(target.id, { ...appendToStroke(target, rec.points, w), clip: addRevealMark(target.clip, marks, w, strokeParts(target).length) })
           haptic()
         } else if (target && rec.chain) {
-          // 続けて書いた線：同じグループに入れ、選ばない（続けて書けば、また同じグループへ）
+          // 「同一グループ」で描いた線：同じグループに入れ、選ばない（続けて描けば、また同じグループへ）
           st.updateStroke(target.id, appendToStroke(target, rec.points, st.project.settings.defaultRevealWidth))
-          const last = rec.points[rec.points.length - 1]
-          st.setDrawChain({ id: target.id, at: performance.now(), x: last.x, y: last.y })
           haptic()
         } else if (target) {
           st.updateStroke(target.id, appendToStroke(target, rec.points, st.project.settings.defaultRevealWidth))
@@ -1317,11 +1308,10 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       } else {
         const created = strokeFromRecording(st.project, rec.points, st.project.strokes.length, st.selection)
         st.addStroke(created)
-        // 手描きのブラシで描いたときは、何も選ばない状態に戻す。続けてすぐ近くに書いた線は、このグループに入る
+        // 手描きのブラシで描いたときは、何も選ばない状態に戻す。「同一グループ」がオンなら、次に描く線もこのグループに入る
         if (st.tool === 'live') {
           st.select(null)
-          const last = rec.points[rec.points.length - 1]
-          st.setDrawChain({ id: created.id, at: performance.now(), x: last.x, y: last.y })
+          st.setDrawChain(st.sameGroup ? { id: created.id } : null)
         }
         haptic()
       }
@@ -1520,7 +1510,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
               st.setLiveMode('brush')
               st.setLivePart(null)
               setCoachClosed(true)
-              st.notify('ブラシで画像をなぞると描けます。続けてすぐ近くに書いた線は1つのグループにまとまります（「区切る」で次のグループへ）。2本指で拡大・移動できます')
+              st.notify('ブラシで画像をなぞると描けます。1本ごとに新しいグループになります（「同一グループ」をオンにすると、描いた線を1つのグループにまとめます）。2本指で拡大・移動できます')
             }}
           >
             <Icon name="pen" size={13} /> 自分で描く

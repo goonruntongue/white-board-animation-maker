@@ -195,20 +195,22 @@ function ToolSize({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' })
   )
 }
 
-/** 続けて書いた線のまとまりを区切る（次に書く線は、新しいグループになる） */
-function BreakKey({ phone }: { phone: boolean }): React.JSX.Element {
-  const chaining = useEditor((s) => !!s.drawChain)
+/** 「同一グループ」：オンの間、描いた線を1つのグループにまとめる（オンにするたびに、新しいグループから始める） */
+function SameGroupKey({ phone }: { phone: boolean }): React.JSX.Element {
+  const on = useEditor((s) => s.sameGroup)
   const onClick = (): void => {
-    useEditor.getState().setDrawChain(null)
-    useEditor.getState().notify('次に書く線から、新しいグループになります')
+    const st = useEditor.getState()
+    st.setSameGroup(!on)
+    st.notify(on ? '同一グループをオフにしました。1本ごとに新しいグループになります' : '同一グループをオンにしました。これから描く線を1つのグループにまとめます')
   }
+  const title = 'オンの間に描いた線を、1つのグループにまとめます（すでに描いた線は変わりません）。オフにすると、1本ごとに別のグループになります'
   return phone ? (
-    <button className="pc-key text" disabled={!chaining} onClick={onClick} title="次に書く線を、新しいグループにする">
-      区切る
+    <button className={`pc-key text ${on ? 'on' : ''}`} aria-pressed={on} onClick={onClick} title={title}>
+      同一グループ
     </button>
   ) : (
-    <button className="tool-btn live-redo" disabled={!chaining} onClick={onClick} title="続けて書いた線のまとまりを区切り、次に書く線を新しいグループにする">
-      <span>区切る</span>
+    <button className={`tool-btn live-redo ${on ? 'on' : ''}`} aria-pressed={on} onClick={onClick} title={title}>
+      <span>同一グループ</span>
     </button>
   )
 }
@@ -437,7 +439,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
       mode === 'path'
         ? '編集したい線を押して選びます'
         : mode === 'brush'
-        ? 'なぞると新しいグループになります（線を選んでいれば、その線を描き直します。▼ で「線を追加」にも切り替え）'
+        ? 'なぞると新しいグループになります（「同一グループ」がオンなら1つにまとめます。線を選んでいれば、その線を描き直します。▼ で「線を追加」にも切り替え）'
         : mode === 'erase'
           ? 'なぞった所にあるグループを消します'
           : `絵の上を押して${what}を選びます。ドラッグで動かし、太さ・大きさも変えられます`
@@ -452,7 +454,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
         </div>
         <div className="pc-row">
           {brushing || mode === 'erase' ? <SizeSlider phone kind={brushing ? 'brush' : 'eraser'} /> : <span className="pc-hint">{hint}</span>}
-          {brushing && <BreakKey phone />}
+          {brushing && <SameGroupKey phone />}
         </div>
       </div>
     ) : (
@@ -461,7 +463,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
         {mode === 'move' && <AutoSelectCheck phone={false} />}
         {unitSwitch}
         {size ?? <span className="live-hint">{hint}</span>}
-        {brushing && <BreakKey phone={false} />}
+        {brushing && <SameGroupKey phone={false} />}
       </div>
     )
   }
