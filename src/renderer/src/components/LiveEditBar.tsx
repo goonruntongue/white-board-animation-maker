@@ -221,16 +221,44 @@ function SameGroupKey({ phone }: { phone: boolean }): React.JSX.Element {
           : '同一グループをオンにしました。これから描く線を1つのグループにまとめます'
     )
   }
-  const title = 'オンの間に描いた線を、1つのグループにまとめます（すでに描いた線は変わりません）。次のグループに移るときは、いったんオフにしてからオンにします。オフにすると、1本ごとに別のグループになります'
+  const title = 'オンの間に描いた線を、1つのグループにまとめます（すでに描いた線は変わりません）。次のグループに移るときは「区切る」を押します。オフにすると、1本ごとに別のグループになります'
   return phone ? (
-    <button className={`pc-key text same-group ${on ? 'on' : ''}`} aria-pressed={on} onClick={onClick} title={title}>
-      同一グループ
-      <small>{note}</small>
+    <>
+      <button className={`pc-key text same-group ${on ? 'on' : ''}`} aria-pressed={on} onClick={onClick} title={title}>
+        同一グループ
+        <small>{note}</small>
+      </button>
+      <BreakKey phone chainNo={chainNo} />
+    </>
+  ) : (
+    <>
+      <button className={`tool-btn live-redo same-group ${on ? 'on' : ''}`} aria-pressed={on} onClick={onClick} title={title}>
+        <span>同一グループ</span>
+        {on && <small className="same-group-note">{chainNo > 0 ? `#${chainNo} に追加中` : '次は新しいグループ'}</small>}
+      </button>
+      <BreakKey phone={false} chainNo={chainNo} />
+    </>
+  )
+}
+
+/**
+ * 「区切る」：同一グループがオンのまま、次に描く線から新しいグループにする（オフ→オンの2回押しの代わり）。
+ * 同一グループがオンで、グループに描き足している最中（#n に追加中）だけ押せる
+ */
+function BreakKey({ phone, chainNo }: { phone: boolean; chainNo: number }): React.JSX.Element {
+  const onClick = (): void => {
+    const st = useEditor.getState()
+    st.setDrawChain(null)
+    st.notify(`#${chainNo} を区切りました。次に描く線から、新しいグループになります`)
+  }
+  const title = chainNo > 0 ? `#${chainNo} への描き足しをここで終え、次に描く線から新しいグループにします（同一グループはオンのまま）` : '同一グループがオンで、グループに描き足している間に押せます'
+  return phone ? (
+    <button className="pc-key text" disabled={chainNo === 0} onClick={onClick} title={title}>
+      区切る
     </button>
   ) : (
-    <button className={`tool-btn live-redo same-group ${on ? 'on' : ''}`} aria-pressed={on} onClick={onClick} title={title}>
-      <span>同一グループ</span>
-      {on && <small className="same-group-note">{chainNo > 0 ? `#${chainNo} に追加中` : '次は新しいグループ'}</small>}
+    <button className="tool-btn live-redo" disabled={chainNo === 0} onClick={onClick} title={title}>
+      <span>区切る</span>
     </button>
   )
 }

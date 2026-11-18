@@ -1510,7 +1510,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
               st.setLiveMode('brush')
               st.setLivePart(null)
               setCoachClosed(true)
-              st.notify('ブラシで画像をなぞると描けます。「同一グループ」がオンの間は、描いた線が1つのグループにまとまります（次のグループに移るときは、いったんオフにしてからオン）。2本指で拡大・移動できます')
+              st.notify('ブラシで画像をなぞると描けます。「同一グループ」がオンの間は、描いた線が1つのグループにまとまります（次のグループに移るときは「区切る」）。2本指で拡大・移動できます')
             }}
           >
             <Icon name="pen" size={13} /> 自分で描く
