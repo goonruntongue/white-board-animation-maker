@@ -51,8 +51,10 @@ save(sq, 512, 'icon-512.png')
 BG = (27, 28, 30, 255)  # #1B1C1E（マスカブル版の背景と同じ）
 
 # iOS のホーム画面用（透過は黒になるので背景色で埋める）
+# iOS は角丸に切り抜くので、絵を 84% に縮めて余白を取る（右下の再生ボタンが切れないように）
 apple = Image.new('RGBA', sq.size, BG)
-apple.alpha_composite(sq)
+inner_a = sq.resize((int(sq.width * 0.84), int(sq.height * 0.84)), Image.LANCZOS)
+apple.alpha_composite(inner_a, ((sq.width - inner_a.width) // 2, (sq.height - inner_a.height) // 2))
 save(apple.convert('RGB'), 180, 'apple-touch-icon.png')
 
 # Android のマスカブル（端が切られても良いよう 80% に縮めて中央へ）
