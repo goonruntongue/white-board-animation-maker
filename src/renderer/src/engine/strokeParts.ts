@@ -315,3 +315,50 @@ export function setStrokeWidthKeepRatio(stroke: Stroke, width: number): Stroke {
   const points = stroke.points.map((p) => (p.w === undefined ? p : { ...p, w: Math.max(1, Math.round(p.w * f)) }))
   return { ...stroke, points, revealWidth: w }
 }
+
+/** 線ごとの時間（ms）。draw：その線を描く時間 / gap：前の線を描き終えてから、この線を描き始めるまで（最初の線は 0） */
+export interface PartTiming {
+  draw: number
+  gap: number
+}
+
+/** いまの再生での、線ごとの時間（グループの再生時間を、点の時刻の割合で分けたもの） */
+export function partTimings(stroke: Stroke): PartTiming[] {
+  const prep = prepareStroke(stroke)
+  const d = stroke.duration
+  return prep.parts.map((part, i) => ({
+    draw: Math.max(0, (prep.param[part.end] - prep.param[part.start]) * d),
+    gap: i === 0 ? 0 : Math.max(0, (prep.param[part.start] - prep.param[prep.parts[i - 1].end]) * d)
+  }))
+}
+
+/**
+ * 線ごとの時間を決める。点の時刻を付け直し（線の中の緩急はそのまま）、グループの再生時間をその合計にする。
+ * 時刻とミリ秒が 1:1 になるので、決めた秒数どおりに再生される（作品全体の速さの倍率はかかる）。
+ */
+export function setPartTimings(stroke: Stroke, timings: PartTiming[]): Stroke {
+  const prep = prepareStroke(stroke)
+  const pts = stroke.points
+  const points: StrokePoint[] = pts.map((p) => ({ ...p }))
+  let clock = 0
+  prep.parts.forEach((part, i) => {
+    const tm = timings[i] ?? { draw: 300, gap: 0 }
+    const draw = Math.max(50, tm.draw)
+    if (i > 0) clock += Math.max(0, tm.gap)
+    const p0 = prep.param[part.start]
+    const span = prep.param[part.end] - p0
+    // 線の中の位置（0〜1）：いまの緩急を保つ。時間の幅がない線は長さの割合で
+    let len = 0
+    const cum = [0]
+    for (let j = part.start + 1; j <= part.end; j++) {
+      len += Math.hypot(pts[j].x - pts[j - 1].x, pts[j].y - pts[j - 1].y)
+      cum.push(len)
+    }
+    for (let j = part.start; j <= part.end; j++) {
+      const u = span > 1e-9 ? (prep.param[j] - p0) / span : len > 0 ? cum[j - part.start] / len : part.end > part.start ? (j - part.start) / (part.end - part.start) : 0
+      points[j].t = Math.round(clock + u * draw)
+    }
+    clock += draw
+  })
+  return { ...stroke, points, duration: Math.max(50, Math.round(clock)), useRecordedTiming: true }
+}

@@ -3,6 +3,7 @@ import { importHandDialog, importImageDialog, replaceImageDialog, selectHandPres
 import { builtinHand } from '../engine/handAsset'
 import { clearEraserMarks, countEraserMarks, untagClipLines } from '../engine/selection'
 import { countParts } from '../engine/project'
+import { partTimings, setPartTimings, type PartTiming } from '../engine/strokeParts'
 import { getHandPresets } from '../engine/handPresets'
 import { dataUrlBytes, formatBytes } from '../lib/imageTools'
 import { useEditor } from '../store'
@@ -43,6 +44,70 @@ export function Inspector(): React.JSX.Element {
   )
 }
 
+/** 秒の入力（0.1 秒刻み）。入力中の途中の文字（「1.」など）では反映せず、数として読めたら反映する */
+function SecondsInput({ ms, min, label, onChange, onFocus }: { ms: number; min: number; label: string; onChange: (ms: number) => void; onFocus?: () => void }): React.JSX.Element {
+  const [text, setText] = useState<string | null>(null)
+  const shown = text ?? (Math.round(ms / 100) / 10).toFixed(1)
+  return (
+    <input
+      className="sec-input"
+      type="number"
+      inputMode="decimal"
+      step={0.1}
+      min={min / 1000}
+      aria-label={label}
+      value={shown}
+      onFocus={onFocus}
+      onChange={(e) => {
+        setText(e.target.value)
+        const v = Number(e.target.value)
+        if (e.target.value !== '' && Number.isFinite(v)) onChange(Math.max(min, Math.round(v * 10) * 100))
+      }}
+      onBlur={() => setText(null)}
+    />
+  )
+}
+
+/** 線ごとの時間：グループの中の線それぞれの「描く時間」と「前の線からの間」を 0.1 秒単位で決める */
+function PartTimingSection({ strokeId }: { strokeId: string }): React.JSX.Element | null {
+  const stroke = useEditor((s) => s.project.strokes.find((x) => x.id === strokeId))
+  const activePart = useEditor((s) => (s.livePart?.strokeId === strokeId ? s.livePart.part : -1))
+  if (!stroke) return null
+  const timings = partTimings(stroke)
+  const change = (i: number, patch: Partial<PartTiming>): void => {
+    const next = timings.map((t, k) => (k === i ? { ...t, ...patch } : t))
+    const st = useEditor.getState()
+    const cur = st.project.strokes.find((x) => x.id === strokeId)
+    if (cur) st.updateStroke(strokeId, setPartTimings(cur, next))
+  }
+  const focus = (i: number) => () => useEditor.getState().setLivePart({ strokeId, part: i })
+  return (
+    <Section title="線ごとの時間">
+      <p className="muted-text">線ごとに、描く時間と、前の線を描き終えてから描き始めるまでの間を 0.1 秒単位で決められます。グループの再生時間は、その合計になります。</p>
+      <div className="part-timing" role="table" aria-label="線ごとの時間">
+        <div className="pt-head" role="row">
+          <span role="columnheader">線</span>
+          <span role="columnheader">前の線からの間</span>
+          <span role="columnheader">描く時間</span>
+        </div>
+        {timings.map((t, i) => (
+          <div key={i} className={`pt-row ${activePart === i ? 'on' : ''}`} role="row">
+            <button className="pt-name" role="cell" onClick={focus(i)} title="この線を選ぶ">
+              線 {i + 1}
+            </button>
+            <span role="cell" className="pt-cell">
+              {i === 0 ? <span className="pt-none">—</span> : <><SecondsInput ms={t.gap} min={0} label={`線 ${i + 1} の前の間（秒）`} onFocus={focus(i)} onChange={(ms) => change(i, { gap: ms })} />秒</>}
+            </span>
+            <span role="cell" className="pt-cell">
+              <SecondsInput ms={t.draw} min={100} label={`線 ${i + 1} を描く時間（秒）`} onFocus={focus(i)} onChange={(ms) => change(i, { draw: ms })} />秒
+            </span>
+          </div>
+        ))}
+      </div>
+    </Section>
+  )
+}
+
 function StrokeInspector(): React.JSX.Element | null {
   const stroke = useEditor((s) => s.project.strokes.find((x) => x.id === s.selectedId))
   const index = useEditor((s) => s.project.strokes.findIndex((x) => x.id === s.selectedId))
@@ -75,7 +140,7 @@ function StrokeInspector(): React.JSX.Element | null {
           value={stroke.duration}
           min={100}
           max={20000}
-          step={50}
+          step={100}
           divisor={1000}
           unit="秒"
           onChange={(v) => set({ duration: Math.max(50, v) })}
@@ -105,7 +170,7 @@ function StrokeInspector(): React.JSX.Element | null {
           value={stroke.delayAfter}
           min={0}
           max={5000}
-          step={50}
+          step={100}
           divisor={1000}
           unit="秒"
           onChange={(v) => set({ delayAfter: Math.max(0, v) })}
@@ -119,6 +184,7 @@ function StrokeInspector(): React.JSX.Element | null {
         <ToggleField label="再生に含める" checked={!stroke.hidden} onChange={(v) => set({ hidden: !v })} />
         <ColorField label="表示色" value={stroke.color} onChange={(v) => set({ color: v })} />
       </Section>
+      {countParts(stroke) > 1 && <PartTimingSection strokeId={stroke.id} />}
       <Section title="表示できる範囲">
         <p className="muted-text">
           {!stroke.clip
@@ -207,7 +273,7 @@ function ProjectInspector(): React.JSX.Element {
           value={st.startDelay}
           min={0}
           max={5000}
-          step={50}
+          step={100}
           divisor={1000}
           unit="秒"
           onChange={(v) => updateSettings({ startDelay: v })}
@@ -247,7 +313,7 @@ function ProjectInspector(): React.JSX.Element {
           value={st.defaultDelayAfter}
           min={0}
           max={5000}
-          step={50}
+          step={100}
           divisor={1000}
           unit="秒"
           onChange={(v) => updateSettings({ defaultDelayAfter: v })}
