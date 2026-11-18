@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { importSampleImage } from '../commands'
 import { setBarLayout, useBarLayout } from '../lib/barLayout'
+import { isDesktop } from '../lib/platform'
+import { AboutDialog } from './AboutDialog'
 import { openGuide, setShowTourOnStartup, startTour, useTourPrefs } from '../lib/tour'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
@@ -10,6 +12,9 @@ import { ActionSheet } from './phone/ActionSheet'
 
 export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Element {
   const [open, setOpen] = useState(false)
+  // 「このアプリについて」（Web 版だけ。デスクトップ版には出さない）
+  const [about, setAbout] = useState(false)
+  const aboutDialog = about && <AboutDialog onClose={() => setAbout(false)} />
   const { showOnStartup } = useTourPrefs()
   const barLayout = useBarLayout()
   const wrap = useRef<HTMLDivElement>(null)
@@ -68,10 +73,14 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
                 label: barLayout === 'two' ? 'オプションバー：2段' : 'オプションバー：1段',
                 note: barLayout === 'two' ? '押すと1段（1列に並べて横にスクロール）に切り替わります' : '押すと2段（操作の切り替えと、選んだ線の操作を分ける）に切り替わります',
                 onSelect: () => setBarLayout(barLayout === 'two' ? 'one' : 'two')
-              }
+              },
+              ...(isDesktop
+                ? []
+                : [{ icon: 'info' as const, label: 'このアプリについて', note: 'アプリを開く QR コードと著作権の表示', onSelect: () => setAbout(true) }])
             ]}
           />
         )}
+        {aboutDialog}
       </>
     )
   }
@@ -106,8 +115,17 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
             <input type="checkbox" checked={showOnStartup} onChange={(e) => setShowTourOnStartup(e.target.checked)} />
             <span className="switch" />
           </label>
+          {!isDesktop && (
+            <>
+              <hr />
+              <button role="menuitem" onClick={() => run(() => setAbout(true))}>
+                <Icon name="info" /> このアプリについて
+              </button>
+            </>
+          )}
         </div>
       )}
+      {aboutDialog}
     </div>
   )
 }

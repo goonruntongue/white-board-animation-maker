@@ -52,6 +52,8 @@ const PATHS: Record<string, string> = {
   directSelect: 'M6 3l13 9-6 1.2L9.5 19.5Z',
   convertAnchor: 'M5 18l7-12 7 12',
   penAddDel: 'M13 10l6 6-5 5-4.5-1L8 15.5Z M13.5 15.5h.01 M3 6h5 M5.5 3.5v5 M3 11.5h5',
+  // このアプリについて：丸に i
+  info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z M12 11v5.5 M12 7.6h.01',
   // ボタンの説明：はてなの吹き出し
   tipHelp: 'M4 4h16v12H10l-5 4v-4H4Z M9.6 8.6a2.4 2.4 0 1 1 3.4 2.2c-.6.3-1 .8-1 1.4 M12 14.2h.01',
   zoomIn:'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z M20 20l-4-4 M8 11h6 M11 8v6',
