@@ -1493,7 +1493,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       )}
       {image && !rerecordId && !lassoPolyActive && selection && viewMode === 'edit' && (
         <div className="stage-banner info" title="この状態で描いた線に、選択範囲が記録されます">
-          <span>{isPhone ? '範囲の中だけに効きます' : '選択範囲の中だけ表示されます'}</span>
+          <span>範囲の中だけに効きます</span>
           <button className="btn small primary" data-tour={isPhone ? 'auto-phone' : undefined} onClick={openAutoTrace}>
             <Icon name="sparkle" size={13} /> 自動で作る
           </button>
@@ -1541,7 +1541,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       {image && livePathing && viewMode === 'edit' && <PathPalette />}
       {image && (
         <div className="stage-tools">
-          {isPhone && viewMode === 'edit' && !rerecordId && <RangeButton />}
+          {viewMode === 'edit' && !rerecordId && <RangeButton phone={isPhone} />}
           <button className="icon-btn" title="画面に合わせる" onClick={() => setView({ zoom: 1, x: 0, y: 0 })}>
             <Icon name="fit" />
           </button>

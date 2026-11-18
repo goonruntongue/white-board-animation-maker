@@ -33,11 +33,43 @@ export function finishRange(): void {
   st.setTool(isRangeTool(before) ? 'live' : before)
 }
 
-export function RangeButton(): React.JSX.Element {
+/** PC で形ごとに出すボタンの説明（キーと修飾キー） */
+const PC_TIPS: Record<'rect' | 'ellipse' | 'lasso', string> = {
+  rect: '長方形で囲む：ドラッグで四角く囲みます（Shift で追加・Alt で除外）（M）',
+  ellipse: '楕円で囲む：ドラッグで丸く囲みます（Shift で追加・Alt で除外）（Shift+M）',
+  lasso: '投げ縄で囲む：ドラッグで自由な形、クリックで多角形に囲みます（L）'
+}
+
+export function RangeButton({ phone = true }: { phone?: boolean }): React.JSX.Element {
   const tool = useEditor((s) => s.tool)
   const lastSel = useEditor((s) => s.lastSelTool)
   const [menu, setMenu] = useState(false)
   const on = isRangeTool(tool)
+  // PC：「範囲」の見出しと3つの形を並べ、押した形で範囲の道具になる
+  if (!phone) {
+    return (
+      <div
+        className={`range-group ${on ? 'on' : ''}`}
+        role="group"
+        aria-label="範囲"
+        data-tip="範囲：描く範囲・消す範囲・自動で塗る範囲を、形で囲んで決めます。自動にも手描きにも効きます"
+      >
+        <span className="range-label">範囲</span>
+        {RANGE_SHAPES.map((s) => (
+          <button
+            key={s.id}
+            className={`icon-btn ${tool === s.id ? 'on' : ''}`}
+            aria-pressed={tool === s.id}
+            aria-label={`${s.label}で囲む`}
+            data-tip={PC_TIPS[s.id]}
+            onClick={() => startRange(s.id)}
+          >
+            <Icon name={s.icon} />
+          </button>
+        ))}
+      </div>
+    )
+  }
   const shape = RANGE_SHAPES.find((s) => s.id === (on ? tool : lastSel))!
   return (
     <>

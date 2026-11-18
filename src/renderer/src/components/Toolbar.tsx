@@ -16,11 +16,6 @@ const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
   { id: 'pan', icon: 'hand', label: '移動', key: 'H' }
 ]
 
-const SEL_TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
-  { id: 'rect', icon: 'selRect', label: '長方形選択', key: 'M' },
-  { id: 'ellipse', icon: 'selEllipse', label: '楕円形選択', key: 'Shift+M' },
-  { id: 'lasso', icon: 'lasso', label: '投げ縄（ドラッグで自由形 / クリックで多角形）', key: 'L' }
-]
 
 export function Toolbar(): React.JSX.Element {
   const tool = useEditor((s) => s.tool)
@@ -96,21 +91,6 @@ export function Toolbar(): React.JSX.Element {
           <Icon name="sparkle" />
           <span>自動</span>
         </button>
-      </div>
-
-      <div className="tb-group" title="選択範囲：範囲の外はマスクが外れません（Shift で追加・Alt で除外）">
-        {SEL_TOOLS.map((t) => (
-          <button
-            key={t.id}
-            className={`tool-btn icon-only ${tool === t.id ? 'on' : ''}`}
-            title={`${t.label} (${t.key})
-Shift+ドラッグで追加 / Alt+ドラッグで除外`}
-            disabled={!hasImage}
-            onClick={() => setTool(t.id)}
-          >
-            <Icon name={t.icon} />
-          </button>
-        ))}
       </div>
 
       {/* オプションバー：選択ツールなら合成モード、それ以外はペン先サイズ */}

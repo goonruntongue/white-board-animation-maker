@@ -4563,3 +4563,33 @@ button {
   color: #fff;
   text-shadow: none;
 }
+
+/* PC：絵の右下の「範囲」（見出しと3つの形） */
+.range-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+  margin-right: 2px;
+  border-right: 1px solid var(--line);
+}
+.range-label {
+  padding: 0 6px 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.range-group.on .range-label {
+  color: var(--accent-text);
+}
+.range-group .icon-btn.on {
+  background: linear-gradient(180deg, var(--key-pressed-top), var(--key-pressed-bot));
+  box-shadow: var(--key-shadow-pressed);
+  color: var(--accent-text);
+}
+/* 範囲のオプションバーの「完了」（PC） */
+.tool-btn.primary-key {
+  background: linear-gradient(180deg, var(--accent-top), var(--accent-bot));
+  color: #fff;
+  text-shadow: none;
+}

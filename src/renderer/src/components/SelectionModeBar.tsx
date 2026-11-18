@@ -2,6 +2,7 @@ import { deselect, eraseSelection, invertSelection } from '../commands'
 import type { SelectionOp } from '../engine/selection'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
+import { finishRange } from './phone/RangeButton'
 
 /**
  * 選択ツール用のオプションバー（Photoshop と同じ「新規／追加／除外／交差」）。
@@ -60,6 +61,12 @@ export function SelectionModeBar(): React.JSX.Element {
 
   return (
     <>
+      <div className="tb-group">
+        <button className="tool-btn primary-key" data-tip="完了：範囲を作り終えて、前の道具に戻ります（範囲は効いたまま）（Enter）" onClick={finishRange}>
+          <Icon name="check" />
+          <span>完了</span>
+        </button>
+      </div>
       <div className="tb-group sel-modes" role="radiogroup" aria-label="選択範囲の合成モード">
         <span className="tb-label">範囲</span>
         {MODES.map((m) => (

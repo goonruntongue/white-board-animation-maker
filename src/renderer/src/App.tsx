@@ -38,6 +38,7 @@ import { isDesktop, setWindowTitle } from './lib/platform'
 import { useIsPhone } from './lib/useMedia'
 import { useBarLayout } from './lib/barLayout'
 import { setPathTool } from './lib/pathTool'
+import { finishRange, startRange } from './components/phone/RangeButton'
 import { beginSession, listSnapshots, startAutosave } from './lib/recovery'
 import { SELECTION_TOOLS, useEditor } from './store'
 
@@ -217,6 +218,11 @@ export default function App(): React.JSX.Element {
         case 'ArrowDown':
           e.preventDefault()
           return selectRelative(1)
+        case 'Enter':
+        case 'NumpadEnter':
+          // 範囲の道具：囲み終えたら Enter で前の道具に戻る（多角形の投げ縄を打っている途中は、絵の側で確定する）
+          if (SELECTION_TOOLS.includes(st.tool)) return void (e.preventDefault(), finishRange())
+          break
         case 'Escape':
           if (st.rerecordId) return st.setRerecord(null)
           if (st.livePart) return st.setLivePart(null)
@@ -262,8 +268,8 @@ export default function App(): React.JSX.Element {
         st.setLiveMode('brush')
       }
       else if (k === 'e') st.setTool('erase')
-      else if (k === 'm') st.setTool(e.shiftKey ? 'ellipse' : 'rect')
-      else if (k === 'l') st.setTool('lasso')
+      else if (k === 'm') startRange(e.shiftKey ? 'ellipse' : 'rect')
+      else if (k === 'l') startRange('lasso')
       else if (k === 'v') st.setTool('select')
       else if (k === 'h') st.setTool('pan')
       else if (k === 'w') st.setTool('live')
