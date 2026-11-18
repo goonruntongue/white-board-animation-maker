@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { importSampleImage } from '../commands'
 import { setBarLayout, useBarLayout } from '../lib/barLayout'
 import { openGuide, setShowTourOnStartup, startTour, useTourPrefs } from '../lib/tour'
+import { useEditor } from '../store'
 import { Icon } from './Icon'
 import { ActionSheet } from './phone/ActionSheet'
 
@@ -49,6 +50,12 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
               { icon: 'play', label: 'ツアーを始める', note: 'ボタンのそばに順番に説明を出します', onSelect: startTour },
               { icon: 'list', label: '使い方ガイド', note: '全機能を詳しく説明（検索できます）', onSelect: () => openGuide() },
               { icon: 'image', label: 'サンプル画像を使う', note: '練習用の画像をページに追加', onSelect: () => void importSampleImage() },
+              {
+                icon: 'list',
+                label: 'ボタンの説明を見るには',
+                note: 'どのボタンも、長押しするとその説明が画面下に出ます（指を離すと少しして消えます）',
+                onSelect: () => useEditor.getState().notify('ボタンを長押しすると、その説明が出ます')
+              },
               {
                 icon: showOnStartup ? 'check' : 'x',
                 label: showOnStartup ? '起動時にツアーを表示：オン' : '起動時にツアーを表示：オフ',

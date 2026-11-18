@@ -4323,3 +4323,83 @@ button {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* ---------- ボタンの説明（PC：乗せると出る吹き出し／スマホ：長押しで画面下に出る） ---------- */
+.hint-pop {
+  position: fixed;
+  z-index: 1000;
+  max-width: 300px;
+  padding: 7px 10px 8px;
+  border-radius: 9px;
+  background-image: var(--noise), linear-gradient(180deg, var(--panel-top), var(--panel-bot));
+  box-shadow:
+    inset 0 1px 0 var(--hilite),
+    0 0 0 1px var(--line-strong),
+    0 10px 28px rgba(0, 0, 0, 0.42);
+  color: var(--text-1);
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+  animation: hint-in 0.12s ease-out;
+}
+.hint-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.hint-name {
+  color: var(--text-0);
+  font-weight: 700;
+}
+.hint-key {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--well-deep);
+  box-shadow: var(--well-shadow);
+  color: var(--accent-text);
+  font: 700 11px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: nowrap;
+}
+.hint-text {
+  color: var(--text-1);
+}
+.hint-sheet {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 84px);
+  z-index: 1000;
+  width: min(420px, calc(100vw - 32px));
+  padding: 12px 14px 13px;
+  border-radius: 14px;
+  background-image: var(--noise), linear-gradient(180deg, var(--panel-top), var(--panel-bot));
+  box-shadow:
+    inset 0 1px 0 var(--hilite),
+    0 0 0 1px var(--accent),
+    0 18px 44px rgba(0, 0, 0, 0.5);
+  font-size: 13.5px;
+  line-height: 1.55;
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: hint-sheet-in 0.16s ease-out;
+}
+.hint-sheet .hint-name {
+  margin-bottom: 3px;
+  color: var(--accent-text);
+  font-size: 14.5px;
+}
+@keyframes hint-in {
+  from { opacity: 0; transform: translateY(-3px); }
+}
+@keyframes hint-sheet-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+}
+/* 長押しで説明を出すので、ボタンの長押しで文字の選択や吹き出しが出ないようにする */
+.app.phone button,
+.app.phone [role='button'],
+.app.phone label {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}

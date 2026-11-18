@@ -38,6 +38,8 @@ export function useLongPress(onLongPress: () => void, pressTarget?: string): {
     handlers: {
       onPointerDown: (e) => {
         didFire.current = false
+        // 画面全体の「長押しで説明」（HintLayer）とぶつからないよう、この押下は自前の長押しが使うと印を付ける
+        ;(e.nativeEvent as PointerEvent & { ownLongPress?: boolean }).ownLongPress = true
         if (e.pointerType === 'mouse') return // マウスは右クリックで開く
         const el =
           ((pressTarget && (e.target as HTMLElement).closest(pressTarget)) as HTMLElement | null) ??
