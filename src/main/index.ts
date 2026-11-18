@@ -3,6 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 
 const isDev = !app.isPackaged
+const isMac = process.platform === 'darwin'
 let mainWindow: BrowserWindow | null = null
 let pendingOpenPath: string | null = process.argv.find((a) => a.endsWith('.wbanim')) ?? null
 
@@ -132,8 +133,8 @@ function buildMenu(): void {
         { type: 'separator' },
         { label: 'HTMLとして書き出す…', accelerator: 'CmdOrCtrl+E', click: () => send('export-html') },
         { label: '動画・GIF として書き出す…', accelerator: 'CmdOrCtrl+Shift+E', click: () => send('export-video') },
-        { type: 'separator' },
-        { role: 'quit', label: '終了' }
+        // Mac の終了はアプリ名のメニューにある
+        ...(isMac ? [] : ([{ type: 'separator' }, { role: 'quit', label: '終了' }] as MenuItemConstructorOptions[]))
       ]
     },
     {
@@ -200,6 +201,8 @@ function buildMenu(): void {
       ]
     }
   ]
+  // Mac は先頭にアプリ名のメニュー（このアプリについて・隠す・終了など）が要る
+  if (isMac) template.unshift({ role: 'appMenu' })
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
@@ -264,6 +267,14 @@ ipcMain.on('window:setTheme', (_e, pref: ThemePref) => {
 })
 
 // ---------- ライフサイクル ----------
+// Mac：Finder でプロジェクトファイルを開いたとき（起動前・起動後のどちらも）は open-file で届く
+app.on('open-file', (e, path) => {
+  e.preventDefault()
+  if (!path.endsWith('.wbanim')) return
+  if (mainWindow && !mainWindow.webContents.isLoading()) void sendProjectToRenderer(path)
+  else pendingOpenPath = path
+})
+
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
