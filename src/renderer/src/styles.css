@@ -2611,6 +2611,8 @@ button {
   opacity: 0.4;
 }
 .action-icon {
+  /* 説明が長い行でも、つぶれて楕円にならないように */
+  flex: none;
   display: grid;
   place-items: center;
   width: 36px;
@@ -2621,6 +2623,7 @@ button {
   color: var(--accent-text);
 }
 .action-text {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   font-weight: 700;
