@@ -46,10 +46,14 @@ jobs:
           wranglerVersion: '4'
           command: pages deploy publish --project-name whiteboard-animation-maker --branch main --commit-hash ${{ github.sha }}
       - name: 公開したページが開けるか確かめる
+        # 公開した直後は、数十秒ほど 500 が返ることがあるので、15秒おきに最大3分まで待つ
         run: |
-          sleep 15
           for url in https://whiteboard-animation-maker.pages.dev/ https://whiteboard-animation-maker.pages.dev/app/; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "$url")
-            echo "$url → $code"
-            test "$code" = 200
+            for i in $(seq 1 12); do
+              code=$(curl -s -o /dev/null -w '%{http_code}' "$url")
+              echo "$url → $code"
+              [ "$code" = 200 ] && break
+              [ "$i" = 12 ] && exit 1
+              sleep 15
+            done
           done
