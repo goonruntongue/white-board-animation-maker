@@ -186,11 +186,12 @@ PRD の MVP（8章）はひと通り動く状態です。
 
 ## AI 連携（MCP）
 
-デスクトップ版は、MCP（Model Context Protocol）のエンドポイントを持ちます。Claude Code・Codex などの MCP クライアントから、画像の読み込み・描き順の自動作成・グループの並べ替えや描き直し・1コマの確認・書き出し（.wbanim / MP4 / WebM / GIF / HTML）までを操作できます。
+デスクトップ版と Web 版は、MCP（Model Context Protocol）のエンドポイントを持ちます。Claude Code・Codex などの MCP クライアントから、画像の読み込み・描き順の自動作成・グループの並べ替えや描き直し・1コマの確認・書き出し（.wbanim / MP4 / WebM / GIF / HTML）までを操作できます。
 
 - 歯車のメニュー →「AI 連携（MCP）」で受け付けをオンにし、表示される URL（`http://127.0.0.1:39271/mcp/<合言葉>`）を MCP サーバー（Streamable HTTP）として登録する
 - 例：`claude mcp add --transport http whiteboard http://127.0.0.1:39271/mcp/<合言葉>`
 - 道具の一覧と説明は `src/shared/mcp.ts`、実際の操作は `src/renderer/src/automation.ts`、待ち受けは `src/main/mcpServer.ts`
 - 書き出したファイルは「書類」の `Whiteboard Animation Maker/AI exports` に保存する
-- Web 版（Cloudflare の中継経由）は準備中
+- Web 版は Cloudflare の中継（`relay/`、Workers ＋ Durable Objects）を通す：歯車のメニュー →「AI 連携（MCP）」でオンにすると、タブが WebSocket で中継につながり、`https://whiteboard-mcp-relay.goonruntongue.workers.dev/mcp/<合言葉>` を AI に登録できる（claude.ai のカスタムコネクタにも使える）。書き出したファイルは中継に2時間だけ置き、ダウンロード用の URL を AI に返す。タブ側は `src/renderer/src/lib/webMcp.ts`
+- 中継の公開（`relay/` を変えたとき）：`npx wrangler deploy --config relay/wrangler.jsonc`（main への push では公開されない）
 

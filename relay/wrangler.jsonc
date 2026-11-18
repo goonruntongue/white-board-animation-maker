@@ -1,0 +1,15 @@
+// Web 版の AI 連携（MCP）の中継。AI（MCP クライアント）と、開いているブラウザのタブを結ぶ。
+// 公開：npx wrangler deploy --config relay/wrangler.jsonc
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "whiteboard-mcp-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "durable_objects": {
+    "bindings": [{ "name": "SESSIONS", "class_name": "RelaySession" }]
+  },
+  // 無料プランで使えるのは SQLite 版の Durable Object
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RelaySession"] }],
+  "observability": { "enabled": true }
+}

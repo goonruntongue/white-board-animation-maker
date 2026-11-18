@@ -36,6 +36,7 @@ import { getTourPrefs, GUIDE_EVENT, TOUR_EVENT } from './lib/tour'
 import { buildTimeline } from './engine/wb-engine'
 import { isDesktop, setWindowTitle } from './lib/platform'
 import { runToolForAi } from './automation'
+import { startWebMcp } from './lib/webMcp'
 import { useIsPhone } from './lib/useMedia'
 import { useBarLayout } from './lib/barLayout'
 import { setPathTool } from './lib/pathTool'
@@ -166,6 +167,10 @@ export default function App(): React.JSX.Element {
 
   // ---- Electron メニュー ----
   useEffect(() => window.desktop?.onMenu(runMenuCommand), [])
+  // AI 連携（MCP）：Web 版は Cloudflare の中継につなぐ（オンにしてあるときだけ）
+  useEffect(() => {
+    if (!isDesktop) startWebMcp()
+  }, [])
   // AI 連携（MCP）：デスクトップ版のエンドポイントに届いた道具の呼び出しを実行して返す
   useEffect(
     () =>

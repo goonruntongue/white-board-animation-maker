@@ -16,7 +16,7 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
   // 「このアプリについて」（Web 版だけ。デスクトップ版には出さない）
   const [about, setAbout] = useState(false)
   const aboutDialog = about && <AboutDialog onClose={() => setAbout(false)} />
-  // AI 連携（MCP）：いまはデスクトップ版だけ
+  // AI 連携（MCP）：デスクトップ版はこのパソコンの中、Web 版は Cloudflare の中継経由
   const [mcp, setMcp] = useState(false)
   const mcpDialog = mcp && <McpDialog onClose={() => setMcp(false)} />
   const { showOnStartup } = useTourPrefs()
@@ -78,6 +78,7 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
                 note: barLayout === 'two' ? '押すと1段（1列に並べて横にスクロール）に切り替わります' : '押すと2段（操作の切り替えと、選んだ線の操作を分ける）に切り替わります',
                 onSelect: () => setBarLayout(barLayout === 'two' ? 'one' : 'two')
               },
+              { icon: 'sparkle' as const, label: 'AI 連携（MCP）', note: 'Claude などの AI から、このアプリを操作する', onSelect: () => setMcp(true) },
               ...(isDesktop
                 ? []
                 : [{ icon: 'info' as const, label: 'このアプリについて', note: 'アプリを開く QR コードと著作権の表示', onSelect: () => setAbout(true) }])
@@ -85,6 +86,7 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
           />
         )}
         {aboutDialog}
+        {mcpDialog}
       </>
     )
   }
@@ -119,15 +121,11 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
             <input type="checkbox" checked={showOnStartup} onChange={(e) => setShowTourOnStartup(e.target.checked)} />
             <span className="switch" />
           </label>
-          {isDesktop && (
-            <>
-              <hr />
-              <button role="menuitem" onClick={() => run(() => setMcp(true))}>
-                <Icon name="sparkle" /> AI 連携（MCP）
-                <small>AI からこのアプリを操作する</small>
-              </button>
-            </>
-          )}
+          <hr />
+          <button role="menuitem" onClick={() => run(() => setMcp(true))}>
+            <Icon name="sparkle" /> AI 連携（MCP）
+            <small>AI からこのアプリを操作する</small>
+          </button>
           {!isDesktop && (
             <>
               <hr />
