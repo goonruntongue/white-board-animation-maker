@@ -7,9 +7,10 @@ import { SelectionModeBar } from './SelectionModeBar'
 import { ThemeSwitch } from './ThemeSwitch'
 import { HelpMenu } from './HelpMenu'
 import { LiveEditBar } from './LiveEditBar'
+import { ScrollRow } from './ScrollRow'
 
 const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
-  { id: 'erase', icon: 'eraser', label: '消す', key: 'E' },
+  { id: 'erase', icon: 'eraser', label: 'グループから消す', key: 'E' },
   { id: 'select', icon: 'cursor', label: 'グループを選ぶ', key: 'V' },
   { id: 'live', icon: 'liveEdit', label: '手描き', key: 'W' },
   { id: 'pan', icon: 'hand', label: '移動', key: 'H' }
@@ -39,6 +40,8 @@ export function Toolbar(): React.JSX.Element {
         <span className="brand-name">Whiteboard Animation Maker</span>
       </div>
 
+      {/* 道具とオプションバーは、入りきらなければ横にスクロールする（右端の保存・書き出しはいつも見える） */}
+      <ScrollRow className="tb-scroll" wheel label="道具とオプション">
       <div className="tb-group">
         <button className="icon-btn" title="新規 (Ctrl+N)" onClick={newProject}>
           <Icon name="file" />
@@ -124,6 +127,7 @@ Shift+ドラッグで追加 / Alt+ドラッグで除外`}
         {dirty && <span className="dirty-dot" title="未保存の変更があります" />}
         {!isDesktop && <span className="env-badge">ブラウザ版</span>}
       </div>
+      </ScrollRow>
 
       <div className="tb-group end">
         <ThemeSwitch />

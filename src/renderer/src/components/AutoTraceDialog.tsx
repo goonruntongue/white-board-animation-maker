@@ -110,10 +110,15 @@ export function AutoTraceDialog(): React.JSX.Element {
       st.setLivePart(null)
       st.setViewMode('edit')
       st.setTime(0)
+      // 次にするのは「再生して確かめる・気になる線を選んで直す」なので、選ぶ・動かす にしてタイムラインを出す
+      // （ブラシのままだと、絵に触れただけで新しいグループが描かれてしまう）
+      st.setTool('live')
+      st.setLiveMode('move')
+      st.setTimelineHidden(false)
       notify(
         result.fallback
           ? '文字や図をうまく分けられなかったため、画像全体を1つのグループにしました'
-          : `${result.blocks} 個のグループを作りました。再生して確かめ、順番や速さは描き順リストで直せます`
+          : `${result.blocks} 個のグループを作りました。再生して確かめ、気になる線はタイムラインで選んで直せます`
       )
       close()
     } catch (e) {

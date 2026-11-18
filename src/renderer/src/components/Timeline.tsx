@@ -6,6 +6,7 @@ import { strokeParts } from '../engine/strokeParts'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
 import { ScrollRow } from './ScrollRow'
+import { useIsPhone } from '../lib/useMedia'
 import { StrokeActions } from './phone/StrokeActions'
 import { useLongPress } from '../lib/useLongPress'
 
@@ -297,6 +298,9 @@ export function Timeline(): React.JSX.Element {
   }, [total])
 
   const { setViewMode, select } = useEditor.getState()
+  const isPhone = useIsPhone()
+  // スマホ：選んだグループの線の番号（下の操作の行の先頭に入れる）
+  let partsInline: React.ReactNode = null
 
   return (
     <footer className="timeline">
@@ -391,26 +395,38 @@ export function Timeline(): React.JSX.Element {
         </div>
         </div>
         <TimelineScrollbar viewport={scrollRef} total={total} />
-        {selectedId && multiIds.length < 2 && (() => {
-          const stroke = project.strokes.find((s) => s.id === selectedId)
-          if (!stroke) return null
-          const parts = strokeParts(stroke)
-          if (!parts.length) return null
-          return <div className="timeline-parts" onPointerDown={(e) => e.stopPropagation()} onPointerMove={(e) => e.stopPropagation()}>
-            <span className="timeline-parts-label">線 ({parts.length})</span>
-            <ScrollRow className="timeline-parts-list" label={`${stroke.name} の線`}>
-              {parts.map((_, part) => <button key={part} className={livePart?.strokeId === stroke.id && livePart.part === part ? 'on' : ''} onClick={() => {
+        {(() => {
+          const stroke = selectedId && multiIds.length < 2 ? project.strokes.find((s) => s.id === selectedId) : undefined
+          const parts = stroke ? strokeParts(stroke) : []
+          if (!stroke || !parts.length) return null
+          const buttons = parts.map((_, part) => <button key={part} className={livePart?.strokeId === stroke.id && livePart.part === part ? 'on' : ''} onClick={() => {
                 const st = useEditor.getState()
                 st.setPlaying(false)
                 st.setViewMode('edit')
                 st.setTool('live')
                 st.setLivePart({ strokeId: stroke.id, part })
-              }} aria-label={`${stroke.name} の線 ${part + 1}`} title={`線 ${part + 1} を選ぶ`}>{part + 1}</button>)}
+              }} aria-label={`${stroke.name} の線 ${part + 1}`} title={`線 ${part + 1} を選ぶ`}>{part + 1}</button>)
+          // スマホは縦の場所が足りないので、線の番号は下の操作と同じ1行に並べる（はみ出したら横スクロール）
+          if (isPhone) {
+            partsInline = (
+              <>
+                <span className="timeline-parts-label">線 ({parts.length})</span>
+                <span className="timeline-parts-list inline">{buttons}</span>
+                <span className="tl-divider" aria-hidden="true" />
+              </>
+            )
+            return null
+          }
+          return <div className="timeline-parts" onPointerDown={(e) => e.stopPropagation()} onPointerMove={(e) => e.stopPropagation()}>
+            <span className="timeline-parts-label">線 ({parts.length})</span>
+            <ScrollRow className="timeline-parts-list" label={`${stroke.name} の線`}>
+              {buttons}
             </ScrollRow>
           </div>
         })()}
         {/* はみ出したら横にスクロール（端に矢印が出る） */}
         <ScrollRow className="timeline-actions" label="タイムラインの操作" onPointerDown={(e) => e.stopPropagation()} onPointerMove={(e) => e.stopPropagation()}>
+          {partsInline}
           {multiIds.length < 2 && selectedLine && selectedLine.part > 0 && <button className="timeline-insert" title="選んだ線の手前で、グループを2つに分ける（描くタイミングはそのまま）" onClick={() => {
             const st = useEditor.getState()
             st.splitGroup(selectedLine.strokeId, selectedLine.part)
