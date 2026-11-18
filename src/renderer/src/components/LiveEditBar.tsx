@@ -7,10 +7,10 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useShallow } from 'zustand/react/shallow'
+import { setAutoSelect, useAutoSelect } from '../lib/autoSelect'
 import { setBrushTarget, useBrushTarget, type BrushTarget } from '../lib/brushTarget'
 import { ActionSheet } from './phone/ActionSheet'
 import {
-  setAllPartsWidth,
   setPartWidth,
   setStrokeWidthKeepRatio,
   strokeParts,
@@ -71,18 +71,6 @@ export function setLiveWidth(width: number): void {
   )
   // 太くした分も見えるように、止まったら通過部分を表示する（同じ元に戻す1回分）
   revealLineSoon(lp.strokeId, whole ? -1 : lp.part, whole ? `livestroke:${lp.strokeId}` : `livepart:${lp.strokeId}:${lp.part}`)
-}
-
-/** 線ごと：選んでいる線の太さを、その軌跡のすべての線に使う */
-function applyToStroke(): void {
-  const st = useEditor.getState()
-  const lp = st.livePart
-  if (!lp) return
-  const stroke = st.project.strokes.find((s) => s.id === lp.strokeId)
-  const part = stroke ? strokeParts(stroke)[lp.part] : undefined
-  if (!stroke || !part) return
-  st.commit((p) => ({ ...p, strokes: p.strokes.map((s) => (s.id === lp.strokeId ? setAllPartsWidth(s, part.width) : s)) }))
-  st.notify(`#${st.project.strokes.indexOf(stroke) + 1} のすべての線を ${part.width}px にしました`)
 }
 
 /** 選んでいる軌跡（線）を、その中心を基準に拡大・縮小する（続けて押した分は、元に戻す1回分にまとめる） */
@@ -261,6 +249,25 @@ function ModeSwitch({ phone }: { phone: boolean }): React.JSX.Element {
   )
 }
 
+/** 選ぶ・動かす の「自動選択」チェック（オフにすると、いま選んでいる線から選び替えない） */
+function AutoSelectCheck({ phone }: { phone: boolean }): React.JSX.Element {
+  const on = useAutoSelect()
+  return (
+    <label
+      className={`auto-select ${phone ? 'phone' : ''} ${on ? 'on' : ''}`}
+      title={on ? '自動選択：押した所にある線に選び替えて動かす（外すと、いま選んでいる線だけを動かす）' : '自動選択オフ：どこをドラッグしても、いま選んでいる線を動かす'}
+    >
+      <input type="checkbox" checked={on} onChange={(e) => setAutoSelect(e.target.checked)} />
+      <span className="auto-select-box" aria-hidden="true">
+        <svg width="12" height="10" viewBox="0 0 12 10">
+          <path d="M1.5 5.2 L4.6 8.2 L10.5 1.8" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+      <span>自動選択</span>
+    </label>
+  )
+}
+
 const Caret = (): React.JSX.Element => (
   <svg width="10" height="7" viewBox="0 0 10 7" aria-hidden="true">
     <path d="M1.5 1.5 L5 5.2 L8.5 1.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -426,6 +433,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
       <div className="pc-rows">
         <div className="pc-row">
           <ModeSwitch phone />
+          {mode === 'move' && <AutoSelectCheck phone />}
           {(brushing || mode === 'erase') && <SizePresets phone kind={brushing ? 'brush' : 'eraser'} />}
         </div>
         <div className="pc-row">
@@ -436,6 +444,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
     ) : (
       <div className="tb-group live-bar">
         <ModeSwitch phone={false} />
+        {mode === 'move' && <AutoSelectCheck phone={false} />}
         {unitSwitch}
         {size ?? <span className="live-hint">{hint}</span>}
         {brushing && <BreakKey phone={false} />}
@@ -454,6 +463,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
       <div className="pc-rows">
         <div className="pc-row">
           <ModeSwitch phone />
+          {mode === 'move' && <AutoSelectCheck phone />}
           {sized && <SizePresets phone kind={kind} />}
         </div>
         <div className="pc-row">
@@ -498,11 +508,6 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
                 <Icon name="zoomIn" size={18} />
                 <small>拡大</small>
               </button>
-              {!whole && (
-                <button className="pc-key text" onClick={applyToStroke}>
-                  グループ全体に
-                </button>
-              )}
             </>
           )}
           <button className="pc-key" disabled={!liveHasClip} onClick={() => useEditor.getState().openDialog('auto')} title="選択中のグループの表示範囲を自動で作り直す">
@@ -519,6 +524,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
   return (
     <div className="tb-group live-bar" title={`選んだ${what}の編集。絵は、この${what}を描き終えた瞬間を表示しています`}>
       <ModeSwitch phone={false} />
+      {mode === 'move' && <AutoSelectCheck phone={false} />}
       {unitSwitch}
       <span className="tb-label">{label}</span>
       <button className="tool-btn live-redo" disabled={!liveHasClip} title={liveHasClip ? '選択中のグループの表示範囲を自動で作り直す' : '自動で再作成するには、グループに表示範囲が必要です'} onClick={() => useEditor.getState().openDialog('auto')}><Icon name="sparkle" /><span>自動で再作成</span></button>
@@ -558,11 +564,6 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
           <span className="live-value" title={`${what}の太さ（px）`}>
             {live.width}
           </span>
-          {!whole && (
-            <button className="icon-btn" title="この太さを、同じグループのすべての線に使う" onClick={applyToStroke}>
-              <Icon name="layers" />
-            </button>
-          )}
         </>
       ))}
       <button className="icon-btn" title="選択を外す (Esc)" onClick={clear}>

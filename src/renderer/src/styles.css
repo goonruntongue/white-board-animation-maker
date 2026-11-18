@@ -4278,3 +4278,48 @@ button {
   background: linear-gradient(180deg, var(--key-pressed-top), var(--key-pressed-bot));
   box-shadow: var(--key-shadow-pressed);
 }
+
+/* ---------- 選ぶ・動かす の「自動選択」チェック ---------- */
+.auto-select {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.auto-select.phone {
+  min-height: 44px;
+  font-size: 12.5px;
+}
+.auto-select input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+.auto-select-box {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--well-deep);
+  box-shadow: var(--well-shadow), 0 0 0 1px var(--line-strong);
+  color: transparent;
+}
+.auto-select.on .auto-select-box {
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  color: #fff;
+}
+.auto-select input:focus-visible + .auto-select-box {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

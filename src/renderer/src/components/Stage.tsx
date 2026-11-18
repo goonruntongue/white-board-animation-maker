@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { captureImage, importImageDialog, importSampleImage, openAutoTrace, togglePlay } from '../commands'
 import { appendToStroke, simplifyPoints, strokeFromRecording } from '../engine/project'
+import { getAutoSelect } from '../lib/autoSelect'
 import { getBrushTarget } from '../lib/brushTarget'
 import { hitPart, replaceStrokePart, strokeParts, transformPart, transformStroke } from '../engine/strokeParts'
 import { fitPath, fitTolerance, insertAnchor, nearestOnPath, partPoints, type PathNode } from '../engine/pathEdit'
@@ -991,9 +992,11 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         drawOverlay()
         return
       }
-      // タップした所にある線（軌跡ごとのときは、その線の軌跡）を選ぶ。何もない所なら選択を外す。そのままドラッグすると動かす
-      const hit = hitPart(project.strokes, p.x, p.y, (e.pointerType === 'touch' ? 14 : 5) / scale)
-      st.setLivePart(hit && st.liveUnit === 'stroke' ? { strokeId: hit.strokeId, part: 0 } : hit)
+      // 自動選択オン：タップした所にある線（軌跡ごとのときは、その線の軌跡）を選ぶ。何もない所なら選択を外す。そのままドラッグすると動かす
+      // 自動選択オフ：いま選んでいる線から選び替えず、どこをドラッグしてもその線を動かす（何も選んでいないときだけ、押した所の線を選ぶ）
+      const keep = !getAutoSelect() && st.livePart && st.project.strokes.some((x) => x.id === st.livePart!.strokeId) ? st.livePart : null
+      const hit = keep ?? hitPart(project.strokes, p.x, p.y, (e.pointerType === 'touch' ? 14 : 5) / scale)
+      if (!keep) st.setLivePart(hit && st.liveUnit === 'stroke' ? { strokeId: hit.strokeId, part: 0 } : hit)
       if (hit) {
         haptic()
         const stroke = st.project.strokes.find((x) => x.id === hit.strokeId)!
