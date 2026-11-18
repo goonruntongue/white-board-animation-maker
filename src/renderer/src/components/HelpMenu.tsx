@@ -51,7 +51,7 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
               { icon: 'list', label: '使い方ガイド', note: '全機能を詳しく説明（検索できます）', onSelect: () => openGuide() },
               { icon: 'image', label: 'サンプル画像を使う', note: '練習用の画像をページに追加', onSelect: () => void importSampleImage() },
               {
-                icon: 'list',
+                icon: 'tipHelp',
                 label: 'ボタンの説明を見るには',
                 note: 'どのボタンも、長押しするとその説明が画面下に出ます（指を離すと少しして消えます）',
                 onSelect: () => useEditor.getState().notify('ボタンを長押しすると、その説明が出ます')
