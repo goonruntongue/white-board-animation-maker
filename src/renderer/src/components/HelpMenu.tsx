@@ -6,6 +6,7 @@ import { setBarLayout, useBarLayout } from '../lib/barLayout'
 import { isDesktop } from '../lib/platform'
 import { AboutDialog } from './AboutDialog'
 import { McpDialog } from './McpDialog'
+import { AgentPromptDialog } from './AgentPromptDialog'
 import { openGuide, setShowTourOnStartup, startTour, useTourPrefs } from '../lib/tour'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
@@ -19,6 +20,9 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
   // AI 連携（MCP）：デスクトップ版はこのパソコンの中、Web 版は Cloudflare の中継経由
   const [mcp, setMcp] = useState(false)
   const mcpDialog = mcp && <McpDialog onClose={() => setMcp(false)} />
+  // AI エージェントに渡す指示文（スキルとして登録させてから作らせる）
+  const [agent, setAgent] = useState(false)
+  const agentDialog = agent && <AgentPromptDialog onClose={() => setAgent(false)} />
   const { showOnStartup } = useTourPrefs()
   const barLayout = useBarLayout()
   const wrap = useRef<HTMLDivElement>(null)
@@ -78,6 +82,7 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
                 note: barLayout === 'two' ? '押すと1段（1列に並べて横にスクロール）に切り替わります' : '押すと2段（操作の切り替えと、選んだ線の操作を分ける）に切り替わります',
                 onSelect: () => setBarLayout(barLayout === 'two' ? 'one' : 'two')
               },
+              { icon: 'sparkle' as const, label: 'AI エージェントに作ってもらう', note: 'Claude Code・Codex などに渡す指示文をコピー', onSelect: () => setAgent(true) },
               { icon: 'sparkle' as const, label: 'AI 連携（MCP）', note: 'Claude などの AI から、このアプリを操作する', onSelect: () => setMcp(true) },
               ...(isDesktop
                 ? []
@@ -87,6 +92,7 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
         )}
         {aboutDialog}
         {mcpDialog}
+        {agentDialog}
       </>
     )
   }
@@ -122,6 +128,10 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
             <span className="switch" />
           </label>
           <hr />
+          <button role="menuitem" onClick={() => run(() => setAgent(true))}>
+            <Icon name="sparkle" /> AI エージェントに作ってもらう
+            <small>指示文をコピー</small>
+          </button>
           <button role="menuitem" onClick={() => run(() => setMcp(true))}>
             <Icon name="sparkle" /> AI 連携（MCP）
             <small>AI からこのアプリを操作する</small>
@@ -138,6 +148,7 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
       )}
       {aboutDialog}
       {mcpDialog}
+      {agentDialog}
     </div>
   )
 }

@@ -191,7 +191,7 @@ PRD の MVP（8章）はひと通り動く状態です。
 - 歯車のメニュー →「AI 連携（MCP）」で受け付けをオンにし、表示される URL（`http://127.0.0.1:39271/mcp/<合言葉>`）を MCP サーバー（Streamable HTTP）として登録する
 - 例：`claude mcp add --transport http whiteboard http://127.0.0.1:39271/mcp/<合言葉>`
 - 道具の一覧と説明は `src/shared/mcp.ts`、実際の操作は `src/renderer/src/automation.ts`、待ち受けは `src/main/mcpServer.ts`
-- **AI エージェントに最初から最後まで任せる手順書**：[docs/ai-agent-guide.md](docs/ai-agent-guide.md)（このファイルを AI エージェントに読ませると、アプリの準備・接続の確認・画像の用意・描き順の調整・MP4 の書き出しまでを自分で進める。利用者の操作が要る所だけ、お願いが出る）
+- **AI エージェントに最初から最後まで任せる手順書（スキル）**：[site/agent/SKILL.md](site/agent/SKILL.md)（公開先 `/agent/SKILL.md`。付属の道具も同じ場所）。Web アプリの歯車のメニュー →「AI エージェントに作ってもらう」で、スキル名を入れて指示文をコピーし、エージェントに渡すと、手順書を取得してグローバルなスキルとして登録し、動画を最後まで作る
 - 書き出したファイルは「書類」の `Whiteboard Animation Maker/AI exports` に保存する
 - Web 版は Cloudflare の中継（`relay/`、Workers ＋ Durable Objects）を通す：歯車のメニュー →「AI 連携（MCP）」でオンにすると、タブが WebSocket で中継につながり、`https://whiteboard-mcp-relay.goonruntongue.workers.dev/mcp/<合言葉>` を AI に登録できる（claude.ai のカスタムコネクタにも使える）。書き出したファイルは中継に2時間だけ置き、ダウンロード用の URL を AI に返す。タブ側は `src/renderer/src/lib/webMcp.ts`
 - 中継の公開（`relay/` を変えたとき）：`npx wrangler deploy --config relay/wrangler.jsonc`（main への push では公開されない）

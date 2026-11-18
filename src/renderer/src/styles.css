@@ -4794,3 +4794,18 @@ button {
   opacity: 0.85;
   white-space: nowrap;
 }
+
+/* AI エージェントに渡す指示文 */
+.agent-prompt {
+  max-height: 260px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--well);
+  box-shadow: var(--well-shadow);
+  font: 11.5px/1.7 ui-monospace, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
