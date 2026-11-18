@@ -193,9 +193,105 @@ export function insertAnchor(nodes: PathNode[], seg: number, t: number): PathNod
   return out
 }
 
-/** アンカーを消す（両どなりのハンドルはそのまま。2つ未満にはしない） */
+/** 区間 seg（nodes[seg]→nodes[seg+1]）の上の点を n 個取る（端は含めない） */
+function segmentSamples(A: PathNode, B: PathNode, n: number): Pt[] {
+  const out: Pt[] = []
+  for (let k = 1; k < n; k++) {
+    const t = k / n
+    out.push({ x: bez(A.x, A.outX, B.inX, B.x, t), y: bez(A.y, A.outY, B.inY, B.y, t) })
+  }
+  return out
+}
+
+/**
+ * 端 A・B と、その向き（tA：A から出る向き、tB：B へ入る向きの逆＝B から A 側へ出る向き）を保ったまま、
+ * 点の並び pts にいちばん近くなるハンドルの長さを求める（最小二乗。Illustrator・Schneider の方法と同じ考え方）。
+ */
+function fitHandles(A: Pt, B: Pt, tA: Pt, tB: Pt, pts: Pt[]): [number, number] {
+  const all = [A, ...pts, B]
+  // 弦の長さで各点の位置 t を決め、ニュートン法で少しずつ曲線上のいちばん近い所へ寄せる
+  const cum = [0]
+  for (let i = 1; i < all.length; i++) cum.push(cum[i - 1] + Math.hypot(all[i].x - all[i - 1].x, all[i].y - all[i - 1].y))
+  const total = cum[cum.length - 1] || 1
+  const ts = cum.map((c) => c / total)
+  const chord = Math.hypot(B.x - A.x, B.y - A.y)
+  let alpha: [number, number] = [chord / 3, chord / 3]
+  for (let iter = 0; iter < 4; iter++) {
+    let c00 = 0, c01 = 0, c11 = 0, x0 = 0, x1 = 0
+    for (let i = 0; i < all.length; i++) {
+      const t = ts[i]
+      const u = 1 - t
+      const b0 = u * u * u, b1 = 3 * u * u * t, b2 = 3 * u * t * t, b3 = t * t * t
+      const a1 = { x: tA.x * b1, y: tA.y * b1 }
+      const a2 = { x: tB.x * b2, y: tB.y * b2 }
+      c00 += a1.x * a1.x + a1.y * a1.y
+      c01 += a1.x * a2.x + a1.y * a2.y
+      c11 += a2.x * a2.x + a2.y * a2.y
+      const rx = all[i].x - (A.x * (b0 + b1) + B.x * (b2 + b3))
+      const ry = all[i].y - (A.y * (b0 + b1) + B.y * (b2 + b3))
+      x0 += a1.x * rx + a1.y * ry
+      x1 += a2.x * rx + a2.y * ry
+    }
+    const det = c00 * c11 - c01 * c01
+    let a = Math.abs(det) > 1e-9 ? (x0 * c11 - x1 * c01) / det : chord / 3
+    let b = Math.abs(det) > 1e-9 ? (c00 * x1 - c01 * x0) / det : chord / 3
+    // 向きが逆になる・長すぎる答えは、形が崩れるので使わない
+    if (!(a > chord * 0.02) || !(b > chord * 0.02) || a > chord * 2 || b > chord * 2) {
+      a = chord / 3
+      b = chord / 3
+    }
+    alpha = [a, b]
+    // t を曲線上のいちばん近い所へ寄せる（ニュートン法 1 歩）
+    const P1 = { x: A.x + tA.x * a, y: A.y + tA.y * a }
+    const P2 = { x: B.x + tB.x * b, y: B.y + tB.y * b }
+    for (let i = 1; i < all.length - 1; i++) {
+      const t = ts[i]
+      const u = 1 - t
+      const qx = u * u * u * A.x + 3 * u * u * t * P1.x + 3 * u * t * t * P2.x + t * t * t * B.x
+      const qy = u * u * u * A.y + 3 * u * u * t * P1.y + 3 * u * t * t * P2.y + t * t * t * B.y
+      const d1x = 3 * (u * u * (P1.x - A.x) + 2 * u * t * (P2.x - P1.x) + t * t * (B.x - P2.x))
+      const d1y = 3 * (u * u * (P1.y - A.y) + 2 * u * t * (P2.y - P1.y) + t * t * (B.y - P2.y))
+      const d2x = 6 * (u * (P2.x - 2 * P1.x + A.x) + t * (B.x - 2 * P2.x + P1.x))
+      const d2y = 6 * (u * (P2.y - 2 * P1.y + A.y) + t * (B.y - 2 * P2.y + P1.y))
+      const ex = qx - all[i].x
+      const ey = qy - all[i].y
+      const den = d1x * d1x + d1y * d1y + ex * d2x + ey * d2y
+      if (Math.abs(den) > 1e-9) ts[i] = Math.max(0, Math.min(1, t - (ex * d1x + ey * d1y) / den))
+    }
+  }
+  return alpha
+}
+
+const unit = (x: number, y: number): Pt | null => {
+  const l = Math.hypot(x, y)
+  return l > 1e-6 ? { x: x / l, y: y / l } : null
+}
+
+/**
+ * アンカーを消す（2つ未満にはしない）。
+ * 途中のアンカーを消すときは、消す前の曲線の形にできるだけ沿うよう、両どなりのハンドルの長さを計算し直す
+ * （ハンドルをそのままにすると、短いハンドルで長い区間を結ぶことになり、アンカーの所だけ急に曲がる折れ線のような形になる）。
+ */
 export function removeAnchor(nodes: PathNode[], index: number): PathNode[] {
   if (nodes.length <= 2 || index < 0 || index >= nodes.length) return nodes
+  if (index > 0 && index < nodes.length - 1) {
+    const A = nodes[index - 1]
+    const M = nodes[index]
+    const B = nodes[index + 1]
+    // 消す前の2つの区間に沿った点（形の手本）
+    const pts = [...segmentSamples(A, M, 24), { x: M.x, y: M.y }, ...segmentSamples(M, B, 24)]
+    // 向き：ハンドルの向きを保つ（ハンドルがない角のアンカーは、手本の最初・最後の点の向き）
+    const tA = unit(A.outX - A.x, A.outY - A.y) ?? unit(pts[0].x - A.x, pts[0].y - A.y) ?? unit(B.x - A.x, B.y - A.y) ?? { x: 1, y: 0 }
+    const last = pts[pts.length - 1]
+    const tB = unit(B.inX - B.x, B.inY - B.y) ?? unit(last.x - B.x, last.y - B.y) ?? unit(A.x - B.x, A.y - B.y) ?? { x: -1, y: 0 }
+    const [a, b] = fitHandles(A, B, tA, tB, pts)
+    const out = nodes.map((n) => ({ ...n }))
+    out[index - 1] = { ...out[index - 1], outX: A.x + tA.x * a, outY: A.y + tA.y * a }
+    out[index + 1] = { ...out[index + 1], inX: B.x + tB.x * b, inY: B.y + tB.y * b }
+    // なめらかなアンカー（反対側のハンドルと一直線）は、反対側の長さはそのままで向きだけそろったまま
+    out.splice(index, 1)
+    return out
+  }
   const out = nodes.filter((_, i) => i !== index)
   // 端のアンカーを消したときは、新しい端の外側のハンドルをアンカーに戻す
   if (index === 0) out[0] = { ...out[0], inX: out[0].x, inY: out[0].y }
