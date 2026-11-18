@@ -1,3 +1,4 @@
+import { ScrollRow } from './ScrollRow'
 import { useRef, useState } from 'react'
 import { importImageDialog, replaceImageDialog } from '../commands'
 import { useLongPress } from '../lib/useLongPress'
@@ -53,8 +54,9 @@ export function PageStrip(): React.JSX.Element {
           {project.pageIndex + 1}/{count}
         </b>
       </span>
-      <div
+      <ScrollRow
         className="page-list"
+        label="ページの一覧"
         {...lp.handlers}
         onPointerDown={(e) => {
           pressed.current = indexOf(e)
@@ -96,7 +98,7 @@ export function PageStrip(): React.JSX.Element {
           <Icon name="image" size={15} />
           <i>＋</i>
         </button>
-      </div>
+      </ScrollRow>
       {menuFor !== null && <ActionSheet title={`ページ ${menuFor + 1}`} actions={actions(menuFor)} onClose={() => setMenuFor(null)} />}
     </div>
   )

@@ -4,6 +4,7 @@
 //  ・ブラシで足す：なぞった所を、選んだ軌跡に足す（ペンもそこを通り、表示範囲も広がる）
 //  ・消しゴム：なぞった所を、選んだ軌跡では見せない
 // 絵（ステージ）は「選んだ軌跡（線）を描き終えた瞬間」を見せているので、変えるとその場で見え方が変わる。
+import { ScrollRow } from './ScrollRow'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useShallow } from 'zustand/react/shallow'
@@ -468,15 +469,15 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
     return phone ? (
       // スマホは2段：上に操作の切り替えと大きさ、下にスライダーや案内
       <div className="pc-rows">
-        <div className="pc-row">
+        <ScrollRow className="pc-row">
           <ModeSwitch phone />
           {mode === 'move' && <AutoSelectCheck phone />}
           {(brushing || mode === 'erase') && <SizePresets phone kind={brushing ? 'brush' : 'eraser'} />}
-        </div>
-        <div className="pc-row">
+        </ScrollRow>
+        <ScrollRow className="pc-row">
           {brushing || mode === 'erase' ? <SizeSlider phone kind={brushing ? 'brush' : 'eraser'} /> : <span className="pc-hint">{hint}</span>}
           {brushing && <SameGroupKey phone />}
-        </div>
+        </ScrollRow>
       </div>
     ) : (
       <div className="tb-group live-bar">
@@ -499,12 +500,12 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
     return (
       // スマホは2段：上に操作の切り替え（と大きさ）、下に選んだ線の操作（よく使う順）
       <div className="pc-rows">
-        <div className="pc-row">
+        <ScrollRow className="pc-row">
           <ModeSwitch phone />
           {mode === 'move' && <AutoSelectCheck phone />}
           {sized && <SizePresets phone kind={kind} />}
-        </div>
-        <div className="pc-row">
+        </ScrollRow>
+        <ScrollRow className="pc-row">
           {/* 選択を外す（×）と同一グループは、横にスクロールしなくても見えるよう、先頭に置く */}
           <button className="pc-key" aria-label="選択を外す" onClick={clear}>
             <Icon name="x" size={18} />
@@ -557,7 +558,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
             <Icon name="sparkle" size={18} /><small>自動で再作成</small>
           </button>
           <StrokeKeys strokeId={live.strokeId} />
-        </div>
+        </ScrollRow>
       </div>
     )
   }

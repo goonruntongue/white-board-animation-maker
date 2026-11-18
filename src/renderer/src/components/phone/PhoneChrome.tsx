@@ -4,6 +4,7 @@
 //   ドック       … 親指が届く画面下に、作業の順番どおり「自動｜手描き」と「描き順」「設定」「書き出し」
 //                  （範囲は自動にも手描きにも効く共通の指定なので、ドックではなく絵の右下のボタンから）
 //                  （「選ぶ」「消す」は「直す」＝ライブ編集にまとめた）
+import { ScrollRow } from '../ScrollRow'
 import { useState } from 'react'
 import {
   captureImage,
@@ -108,14 +109,14 @@ export function PhoneContextBar(): React.JSX.Element | null {
   const hasImage = useEditor((s) => !!s.project.image)
   if (!hasImage) return null
   return (
-    <div className="phone-context" role="toolbar" aria-label="道具の設定">
+    <ScrollRow className="phone-context" role="toolbar" label="道具の設定">
       {tool === 'erase' && <PenOptions kind="eraser" />}
       {(tool === 'rect' || tool === 'ellipse' || tool === 'lasso') && <SelectionOptions />}
       {tool === 'select' && <StrokeOptions />}
       {/* 描き直し中（内部では描くツール）も、直すと同じ操作を出す */}
       {(tool === 'live' || tool === 'draw') && <LiveEditBar phone />}
       {tool === 'pan' && <span className="pc-hint">ドラッグで表示位置を移動（2本指でも移動・拡大できます）</span>}
-    </div>
+    </ScrollRow>
   )
 }
 
