@@ -181,3 +181,14 @@ PRD の MVP（8章）はひと通り動く状態です。
 - [x] 手描き：絵の上の線（ペンを下ろしてから上げるまでの一筆）をタップで選び、太さの変更・ドラッグで移動・拡大縮小・ブラシで足す（表示範囲も広げる）・消しゴムを、描き終えた瞬間の絵を見ながら行える
 - [x] 自動の描き順を「どこから描くか（文字の大きさ・領域・段組みの判定）」と「どう描くか（自然に描く／線をたどる／範囲を塗る）」に分離。線をたどるときはペンの太さを線の太さから自動選択
 - [ ] グループの点編集（ベジェ）、SVG対応 など（PRD 9章）
+
+## AI 連携（MCP）
+
+デスクトップ版は、MCP（Model Context Protocol）のエンドポイントを持ちます。Claude Code・Codex などの MCP クライアントから、画像の読み込み・描き順の自動作成・グループの並べ替えや描き直し・1コマの確認・書き出し（.wbanim / MP4 / WebM / GIF / HTML）までを操作できます。
+
+- 歯車のメニュー →「AI 連携（MCP）」で受け付けをオンにし、表示される URL（`http://127.0.0.1:39271/mcp/<合言葉>`）を MCP サーバー（Streamable HTTP）として登録する
+- 例：`claude mcp add --transport http whiteboard http://127.0.0.1:39271/mcp/<合言葉>`
+- 道具の一覧と説明は `src/shared/mcp.ts`、実際の操作は `src/renderer/src/automation.ts`、待ち受けは `src/main/mcpServer.ts`
+- 書き出したファイルは「書類」の `Whiteboard Animation Maker/AI exports` に保存する
+- Web 版（Cloudflare の中継経由）は準備中
+

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell, type MenuItemConstructorOptions } from 'electron'
 import { readFile, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
+import { setupMcp, shutdownMcp } from './mcpServer'
 
 const isDev = !app.isPackaged
 const isMac = process.platform === 'darwin'
@@ -290,10 +291,14 @@ if (!app.requestSingleInstanceLock()) {
   void app.whenReady().then(() => {
     buildMenu()
     createWindow()
+    // AI 連携（MCP）のエンドポイント。オンにしているときだけ待ち受ける
+    void setupMcp(() => mainWindow)
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
     })
   })
+
+  app.on('before-quit', () => shutdownMcp())
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()

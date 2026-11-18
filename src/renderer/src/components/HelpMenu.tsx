@@ -5,6 +5,7 @@ import { importSampleImage } from '../commands'
 import { setBarLayout, useBarLayout } from '../lib/barLayout'
 import { isDesktop } from '../lib/platform'
 import { AboutDialog } from './AboutDialog'
+import { McpDialog } from './McpDialog'
 import { openGuide, setShowTourOnStartup, startTour, useTourPrefs } from '../lib/tour'
 import { useEditor } from '../store'
 import { Icon } from './Icon'
@@ -15,6 +16,9 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
   // 「このアプリについて」（Web 版だけ。デスクトップ版には出さない）
   const [about, setAbout] = useState(false)
   const aboutDialog = about && <AboutDialog onClose={() => setAbout(false)} />
+  // AI 連携（MCP）：いまはデスクトップ版だけ
+  const [mcp, setMcp] = useState(false)
+  const mcpDialog = mcp && <McpDialog onClose={() => setMcp(false)} />
   const { showOnStartup } = useTourPrefs()
   const barLayout = useBarLayout()
   const wrap = useRef<HTMLDivElement>(null)
@@ -115,6 +119,15 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
             <input type="checkbox" checked={showOnStartup} onChange={(e) => setShowTourOnStartup(e.target.checked)} />
             <span className="switch" />
           </label>
+          {isDesktop && (
+            <>
+              <hr />
+              <button role="menuitem" onClick={() => run(() => setMcp(true))}>
+                <Icon name="sparkle" /> AI 連携（MCP）
+                <small>AI からこのアプリを操作する</small>
+              </button>
+            </>
+          )}
           {!isDesktop && (
             <>
               <hr />
@@ -126,6 +139,7 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
         </div>
       )}
       {aboutDialog}
+      {mcpDialog}
     </div>
   )
 }
