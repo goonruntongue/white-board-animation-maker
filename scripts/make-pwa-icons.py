@@ -47,14 +47,17 @@ def save(img, size, name):
 save(sq, 192, 'icon-192.png')
 save(sq, 512, 'icon-512.png')
 
-# iOS のホーム画面用（透過は黒になるので白で埋める）
-apple = Image.new('RGBA', sq.size, (255, 255, 255, 255))
+# アイコンの外側（透過）を埋める色：アイコンの暗い枠になじむ色
+BG = (31, 32, 39, 255)
+
+# iOS のホーム画面用（透過は黒になるので背景色で埋める）
+apple = Image.new('RGBA', sq.size, BG)
 apple.alpha_composite(sq)
 save(apple.convert('RGB'), 180, 'apple-touch-icon.png')
 
 # Android のマスカブル（端が切られても良いよう 80% に縮めて中央へ）
 m = 1024
-mask_bg = Image.new('RGBA', (m, m), (236, 241, 246, 255))
+mask_bg = Image.new('RGBA', (m, m), BG)
 inner = sq.resize((int(m * 0.8), int(m * 0.8)), Image.LANCZOS)
 mask_bg.alpha_composite(inner, ((m - inner.width) // 2, (m - inner.height) // 2))
 save(mask_bg.convert('RGB'), 512, 'icon-maskable-512.png')
