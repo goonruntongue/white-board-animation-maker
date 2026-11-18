@@ -60,7 +60,7 @@ export function AutoTraceDialog(): React.JSX.Element {
   const [prefs] = useState(loadPrefs)
   const [revealWidth, setRevealWidth] = useState(prefs.revealWidth)
   const [detail, setDetail] = useState<AutoDetail>(prefs.detail)
-  // 「インクの線をたどる」は廃止（前に選んでいた人は「自然に書く」に戻す）
+  // 「インクの線をたどる」は廃止（前に選んでいた人は「自然に描く」に戻す）
   const [pathMode, setPathMode] = useState<'natural' | 'group'>(prefs.pathMode === 'group' ? 'group' : 'natural')
   const [fill, setFill] = useState(!!selection && !editingStroke)
   // 選択範囲：範囲全体を均一に塗る（area）か、範囲の中の文字・図を見分けて自然な順に描く（detect）
@@ -148,7 +148,7 @@ export function AutoTraceDialog(): React.JSX.Element {
           <div className="form-grid">
             <label>描き方</label>
             <div className="choice-row" role="radiogroup" aria-label="描き方">
-              <button role="radio" aria-checked={!fill && pathMode === 'natural'} className={`choice ${!fill && pathMode === 'natural' ? 'on' : ''}`} onClick={() => { setFill(false); setPathMode('natural') }}><strong>自然に書く</strong><small>近い所から・行は左→右</small></button>
+              <button role="radio" aria-checked={!fill && pathMode === 'natural'} className={`choice ${!fill && pathMode === 'natural' ? 'on' : ''}`} onClick={() => { setFill(false); setPathMode('natural') }}><strong>自然に描く</strong><small>近い所から・行は左→右</small></button>
               <button role="radio" aria-checked={!fill && pathMode === 'group'} className={`choice ${!fill && pathMode === 'group' ? 'on' : ''}`} onClick={() => { setFill(false); setPathMode('group') }}><strong>かたまりを描く</strong><small>まとまりごとに描く</small></button>
               <button role="radio" aria-checked={fill} className={`choice ${fill ? 'on' : ''}`} onClick={() => { setFill(true); if (mode === 'stroke') setMode('append') }}><strong>選択範囲を塗る</strong><small>選んだ範囲だけ</small></button>
             </div>
@@ -158,9 +158,9 @@ export function AutoTraceDialog(): React.JSX.Element {
               <label>塗り方</label>
               <div className="choice-row" role="radiogroup" aria-label="塗り方">
                 <button role="radio" aria-checked={fillKind === 'area'} className={`choice ${fillKind === 'area' ? 'on' : ''}`} onClick={() => setFillKind('area')}><strong>範囲全体を塗る</strong><small>端から端まで均一に</small></button>
-                <button role="radio" aria-checked={fillKind === 'detect'} className={`choice ${fillKind === 'detect' ? 'on' : ''}`} onClick={() => setFillKind('detect')}><strong>中の文字・図を見分けて描く</strong><small>自然に書くと同じ順番</small></button>
+                <button role="radio" aria-checked={fillKind === 'detect'} className={`choice ${fillKind === 'detect' ? 'on' : ''}`} onClick={() => setFillKind('detect')}><strong>中の文字・図を見分けて描く</strong><small>自然に描くと同じ順番</small></button>
               </div>
-              {fillKind === 'detect' && <p>範囲の中の文字や図だけを見分け、「自然に書く」と同じ順番と動きで描きます。範囲の外は表示しません。</p>}
+              {fillKind === 'detect' && <p>範囲の中の文字や図だけを見分け、「自然に描く」と同じ順番と動きで描きます。範囲の外は表示しません。</p>}
               {fillKind === 'area' && <>
               <label>進む方向</label>
               <div className="choice-row" role="radiogroup" aria-label="進む方向">
