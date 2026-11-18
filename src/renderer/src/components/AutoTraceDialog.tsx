@@ -60,7 +60,8 @@ export function AutoTraceDialog(): React.JSX.Element {
   const [prefs] = useState(loadPrefs)
   const [revealWidth, setRevealWidth] = useState(prefs.revealWidth)
   const [detail, setDetail] = useState<AutoDetail>(prefs.detail)
-  const [pathMode, setPathMode] = useState<'natural' | 'group' | 'ink'>(prefs.pathMode === 'ink' || prefs.pathMode === 'group' ? prefs.pathMode : 'natural')
+  // 「インクの線をたどる」は廃止（前に選んでいた人は「自然に書く」に戻す）
+  const [pathMode, setPathMode] = useState<'natural' | 'group'>(prefs.pathMode === 'group' ? 'group' : 'natural')
   const [fill, setFill] = useState(!!selection && !editingStroke)
   // 選択範囲：範囲全体を均一に塗る（area）か、範囲の中の文字・図を見分けて自然な順に描く（detect）
   const [fillKind, setFillKind] = useState<'area' | 'detect'>('area')
@@ -149,7 +150,6 @@ export function AutoTraceDialog(): React.JSX.Element {
             <div className="choice-row" role="radiogroup" aria-label="描き方">
               <button role="radio" aria-checked={!fill && pathMode === 'natural'} className={`choice ${!fill && pathMode === 'natural' ? 'on' : ''}`} onClick={() => { setFill(false); setPathMode('natural') }}><strong>自然に書く</strong><small>近い所から・行は左→右</small></button>
               <button role="radio" aria-checked={!fill && pathMode === 'group'} className={`choice ${!fill && pathMode === 'group' ? 'on' : ''}`} onClick={() => { setFill(false); setPathMode('group') }}><strong>かたまりを描く</strong><small>まとまりごとに描く</small></button>
-              <button role="radio" aria-checked={!fill && pathMode === 'ink'} className={`choice ${!fill && pathMode === 'ink' ? 'on' : ''}`} onClick={() => { setFill(false); setPathMode('ink') }}><strong>インクの線をたどる</strong><small>試験版・書き順は推定</small></button>
               <button role="radio" aria-checked={fill} className={`choice ${fill ? 'on' : ''}`} onClick={() => { setFill(true); if (mode === 'stroke') setMode('append') }}><strong>選択範囲を塗る</strong><small>選んだ範囲だけ</small></button>
             </div>
             {fill && <>
@@ -182,14 +182,12 @@ export function AutoTraceDialog(): React.JSX.Element {
               </>}
             </>}
             {!fill && pathMode === 'natural' && <p>文字の大きさから行・まとまりを見分けます。近いまとまりを書き切ってから次へ進み、行は1回で左から右へ、背の高い図は左の列から上→下へ書きます。</p>}
-            {!fill && pathMode === 'ink' && <p>「自然に書く」と同じ順番でまとまりを選び、その中で線の中心をたどります。線の太さを場所ごとに測ってペンの太さを自動で切り替え、1回なぞれば線の幅全体が見えるようにします。もう見えている線は飛ばすので、細かい線が多い画像でも短い時間で描けます。元の書き順は分からないため推定です。</p>}
             {!fill && <>
             <label>ペンの太さ</label>
             <div className="choice-row">
               <button className={`choice ${revealWidth === 0 ? 'on' : ''}`} onClick={() => setRevealWidth(0)}>自動</button>
               <button className={`choice ${revealWidth > 0 ? 'on' : ''}`} onClick={() => setRevealWidth(revealWidth || 20)}>指定する</button>
             </div>
-            {revealWidth === 0 && pathMode === 'ink' && <p>自動：線の太さを測り、にじみの分も含めて覆える太さを、場所ごとに選びます。</p>}
             {revealWidth > 0 && <SliderField label="表示する線の幅" hint="元画像上の幅です。細くするとインクが一部残る場合があります。" value={revealWidth} min={1} max={300} step={1} unit="px" onChange={setRevealWidth} />}
             <label>かたまりの大きさ</label>
             <div className="choice-row" role="radiogroup" aria-label="かたまりの大きさ">
