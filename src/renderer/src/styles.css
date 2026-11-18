@@ -4809,3 +4809,22 @@ button {
   overflow-wrap: anywhere;
   user-select: all;
 }
+
+/* 歯車のメニュー（PC）：長い項目も1行に収め、ほかの項目と同じ余白にする */
+.help-pop {
+  width: max-content;
+  min-width: 260px;
+  max-width: min(400px, calc(100vw - 24px));
+}
+.help-pop > button {
+  height: auto;
+  min-height: 36px;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+.help-pop > button svg {
+  flex: none;
+}
+.help-pop > button small {
+  padding-left: 16px;
+}
