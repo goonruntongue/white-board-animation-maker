@@ -4466,3 +4466,52 @@ button {
 .timeline-actions > .tl-divider {
   margin-right: auto;
 }
+
+/* パス編集の道具パネル（絵の上に浮かぶ。上の取っ手で動かせる） */
+.path-palette {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px 4px;
+  border-radius: 10px;
+  background: var(--well);
+  box-shadow: var(--well-shadow), 0 6px 18px rgba(0, 0, 0, 0.25);
+  touch-action: none;
+}
+.path-palette-grip {
+  width: 100%;
+  height: 14px;
+  cursor: grab;
+  background: repeating-linear-gradient(90deg, var(--text-3, #8a8f8c) 0 1px, transparent 1px 4px) center / 26px 6px no-repeat;
+  opacity: 0.7;
+}
+.path-palette-grip:active {
+  cursor: grabbing;
+}
+.path-palette-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+}
+.path-palette-btn:hover {
+  background: var(--accent-soft);
+}
+.path-palette-btn.on {
+  background: linear-gradient(180deg, var(--accent-top), var(--accent-bot));
+  color: #fff;
+  box-shadow: var(--accent-glow);
+}
+.app.phone .path-palette-btn {
+  width: 44px;
+  height: 44px;
+}

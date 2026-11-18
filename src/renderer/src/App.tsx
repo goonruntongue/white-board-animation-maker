@@ -37,6 +37,7 @@ import { buildTimeline } from './engine/wb-engine'
 import { isDesktop, setWindowTitle } from './lib/platform'
 import { useIsPhone } from './lib/useMedia'
 import { useBarLayout } from './lib/barLayout'
+import { setPathTool } from './lib/pathTool'
 import { beginSession, listSnapshots, startAutosave } from './lib/recovery'
 import { SELECTION_TOOLS, useEditor } from './store'
 
@@ -239,6 +240,12 @@ export default function App(): React.JSX.Element {
         if (e.key === ',' || e.key === '.') {
           e.preventDefault()
           return stepLivePart(e.key === ',' ? -1 : 1)
+        }
+        // パス編集の道具（Illustrator と同じキー）：A パス選択 / Shift+C アンカーポイントの切り替え / + − 追加・削除
+        if (st.liveMode === 'path') {
+          if (k === 'a' && !e.shiftKey) return void (e.preventDefault(), setPathTool('direct'))
+          if (k === 'c' && e.shiftKey) return void (e.preventDefault(), setPathTool('convert'))
+          if (e.key === '+' || e.key === '=' || e.key === '-' || e.key === ';') return void (e.preventDefault(), setPathTool('addDel'))
         }
       }
       if (bracket !== 0) {

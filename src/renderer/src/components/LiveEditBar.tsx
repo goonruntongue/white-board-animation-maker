@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom'
 import { useShallow } from 'zustand/react/shallow'
 import { setAutoSelect, useAutoSelect } from '../lib/autoSelect'
 import { setBrushTarget, useBrushTarget, type BrushTarget } from '../lib/brushTarget'
+import { usePathTool, type PathTool } from '../lib/pathTool'
 import { ActionSheet } from './phone/ActionSheet'
 import {
   setPartWidth,
@@ -22,6 +23,18 @@ import { addRevealMark } from '../engine/selection'
 import { useEditor } from '../store'
 import { ERASER_PRESETS, PEN_PRESETS } from './PenSizePicker'
 import { Icon } from './Icon'
+
+/** パス編集のオプションバーに出す、いまの道具の使い方 */
+const PATH_HINT: Record<PathTool, string> = {
+  direct: 'アンカー・ハンドルをドラッグ／線の上をダブルクリックで追加／Alt＋ドラッグで角に',
+  convert: 'アンカーを押すと角に／アンカーからドラッグでなめらかに／ハンドルは片側だけ動く',
+  addDel: '線の上を押すとアンカーを追加／アンカーの上を押すと削除'
+}
+const PATH_HINT_PHONE: Record<PathTool, string> = {
+  direct: 'アンカーをドラッグで調整。線をダブルタップで追加',
+  convert: 'アンカーを押すと角に。引っぱるとなめらかに',
+  addDel: '線の上で追加。アンカーの上で削除'
+}
 
 const MIN = 1
 const MAX = 600
@@ -412,6 +425,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
   const hasAnchor = useEditor((s) => s.livePath?.selected != null)
   const clear = (): void => useEditor.getState().setLivePart(null)
   const pathing = mode === 'path'
+  const pathTool = usePathTool()
   const whole = unit === 'stroke' && !pathing
   // 直すは、いつも1本の線ごと（単位の切り替えはない）
   const unitSwitch = null
@@ -482,7 +496,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
                 <Icon name="trash" size={18} />
                 <small>アンカー削除</small>
               </button>
-              <span className="pc-hint">アンカーをドラッグで調整。線をダブルタップで追加</span>
+              <span className="pc-hint">{PATH_HINT_PHONE[pathTool]}</span>
             </>
           )}
           {sized && <SizeSlider phone kind={kind} />}
@@ -539,7 +553,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
           <button className="icon-btn" title="選んだアンカーを削除 (Delete)" disabled={!hasAnchor} onClick={() => deleteSelectedAnchor()}>
             <Icon name="trash" />
           </button>
-          <span className="live-hint">アンカー・ハンドルをドラッグ／線の上をダブルクリックで追加／Alt＋ドラッグで角に</span>
+          <span className="live-hint">{PATH_HINT[pathTool]}</span>
         </>
       )}
       {!pathing && (size ?? (

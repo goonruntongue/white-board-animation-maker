@@ -3,8 +3,9 @@ import { captureImage, importImageDialog, importSampleImage, openAutoTrace, togg
 import { appendToStroke, simplifyPoints, strokeFromRecording } from '../engine/project'
 import { getAutoSelect } from '../lib/autoSelect'
 import { getBrushTarget } from '../lib/brushTarget'
+import { getPathTool } from '../lib/pathTool'
 import { hitPart, replaceStrokePart, strokeParts, transformPart, transformStroke } from '../engine/strokeParts'
-import { fitPath, fitTolerance, insertAnchor, nearestOnPath, partPoints, type PathNode } from '../engine/pathEdit'
+import { fitPath, fitTolerance, insertAnchor, nearestOnPath, partPoints, removeAnchor, type PathNode } from '../engine/pathEdit'
 import { revealLine, updatePathNodes } from '../livePath'
 import { addEraserMark, addRevealMark, combine, flattenShapes, isDegenerate, normalizeBox, untagClipLines, type SelectionOp } from '../engine/selection'
 import type { ClipShape, Stroke, StrokePoint } from '../engine/types'
@@ -14,6 +15,7 @@ import { useAssets } from '../lib/useAssets'
 import { haptic, useIsPhone } from '../lib/useMedia'
 import { SELECTION_TOOLS, useEditor } from '../store'
 import { Icon } from './Icon'
+import { PathPalette } from './PathPalette'
 
 interface View {
   zoom: number
@@ -141,7 +143,18 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   /** パス編集でアンカー・ハンドルをドラッグしている途中 */
   /** パス編集のダブルクリック（ダブルタップ）判定用：前回押した時刻と画面上の位置 */
   const lastTap = useRef<{ time: number; x: number; y: number }>({ time: 0, x: 0, y: 0 })
-  const pathDrag = useRef<{ pointerId: number; kind: 'anchor' | 'in' | 'out'; index: number; start: Pt; nodes: PathNode[]; alt: boolean; key: string } | null>(null)
+  const pathDrag = useRef<{
+    pointerId: number
+    /** pull：アンカーポイントの切り替えで、アンカーからハンドルを引き出す */
+    kind: 'anchor' | 'in' | 'out' | 'pull'
+    index: number
+    start: Pt
+    startClient: Pt
+    moved: boolean
+    nodes: PathNode[]
+    alt: boolean
+    key: string
+  } | null>(null)
   /** ライブ編集で線をドラッグして動かしている途中（動かす前の軌跡を持っておき、そこからのずれで動かす） */
   const liveDrag = useRef<{ pointerId: number; start: Pt; startClient: Pt; stroke: Stroke; part: number; moved: boolean; key: string } | null>(null)
   const assets = useAssets(project)
@@ -808,7 +821,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const onPointerDown = (e: React.PointerEvent): void => {
     // ステージ上のボタンへのタップを描画として扱うと、ポインタ捕捉によって
     // ボタンのクリックが失われ、短い軌跡まで追加されてしまう。
-    if (e.target instanceof Element && e.target.closest('button, a, input, select, textarea, [role="button"]')) return
+    if (e.target instanceof Element && e.target.closest('button, a, input, select, textarea, [role="button"], .path-palette')) return
     if (!image) return
     if (e.pointerType === 'touch') {
       touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
@@ -910,7 +923,36 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
           // ハンドル（選んだアンカーと両どなり）→ アンカーの順に当たりを調べる
           const nodes = lp.nodes
           const sel = lp.selected
+          const ptool = getPathTool()
+          // アンカーポイントの追加・削除：アンカーの上なら消し、線の上ならアンカーを足す（それ以外は何もしない）
+          if (ptool === 'addDel') {
+            let hitAnchor = -1
+            let best = R
+            for (let i = 0; i < nodes.length; i++) {
+              const d = Math.hypot(nodes[i].x - p.x, nodes[i].y - p.y)
+              if (d <= best) {
+                best = d
+                hitAnchor = i
+              }
+            }
+            if (hitAnchor >= 0) {
+              if (nodes.length <= 2) st.notify('アンカーが2つしかないので、これ以上は消せません', 'error')
+              else {
+                updatePathNodes(removeAnchor(nodes, hitAnchor), undefined, null)
+                haptic()
+              }
+              return
+            }
+            const near = nearestOnPath(nodes, p.x, p.y)
+            if (near && near.dist <= R * 1.5) {
+              updatePathNodes(insertAnchor(nodes, near.seg, near.t), undefined, near.seg + 1)
+              haptic()
+            }
+            return
+          }
+          // ハンドルとアンカーのうち、押した所にいちばん近いものをつかむ（縮小表示で重なっていても、狙ったものが取れるように）
           let grab: { kind: 'anchor' | 'in' | 'out'; index: number } | null = null
+          let grabDist = R
           if (sel !== null) {
             const cand: { kind: 'in' | 'out'; index: number }[] = [
               { kind: 'in', index: sel },
@@ -923,25 +965,37 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
               if (!n || (c.kind === 'in' && c.index === 0) || (c.kind === 'out' && c.index === nodes.length - 1)) continue
               const hx = c.kind === 'in' ? n.inX : n.outX
               const hy = c.kind === 'in' ? n.inY : n.outY
-              if (Math.hypot(hx - p.x, hy - p.y) <= R && Math.hypot(hx - n.x, hy - n.y) > 0.5) {
+              const d = Math.hypot(hx - p.x, hy - p.y)
+              if (d <= grabDist && Math.hypot(hx - n.x, hy - n.y) > 0.5) {
                 grab = c
-                break
+                grabDist = d
               }
             }
           }
-          if (!grab) {
-            let best = R
-            for (let i = 0; i < nodes.length; i++) {
-              const d = Math.hypot(nodes[i].x - p.x, nodes[i].y - p.y)
-              if (d <= best) {
-                best = d
-                grab = { kind: 'anchor', index: i }
-              }
+          for (let i = 0; i < nodes.length; i++) {
+            const d = Math.hypot(nodes[i].x - p.x, nodes[i].y - p.y)
+            // 同じ近さならハンドルを優先（アンカーの真上に重なったハンドルも引き出せるように）
+            if (d < grabDist || (d <= grabDist && !grab)) {
+              grabDist = d
+              grab = { kind: 'anchor', index: i }
             }
           }
           if (grab) {
             st.setLivePath({ ...lp, selected: grab.kind === 'anchor' ? grab.index : lp.selected })
-            pathDrag.current = { pointerId: e.pointerId, kind: grab.kind, index: grab.index, start: p, nodes, alt: e.altKey, key: `path:${Date.now()}` }
+            // アンカーポイントの切り替え：アンカーからはハンドルを引き出す（押すだけなら角にする）。ハンドルは片側だけ動かす
+            const convert = ptool === 'convert'
+            const kind = convert && grab.kind === 'anchor' ? 'pull' : grab.kind
+            pathDrag.current = {
+              pointerId: e.pointerId,
+              kind,
+              index: grab.index,
+              start: p,
+              startClient: { x: e.clientX, y: e.clientY },
+              moved: false,
+              nodes,
+              alt: e.altKey || convert,
+              key: `path:${Date.now()}`
+            }
             capture(e)
             // 指でつまんだアンカー・ハンドルは指に隠れるので、拡大鏡で見せる
             if (e.pointerType === 'touch') loupeSoon(e.pointerId, e.clientX, e.clientY)
@@ -950,7 +1004,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
           // 線の上をダブルクリック（ダブルタップ）：アンカーを足す
           // pointerdown の detail は回数を持たないので、前回押した時刻と位置で判定する
           const prevTap = lastTap.current
-          const isDouble = e.timeStamp - prevTap.time < 400 && Math.hypot(e.clientX - prevTap.x, e.clientY - prevTap.y) < 12
+          const isDouble = ptool === 'direct' && e.timeStamp - prevTap.time < 400 && Math.hypot(e.clientX - prevTap.x, e.clientY - prevTap.y) < 12
           lastTap.current = { time: isDouble ? 0 : e.timeStamp, x: e.clientX, y: e.clientY }
           const near = nearestOnPath(nodes, p.x, p.y)
           if (near && near.dist <= R * 1.5) {
@@ -1046,6 +1100,17 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       const dy = p.y - pd.start.y
       const nodes = pd.nodes.map((n) => ({ ...n }))
       const n = nodes[pd.index]
+      if (pd.kind === 'pull') {
+        // 押しただけ（小さなぶれ）では引き出さない。離したときに角にする
+        if (!pd.moved && Math.hypot(e.clientX - pd.startClient.x, e.clientY - pd.startClient.y) < 4) return
+        pd.moved = true
+        // 出ていく側のハンドルを指の所へ、入ってくる側は反対向きに同じ長さ（なめらかなアンカーになる）
+        Object.assign(n, { outX: p.x, outY: p.y, inX: 2 * n.x - p.x, inY: 2 * n.y - p.y })
+        updatePathNodes(nodes, pd.key)
+        if (e.pointerType === 'touch') loupeSoon(e.pointerId, e.clientX, e.clientY)
+        return
+      }
+      pd.moved = true
       if (pd.kind === 'anchor') {
         // アンカーを動かすと、両側のハンドルも一緒に動く
         Object.assign(n, { x: n.x + dx, y: n.y + dy, inX: n.inX + dx, inY: n.inY + dy, outX: n.outX + dx, outY: n.outY + dy })
@@ -1154,9 +1219,16 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     const pdEnd = pathDrag.current
     if (pdEnd?.pointerId === e.pointerId) {
       pathDrag.current = null
-      // パス編集で形を変えたら、線が通る所を表示する（ドラッグと同じ、元に戻す1回分）
       const lp = useEditor.getState().livePath
-      if (lp) revealLine(lp.strokeId, lp.part, pdEnd.key)
+      if (pdEnd.kind === 'pull' && !pdEnd.moved) {
+        // アンカーポイントの切り替えで押しただけ：両側のハンドルをアンカーに戻して角にする
+        const nodes = pdEnd.nodes.map((n, i) => (i === pdEnd.index ? { ...n, inX: n.x, inY: n.y, outX: n.x, outY: n.y } : n))
+        updatePathNodes(nodes, undefined, pdEnd.index)
+        haptic()
+        return
+      }
+      // パス編集で形を変えたら、線が通る所を表示する（ドラッグと同じ、元に戻す1回分）
+      if (lp && pdEnd.moved) revealLine(lp.strokeId, lp.part, pdEnd.key)
       return
     }
     const ld = liveDrag.current
@@ -1465,6 +1537,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
           </button>
         </div>
       )}
+      {image && livePathing && viewMode === 'edit' && <PathPalette />}
       {image && (
         <div className="stage-tools">
           <button className="icon-btn" title="画面に合わせる" onClick={() => setView({ zoom: 1, x: 0, y: 0 })}>
