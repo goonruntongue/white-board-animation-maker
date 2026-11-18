@@ -1,6 +1,7 @@
 // 小さな ⚙ ボタン：ツアー・使い方ガイド・サンプル画像・「起動時にツアーを表示」をまとめる。
 // PC はボタンの下に小さなメニュー、スマホは画面下のシートで開く。
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { importSampleImage } from '../commands'
 import { setBarLayout, useBarLayout } from '../lib/barLayout'
 import { isDesktop } from '../lib/platform'
@@ -16,13 +17,15 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
   const [open, setOpen] = useState(false)
   // 「このアプリについて」（Web 版だけ。デスクトップ版には出さない）
   const [about, setAbout] = useState(false)
-  const aboutDialog = about && <AboutDialog onClose={() => setAbout(false)} />
+  // 説明の画面は、ページのいちばん外側に出す（歯車のあるバーの中に置くと、バーの重なり順のせいで、スマホでは下のドックの後ろに隠れる）
+  const outside = (el: React.JSX.Element | false): React.ReactNode => el && createPortal(el, document.body)
+  const aboutDialog = outside(about && <AboutDialog onClose={() => setAbout(false)} />)
   // AI 連携（MCP）：デスクトップ版はこのパソコンの中、Web 版は Cloudflare の中継経由
   const [mcp, setMcp] = useState(false)
-  const mcpDialog = mcp && <McpDialog onClose={() => setMcp(false)} />
+  const mcpDialog = outside(mcp && <McpDialog onClose={() => setMcp(false)} />)
   // AI エージェントに渡す指示文（スキルとして登録させてから作らせる）
   const [agent, setAgent] = useState(false)
-  const agentDialog = agent && <AgentPromptDialog onClose={() => setAgent(false)} />
+  const agentDialog = outside(agent && <AgentPromptDialog onClose={() => setAgent(false)} />)
   const { showOnStartup } = useTourPrefs()
   const barLayout = useBarLayout()
   const wrap = useRef<HTMLDivElement>(null)
