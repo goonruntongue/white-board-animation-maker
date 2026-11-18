@@ -195,13 +195,27 @@ function ToolSize({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' })
   )
 }
 
-/** 「同一グループ」：オンの間、描いた線を1つのグループにまとめる（オンにするたびに、新しいグループから始める） */
+/**
+ * 「同一グループ」：オンの間、描いた線を1つのグループにまとめる（オンにするたびに、新しいグループから始める）。
+ * ブラシのときは、線を選んでいてもいなくても出す。線を選んでいるときにオンにすると、選択を外す（選んでいるとブラシは描き直し・追加になるため）
+ */
 function SameGroupKey({ phone }: { phone: boolean }): React.JSX.Element {
   const on = useEditor((s) => s.sameGroup)
   const onClick = (): void => {
     const st = useEditor.getState()
+    const deselect = !on && !!st.livePart
+    if (deselect) {
+      if (st.rerecordId) st.setRerecord(null)
+      st.setLivePart(null)
+    }
     st.setSameGroup(!on)
-    st.notify(on ? '同一グループをオフにしました。1本ごとに新しいグループになります' : '同一グループをオンにしました。これから描く線を1つのグループにまとめます')
+    st.notify(
+      on
+        ? '同一グループをオフにしました。1本ごとに新しいグループになります'
+        : deselect
+          ? '線の選択を外し、同一グループをオンにしました。これから描く線を1つのグループにまとめます'
+          : '同一グループをオンにしました。これから描く線を1つのグループにまとめます'
+    )
   }
   const title = 'オンの間に描いた線を、1つのグループにまとめます（すでに描いた線は変わりません）。オフにすると、1本ごとに別のグループになります'
   return phone ? (
@@ -423,6 +437,8 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
   const live = useLive()
   const liveHasClip = useEditor((s) => !!s.project.strokes.find((stroke) => stroke.id === s.livePart?.strokeId)?.clip)
   const mode = useEditor((s) => s.liveMode)
+  // 描き直し中（内部では描くツール）も、ブラシで描いている扱い
+  const brushLike = useEditor((s) => s.tool === 'draw' || s.liveMode === 'brush')
   const unit = useEditor((s) => s.liveUnit)
   const hasAnchor = useEditor((s) => s.livePath?.selected != null)
   const clear = (): void => useEditor.getState().setLivePart(null)
@@ -483,6 +499,8 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
           {sized && <SizePresets phone kind={kind} />}
         </div>
         <div className="pc-row">
+          {/* 同一グループは、横にスクロールしなくても見えるよう、先頭に置く */}
+          {brushLike && <SameGroupKey phone />}
           <span className="pc-label">{label}</span>
           <button className="pc-key" aria-label={`前の${what}を選ぶ`} onClick={() => stepLivePart(-1)}>
             <Icon name="up" size={18} />
@@ -540,6 +558,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
   return (
     <div className="tb-group live-bar" title={`選んだ${what}の編集。絵は、この${what}を描き終えた瞬間を表示しています`}>
       <ModeSwitch phone={false} />
+      {brushLike && <SameGroupKey phone={false} />}
       {mode === 'move' && <AutoSelectCheck phone={false} />}
       {unitSwitch}
       <span className="tb-label">{label}</span>
