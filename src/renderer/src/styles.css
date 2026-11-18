@@ -4525,3 +4525,41 @@ button {
   width: 44px;
   height: 44px;
 }
+
+/* スマホ：絵の右下の「範囲」ボタン（自動にも手描きにも効く範囲を、形で囲んで決める） */
+.range-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 42px;
+  padding: 0 14px 0 11px;
+  border: 0;
+  border-radius: 8px;
+  background: linear-gradient(180deg, var(--key-top), var(--key-bot));
+  box-shadow: var(--key-shadow);
+  color: var(--text-1);
+  font: 700 12px/1 inherit;
+  text-shadow: var(--engrave);
+  cursor: pointer;
+}
+.range-btn.on {
+  background: linear-gradient(180deg, var(--key-pressed-top), var(--key-pressed-bot));
+  box-shadow: var(--key-shadow-pressed);
+  color: var(--accent-text);
+}
+.range-more {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  border: 3px solid transparent;
+  border-right-color: currentColor;
+  border-bottom-color: currentColor;
+  opacity: 0.7;
+}
+/* 範囲のオプションバーの「完了」 */
+.pc-key.primary {
+  background: linear-gradient(180deg, var(--accent-top), var(--accent-bot));
+  color: #fff;
+  text-shadow: none;
+}

@@ -1,7 +1,8 @@
 // スマホ用の操作部品。
 //   上部バー     … メニュー・作品名・元に戻す／やり直す（よく使うものだけ）
 //   オプションバー … いま選んでいる道具の設定（ペン先／範囲の合成モード／選んだ軌跡の操作）
-//   ドック       … 親指が届く画面下に、作業の順番どおり「自動｜直す｜範囲」と「描き順」「設定」「書き出し」
+//   ドック       … 親指が届く画面下に、作業の順番どおり「自動｜手描き」と「描き順」「設定」「書き出し」
+//                  （範囲は自動にも手描きにも効く共通の指定なので、ドックではなく絵の右下のボタンから）
 //                  （「選ぶ」「消す」は「直す」＝ライブ編集にまとめた）
 import { useState } from 'react'
 import {
@@ -31,13 +32,9 @@ const fromLog = (t: number): number => Math.round(PEN_MIN * Math.pow(PEN_MAX / P
 import { ActionSheet, type SheetAction } from './ActionSheet'
 import { HelpMenu } from '../HelpMenu'
 
-type Menu = 'app' | 'export' | 'shape' | null
+import { finishRange } from './RangeButton'
 
-const SHAPES: { id: 'rect' | 'ellipse' | 'lasso'; icon: IconName; label: string; note: string }[] = [
-  { id: 'rect', icon: 'selRect', label: '長方形', note: 'ドラッグで四角く囲む' },
-  { id: 'ellipse', icon: 'selEllipse', label: '楕円形', note: 'ドラッグで丸く囲む' },
-  { id: 'lasso', icon: 'lasso', label: '投げ縄', note: 'なぞって囲む／タップで頂点を打つ' }
-]
+type Menu = 'app' | 'export' | null
 
 // ---------------------------------------------------------------------------
 // 上部バー
@@ -163,6 +160,10 @@ function SelectionOptions(): React.JSX.Element {
   const setMode = useEditor.getState().setSelectionMode
   return (
     <>
+      <button className="pc-key primary" aria-label="範囲を作り終えて、前の道具に戻る" onClick={finishRange}>
+        <Icon name="check" size={18} />
+        <small>完了</small>
+      </button>
       <div className="pc-seg" role="radiogroup" aria-label="合成モード">
         {MODES.map((m) => (
           <button key={m.id} role="radio" aria-checked={mode === m.id} className={`pc-key text ${mode === m.id ? 'on' : ''}`} onClick={() => setMode(m.id)}>
@@ -232,14 +233,11 @@ function StrokeOptions(): React.JSX.Element {
 // ---------------------------------------------------------------------------
 export function PhoneDock(): React.JSX.Element {
   const tool = useEditor((s) => s.tool)
-  const lastSel = useEditor((s) => s.lastSelTool)
   const sheet = useEditor((s) => s.mobileSheet)
   const count = useEditor((s) => s.project.strokes.length)
   const hasImage = useEditor((s) => !!s.project.image)
   const { setTool, setMobileSheet } = useEditor.getState()
   const [menu, setMenu] = useState<Menu>(null)
-  const isSel = tool === 'rect' || tool === 'ellipse' || tool === 'lasso'
-  const shape = SHAPES.find((s) => s.id === (isSel ? tool : lastSel))!
 
   const pick = (t: Tool): void => {
     haptic()
@@ -291,7 +289,7 @@ export function PhoneDock(): React.JSX.Element {
 
   return (
     <nav className="phone-dock" aria-label="道具とメニュー">
-      {/* やる順番に並べる：自動で作る → 直す（描く・選ぶ・消す・足す・パス編集をまとめた） → 範囲 */}
+      {/* やる順番に並べる：自動で作る → 直す（描く・選ぶ・消す・足す・パス編集をまとめた）。範囲は絵の右下のボタンから */}
       {key({ id: 'auto', icon: 'sparkle', label: '自動', on: false, disabled: !hasImage, onClick: () => { haptic(); openAutoTrace() } })}
       {key({
         id: 'live',
@@ -300,16 +298,6 @@ export function PhoneDock(): React.JSX.Element {
         on: tool === 'live' || tool === 'draw' || tool === 'select' || tool === 'erase',
         disabled: !hasImage,
         onClick: openFix
-      })}
-      {key({
-        id: 'sel',
-        icon: shape.icon,
-        label: '範囲',
-        on: isSel,
-        more: true,
-        disabled: !hasImage,
-        // 範囲ツールを使っているときにもう一度押すと、形を選べる
-        onClick: () => (isSel ? setMenu('shape') : pick(lastSel))
       })}
       <span className="dock-sep" aria-hidden />
       {key({
@@ -330,13 +318,6 @@ export function PhoneDock(): React.JSX.Element {
       {key({ id: 'export', icon: 'share', label: '書き出し', on: false, disabled: !hasImage, onClick: () => setMenu('export') })}
 
       {menu === 'export' && <ActionSheet title="書き出し・保存" actions={exportActions} onClose={() => setMenu(null)} />}
-      {menu === 'shape' && (
-        <ActionSheet
-          title="範囲の形"
-          actions={SHAPES.map((s) => ({ icon: s.icon, label: s.label, note: s.note, active: tool === s.id, onSelect: () => pick(s.id) }))}
-          onClose={() => setMenu(null)}
-        />
-      )}
     </nav>
   )
 }
