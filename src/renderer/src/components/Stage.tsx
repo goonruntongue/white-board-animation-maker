@@ -888,9 +888,14 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       if (st.viewMode !== 'edit') st.setViewMode('edit')
       if (st.liveMode === 'erase') {
         // 消しゴム：選んでいる線の軌跡を消す（線を選んでいなければ、消し始めの所にある線の軌跡）
-        if (!st.livePart) {
+        // 線が決まらなければ消さない（前に選んでいたグループ全体に効いてしまわないように）
+        if (!st.livePart || !st.project.strokes.some((x) => x.id === st.livePart!.strokeId)) {
           const hit = hitPart(project.strokes, p.x, p.y, Math.max(st.project.settings.eraserWidth / 2, (e.pointerType === 'touch' ? 14 : 5) / scale))
-          if (hit) st.setLivePart(hit)
+          if (!hit) {
+            st.notify('消す線を選んでください（線の上から消し始めると、その線を選びます）', 'error')
+            return
+          }
+          st.setLivePart(hit)
         }
         erasing.current = { pointerId: e.pointerId, points: [p] }
         capture(e)
@@ -956,7 +961,12 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
             return
           }
         }
-        // 別の線を選ぶ（パス編集はいつも1本の線ごと）
+        // 線を選んでいるときは、ほかの線へ選び替えない（選んでいる線のパスだけを直す）。
+        // 線の外を押したら、アンカーの選択だけ外す。何も選んでいないときだけ、押した所の線を選ぶ
+        if (st.livePart && st.project.strokes.some((x) => x.id === st.livePart!.strokeId)) {
+          if (lp && lp.strokeId === st.livePart.strokeId && lp.part === st.livePart.part && lp.selected != null) st.setLivePath({ ...lp, selected: null })
+          return
+        }
         const hit = hitPart(project.strokes, p.x, p.y, (e.pointerType === 'touch' ? 14 : 5) / scale)
         st.setLivePart(hit)
         if (!hit) st.setLivePath(null)
@@ -1250,8 +1260,15 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const finishErase = (raw: Pt[]): void => {
     const st = useEditor.getState()
     const w = st.project.settings.eraserWidth
-    const target =
-      st.project.strokes.find((s) => s.id === st.selectedId) ?? hitStroke(st.project.strokes, raw[0].x, raw[0].y, w / 2)
+    // 手描きの消しゴムは、選んでいる線のグループだけ（線が決まっていなければ何もしない）
+    const live = st.tool === 'live'
+    const target = live
+      ? st.project.strokes.find((s) => s.id === st.livePart?.strokeId)
+      : (st.project.strokes.find((s) => s.id === st.selectedId) ?? hitStroke(st.project.strokes, raw[0].x, raw[0].y, w / 2))
+    if (live && !target) {
+      st.notify('消す線を選んでください', 'error')
+      return
+    }
     if (!target) {
       st.notify('消しゴムをかけるグループを選んでください（「手描き」・描き順・タイムラインから）', 'error')
       return
