@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { importHandDialog, importImageDialog, replaceImageDialog, selectHandPreset } from '../commands'
-import { builtinHand } from '../engine/handAsset'
 import { clearEraserMarks, countEraserMarks, untagClipLines } from '../engine/selection'
 import { countParts } from '../engine/project'
 import { partTimings, setPartTimings, type PartTiming } from '../engine/strokeParts'
@@ -13,8 +12,6 @@ import { PEN_MAX, PEN_MIN } from './PenSizePicker'
 import { SheetBar } from './SheetBar'
 
 type Tab = 'stroke' | 'project' | 'assets'
-
-const builtinSvgThumb = builtinHand('#1f6feb').dataUrl
 
 export function Inspector(): React.JSX.Element {
   const selectedId = useEditor((s) => s.selectedId)
@@ -406,16 +403,6 @@ function AssetInspector(): React.JSX.Element {
               <span className="hand-label">{p.label}</span>
             </button>
           ))}
-          <button
-            className={`hand-card ${hand.builtin ? 'on' : ''}`}
-            title="シンプルなイラストの手（ペンの色を変えられます）"
-            onClick={() => selectHandPreset('builtin-svg')}
-          >
-            <span className="hand-thumb">
-              <img src={builtinSvgThumb} alt="" draggable={false} />
-            </span>
-            <span className="hand-label">イラスト</span>
-          </button>
           {isCustom && (
             <button className="hand-card on" title={hand.name}>
               <span className="hand-thumb">
