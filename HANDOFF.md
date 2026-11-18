@@ -71,7 +71,7 @@
 
    - 手描きのブラシで「同一グループ」をオン・オフして、まとまり方を見る。
 
-4. 本番に公開する。手順は README の「紹介サイトとアプリを一緒に公開する」と同じ。
+4. 本番に公開する。**GitHub Actions による自動公開が動いていれば、この手順は要らない**（下の「5. 追記」を参照）。動いていないときだけ、README の「紹介サイトとアプリを一緒に公開する」と同じ手順で公開する。
 
    ```powershell
    npm run build:web
@@ -107,4 +107,12 @@
 
 - このリポジトリ専用のクラウドの環境「white-board-animation-maker」を作った。
 - その環境には、Cloudflare の API トークン（api.cloudflare.com 用）が保存されている。通信先には `whiteboard-animation-maker.pages.dev` を足してある。
-- 今後もクラウドから公開したい場合は、GitHub Actions で公開する仕組みに変えるのが確実。`main` に push すると自動で Cloudflare に公開される形にできる。その場合は、トークンとアカウント ID を GitHub のリポジトリの Secrets に登録する必要がある。
+
+## 5. 追記：GitHub Actions で自動で公開するようにした
+
+- `.github/workflows/deploy-site.yml` を追加した。`main` に push すると、GitHub Actions がブラウザ版をビルドし、紹介サイトと一緒に Cloudflare Pages に公開する。
+  - Markdown だけを変えたときは動かない。
+  - 手動で公開したいときは、Actions の画面で「Deploy site to Cloudflare Pages」の Run workflow を押す。
+- 公開には、GitHub のリポジトリの Secrets に `CLOUDFLARE_API_TOKEN`（Cloudflare の API トークン）を登録しておく必要がある。
+- `CLAUDE.md` と `README.md` も、この仕組みに合わせて書き直した。
+- これで、クラウドのセッションからも公開できる。ローカルの PC からの公開も、これまでどおり使える。

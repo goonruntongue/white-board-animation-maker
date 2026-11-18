@@ -94,6 +94,8 @@ npm run build:web
 
 ### 紹介サイトとアプリを一緒に公開する
 
+`main` に push すると、GitHub Actions（`.github/workflows/deploy-site.yml`）が下と同じ手順で自動的に公開します（Cloudflare の API トークンをリポジトリの Secrets の `CLOUDFLARE_API_TOKEN` に登録しておく必要があります）。手元から公開するときの手順は次のとおりです。
+
 Cloudflare Pages のルートには `site/` の紹介サイト、`/app/` には `dist/web/` のブラウザ版を配置します。`site/` だけを公開するとアプリは準備中のページに戻るため、両方をまとめてからデプロイしてください。PowerShell での例：
 
 ```powershell

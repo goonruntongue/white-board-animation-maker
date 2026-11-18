@@ -1,0 +1,55 @@
+# 紹介サイトとブラウザ版を Cloudflare Pages に公開する。
+#   ・main に push すると動く（説明の Markdown だけを変えたときは動かない）。手動（Actions の画面の Run workflow）でも動かせる
+#   ・ルートに site/ の紹介サイト、/app/ に dist/web/ のブラウザ版を置いて、まとめて公開する（README の手順と同じ）
+#   ・Cloudflare の API トークンは、リポジトリの Secrets の CLOUDFLARE_API_TOKEN に登録しておく
+name: Deploy site to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 続けて push したときは、公開を順番に行う（途中のものは取り消さない）
+concurrency:
+  group: deploy-site
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          # ブラウザ版のビルドに Electron 本体は要らないので、ダウンロードを省く
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npm run build:web
+      - name: 公開するフォルダをまとめる
+        run: |
+          mkdir -p publish/app
+          cp -r site/. publish/
+          cp -r dist/web/. publish/app/
+      - name: Cloudflare Pages に公開する
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 777e7cb61aa2611ac23b9f5a8e4deeab
+          wranglerVersion: '4'
+          command: pages deploy publish --project-name whiteboard-animation-maker --branch main --commit-hash ${{ github.sha }}
+      - name: 公開したページが開けるか確かめる
+        run: |
+          sleep 15
+          for url in https://whiteboard-animation-maker.pages.dev/ https://whiteboard-animation-maker.pages.dev/app/; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$url")
+            echo "$url → $code"
+            test "$code" = 200
+          done
