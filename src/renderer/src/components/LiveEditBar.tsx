@@ -201,6 +201,9 @@ function ToolSize({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' })
  */
 function SameGroupKey({ phone }: { phone: boolean }): React.JSX.Element {
   const on = useEditor((s) => s.sameGroup)
+  // オンの間、いま描き足しているグループの番号（まだ描いていなければ 0 ＝ 次の線から新しいグループ）
+  const chainNo = useEditor((s) => (s.sameGroup && s.drawChain ? s.project.strokes.findIndex((x) => x.id === s.drawChain?.id) + 1 : 0))
+  const note = !on ? 'オフ' : chainNo > 0 ? `#${chainNo} に追加中` : '次は新しいグループ'
   const onClick = (): void => {
     const st = useEditor.getState()
     const deselect = !on && !!st.livePart
@@ -217,14 +220,16 @@ function SameGroupKey({ phone }: { phone: boolean }): React.JSX.Element {
           : '同一グループをオンにしました。これから描く線を1つのグループにまとめます'
     )
   }
-  const title = 'オンの間に描いた線を、1つのグループにまとめます（すでに描いた線は変わりません）。オフにすると、1本ごとに別のグループになります'
+  const title = 'オンの間に描いた線を、1つのグループにまとめます（すでに描いた線は変わりません）。次のグループに移るときは、いったんオフにしてからオンにします。オフにすると、1本ごとに別のグループになります'
   return phone ? (
-    <button className={`pc-key text ${on ? 'on' : ''}`} aria-pressed={on} onClick={onClick} title={title}>
+    <button className={`pc-key text same-group ${on ? 'on' : ''}`} aria-pressed={on} onClick={onClick} title={title}>
       同一グループ
+      <small>{note}</small>
     </button>
   ) : (
-    <button className={`tool-btn live-redo ${on ? 'on' : ''}`} aria-pressed={on} onClick={onClick} title={title}>
+    <button className={`tool-btn live-redo same-group ${on ? 'on' : ''}`} aria-pressed={on} onClick={onClick} title={title}>
       <span>同一グループ</span>
+      {on && <small className="same-group-note">{chainNo > 0 ? `#${chainNo} に追加中` : '次は新しいグループ'}</small>}
     </button>
   )
 }
@@ -455,7 +460,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
       mode === 'path'
         ? '編集したい線を押して選びます'
         : mode === 'brush'
-        ? 'なぞると新しいグループになります（「同一グループ」がオンなら1つにまとめます。線を選んでいれば、その線を描き直します。▼ で「線を追加」にも切り替え）'
+        ? 'なぞって描きます。「同一グループ」がオンの間は1つのグループに、オフなら1本ごとに別のグループになります。線を選んでいれば、その線を描き直します（▼ で「線を追加」）'
         : mode === 'erase'
           ? 'なぞった所にあるグループを消します'
           : `絵の上を押して${what}を選びます。ドラッグで動かし、太さ・大きさも変えられます`
@@ -476,10 +481,11 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
     ) : (
       <div className="tb-group live-bar">
         <ModeSwitch phone={false} />
+        {/* 同一グループは、バーが長くてもスクロールの先に隠れないよう、操作の切り替えのすぐ右に置く */}
+        {brushing && <SameGroupKey phone={false} />}
         {mode === 'move' && <AutoSelectCheck phone={false} />}
         {unitSwitch}
         {size ?? <span className="live-hint">{hint}</span>}
-        {brushing && <SameGroupKey phone={false} />}
       </div>
     )
   }
@@ -499,7 +505,10 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
           {sized && <SizePresets phone kind={kind} />}
         </div>
         <div className="pc-row">
-          {/* 同一グループは、横にスクロールしなくても見えるよう、先頭に置く */}
+          {/* 選択を外す（×）と同一グループは、横にスクロールしなくても見えるよう、先頭に置く */}
+          <button className="pc-key" aria-label="選択を外す" onClick={clear}>
+            <Icon name="x" size={18} />
+          </button>
           {brushLike && <SameGroupKey phone />}
           <span className="pc-label">{label}</span>
           <button className="pc-key" aria-label={`前の${what}を選ぶ`} onClick={() => stepLivePart(-1)}>
@@ -548,9 +557,6 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
             <Icon name="sparkle" size={18} /><small>自動で再作成</small>
           </button>
           <StrokeKeys strokeId={live.strokeId} />
-          <button className="pc-key" aria-label="選択を外す" onClick={clear}>
-            <Icon name="x" size={18} />
-          </button>
         </div>
       </div>
     )

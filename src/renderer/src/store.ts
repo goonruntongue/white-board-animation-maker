@@ -18,6 +18,16 @@ interface Snapshot {
 
 const HISTORY_LIMIT = 100
 /** ページが変わったら、前のページ用の選択・再生位置などは持ち越さない */
+// 「同一グループ」のオン・オフ（最初はオン）。端末ごとの好みなので localStorage に覚えておく
+const SAME_GROUP_KEY = 'wbam.sameGroup'
+function readSameGroup(): boolean {
+  try {
+    return localStorage.getItem(SAME_GROUP_KEY) !== 'off'
+  } catch {
+    return true
+  }
+}
+
 const PAGE_RESET = { selectedId: null, livePart: null, livePath: null, selection: null, time: 0, playing: false, rerecordId: null, rerecordPart: null, insertBefore: null, viewMode: 'edit' as const }
 let lastMerge: { key?: string; at: number } = { at: 0 }
 
@@ -40,7 +50,8 @@ interface EditorState {
   /** ライブ編集で選んでいる線（軌跡の中の、ペンを下ろしてから上げるまでの区間） */
   livePart: { strokeId: string; part: number } | null
   /**
-   * 手描きのブラシ「同一グループ」：オンの間、何も選ばずに描いた線を同じグループに入れる。オフなら1本ごとに新しいグループ
+   * 手描きのブラシ「同一グループ」：オンの間、何も選ばずに描いた線を同じグループに入れる。オフなら1本ごとに新しいグループ。
+   * 最初はオン。端末ごとの好みなので localStorage に覚えておく
    */
   sameGroup: boolean
   /**
@@ -142,7 +153,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   livePart: null,
   liveMode: 'brush',
   livePath: null,
-  sameGroup: false,
+  sameGroup: readSameGroup(),
   drawChain: null,
   timelineHidden: false,
   liveUnit: 'part', // 直すは、いつも1本の線ごと（グループをまとめて扱うのは、タイムライン・描き順・設定）
@@ -393,7 +404,14 @@ export const useEditor = create<EditorState>((set, get) => ({
   setLiveMode: (liveMode) => set((s) => ({ liveMode, livePath: null, drawChain: liveMode === s.liveMode ? s.drawChain : null })),
   setLivePath: (livePath) => set({ livePath }),
   setDrawChain: (drawChain) => set({ drawChain }),
-  setSameGroup: (sameGroup) => set({ sameGroup, drawChain: null }),
+  setSameGroup: (sameGroup) => {
+    try {
+      localStorage.setItem(SAME_GROUP_KEY, sameGroup ? 'on' : 'off')
+    } catch {
+      // 保存できなくても、切り替え自体は行う
+    }
+    set({ sameGroup, drawChain: null })
+  },
   setTimelineHidden: (timelineHidden) => set({ timelineHidden }),
   setLiveUnit: (liveUnit) => set((s) => ({ liveUnit, livePart: s.livePart ? { ...s.livePart, part: liveUnit === 'stroke' ? 0 : s.livePart.part } : null })),
   setLivePart: (livePart) => set(livePart ? { livePart, selectedId: livePart.strokeId, drawChain: null } : { livePart }),
