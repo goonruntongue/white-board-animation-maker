@@ -54,3 +54,11 @@ footer .wrap { align-items: center; gap: 12px; flex-wrap: wrap; }
 .about-url { font-size: 11px !important; color: #8f9b90 !important; overflow-wrap: anywhere; }
 .about-copy { display: flex; align-items: center; gap: 8px; margin-top: 6px !important; font-size: 12px !important; }
 @media (max-width: 760px) { footer .wrap { justify-content: center; text-align: center; } }
+
+/* Font Awesome のアイコン（端末の絵文字に左右されない） */
+.ticker .fa-asterisk { margin: 0 17px; font-size: 9px; vertical-align: 1px; }
+.actions .button .fa-solid { font-size: 12px; }
+.visual-bottom .fa-arrow-right { font-size: 8px; margin: 0 3px; }
+.glyph .fa-solid, .glyph .fa-regular { font-size: 26px; }
+.start-options a.button .fa-brands { font-size: 13px; }
+.about-close .fa-xmark { font-size: 15px; }
