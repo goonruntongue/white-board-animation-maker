@@ -1,6 +1,7 @@
 // ブラシの「いまの動き」と「いまの太さ」。絵の上（Stage）とオプションバー（LiveEditBar）で同じ決め方を使う。
 //  ・動き：一から描いているグループ（drawChain）を選んでいるあいだは自動で「追加」。それ以外は ▼ で選んだもの（描き直す／追加）
 //  ・太さ：線を選んでいれば、その線の太さ（ブラシの大きさの欄で変えたら、その値）。選んでいなければ、ブラシの大きさ
+import { useSyncExternalStore } from 'react'
 import { strokeParts } from '../engine/strokeParts'
 import { useEditor } from '../store'
 import { getBrushTarget, useBrushTarget, type BrushTarget } from './brushTarget'
@@ -25,10 +26,37 @@ export function effectiveBrushTarget(st: St): BrushTarget {
   return drawingFresh(st) ? 'add' : getBrushTarget()
 }
 
+// Shift を押しているか（PC：押しながらなぞると、その1回だけ「追加」。ボタンの表示もそのあいだ「追加」にする）
+let shiftHeld = false
+const shiftListeners = new Set<() => void>()
+function setShift(v: boolean): void {
+  if (v === shiftHeld) return
+  shiftHeld = v
+  shiftListeners.forEach((f) => f())
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', (e) => setShift(e.shiftKey), true)
+  window.addEventListener('keyup', (e) => setShift(e.shiftKey), true)
+  window.addEventListener('pointermove', (e) => setShift(e.shiftKey), true)
+  window.addEventListener('blur', () => setShift(false))
+}
+function useShiftHeld(): boolean {
+  return useSyncExternalStore(
+    (f) => {
+      shiftListeners.add(f)
+      return () => void shiftListeners.delete(f)
+    },
+    () => shiftHeld
+  )
+}
+
+/** いまの動き（表示用）。線を選んでいて Shift を押しているあいだは「追加」 */
 export function useEffectiveBrushTarget(): BrushTarget {
   const target = useBrushTarget()
   const fresh = useEditor(drawingFresh)
-  return fresh ? 'add' : target
+  const lineSelected = useEditor((s) => !!selectedLine(s))
+  const shift = useShiftHeld()
+  return fresh || (shift && lineSelected) ? 'add' : target
 }
 
 /** ブラシで描く太さ */

@@ -2096,7 +2096,8 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   .tool-btn span {
     display: none;
   }
-  .live-bar .live-redo span {
+  .live-bar .live-redo span,
+  .live-bar .brush-seg span {
     display: inline;
   }
   .tool-btn {
