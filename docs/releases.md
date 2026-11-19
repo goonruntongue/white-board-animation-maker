@@ -6,7 +6,8 @@
 
 | ファイル名 | 対象 |
 |---|---|
-| `WhiteboardAnimationMaker-Setup.exe` | Windows 10 / 11（64bit） |
+| `WhiteboardAnimationMaker-Setup.exe` | Windows 10 / 11（64bit）インストーラー |
+| `WhiteboardAnimationMaker-Portable.exe` | Windows 10 / 11（64bit）インストール不要版 |
 | `WhiteboardAnimationMaker-mac-arm64.dmg` | Mac（Apple シリコン：M1 以降） |
 | `WhiteboardAnimationMaker-mac-x64.dmg` | Mac（Intel） |
 | `WhiteboardAnimationMaker-linux-x86_64.AppImage` | Linux（x86_64） |

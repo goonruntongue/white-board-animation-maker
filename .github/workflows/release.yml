@@ -48,6 +48,9 @@ jobs:
       - name: Windows 版を作る
         if: runner.os == 'Windows'
         run: npm run dist:win -- --publish never
+      - name: Windows インストール不要版を作る
+        if: runner.os == 'Windows'
+        run: npx electron-builder --win portable --publish never --config.portable.artifactName=WhiteboardAnimationMaker-Portable.exe
       - name: Mac 版を作る（署名なし・アドホック署名）
         if: runner.os == 'macOS'
         env:
