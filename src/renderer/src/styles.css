@@ -4862,3 +4862,16 @@ button {
 .ob-scroll > * {
   flex: none;
 }
+
+/* ブラシ：描き直す／追加の切り替え（PC） */
+.brush-seg {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--well);
+  box-shadow: var(--well-shadow);
+}
+.brush-seg .tool-btn {
+  padding: 0 10px;
+}

@@ -14,18 +14,20 @@ export const SELECTION_TOOLS: Tool[] = ['rect', 'ellipse', 'lasso']
 interface Snapshot {
   project: Project
   selection: ClipRegion | null
+  /** その時点で選んでいた線（元に戻す・やり直すで、選択もその時点に戻す） */
+  livePart?: { strokeId: string; part: number } | null
 }
 
 const HISTORY_LIMIT = 100
 /** ページが変わったら、前のページ用の選択・再生位置などは持ち越さない */
-// 「同一グループ」のオン・オフ（最初はオン）。端末ごとの好みなので localStorage に覚えておく
-const SAME_GROUP_KEY = 'wbam.sameGroup'
-function readSameGroup(): boolean {
-  try {
-    return localStorage.getItem(SAME_GROUP_KEY) !== 'off'
-  } catch {
-    return true
-  }
+
+/** 元に戻す・やり直すで、選んでいた線をその時点に戻す（その線がもうなければ、選択を外す） */
+function restoreLivePart(snap: Snapshot): Partial<EditorState> {
+  if (snap.livePart === undefined) return {}
+  const lp = snap.livePart
+  const stroke = lp ? snap.project.strokes.find((x) => x.id === lp.strokeId) : undefined
+  if (!lp || !stroke) return { livePart: null, livePath: null, drawChain: null }
+  return { livePart: lp, selectedId: lp.strokeId, livePath: null, drawChain: null, lineBrushWidth: null }
 }
 
 const PAGE_RESET = { selectedId: null, livePart: null, livePath: null, selection: null, time: 0, playing: false, rerecordId: null, rerecordPart: null, insertBefore: null, viewMode: 'edit' as const }
@@ -50,15 +52,16 @@ interface EditorState {
   /** ライブ編集で選んでいる線（軌跡の中の、ペンを下ろしてから上げるまでの区間） */
   livePart: { strokeId: string; part: number } | null
   /**
-   * 手描きのブラシ「同一グループ」：オンの間、何も選ばずに描いた線を同じグループに入れる。オフなら1本ごとに新しいグループ。
-   * 最初はオン。端末ごとの好みなので localStorage に覚えておく
-   */
-  sameGroup: boolean
-  /**
-   * 「同一グループ」で描いている最中のグループ。次に描く線はここに入る。
-   * 同一グループを切り替える・グループを選ぶ・操作を切り替える・プロジェクトを開くと、なくなる（次の線は新しいグループ）
+   * ブラシで一から描いている最中のグループ（何も選ばずに描き始めたグループ）。
+   * このグループを選んでいるあいだは、ブラシは自動で「追加」になり、なぞるたびに線が足されていく。
+   * 自分で線を選ぶ・「新しいグループ」を押す・操作を切り替える・プロジェクトを開くと、なくなる
    */
   drawChain: { id: string } | null
+  /**
+   * ブラシで線を選んでいるときの太さ（描き直す・追加の太さ）。null なら選んでいる線の太さ。
+   * 選ぶ線が変わると null に戻る（その線の太さから始まる）
+   */
+  lineBrushWidth: number | null
   /** スマホ：下のタイムラインを隠しているか（手描きのブラシに入ると隠し、ほかの操作に移ると出す。ボタンでいつでも切り替え） */
   timelineHidden: boolean
   /**
@@ -126,7 +129,9 @@ interface EditorState {
   setLiveMode: (m: 'move' | 'brush' | 'erase' | 'path') => void
   setLivePath: (p: EditorState['livePath']) => void
   setDrawChain: (c: EditorState['drawChain']) => void
-  setSameGroup: (on: boolean) => void
+  setLineBrushWidth: (w: number | null) => void
+  /** 「新しいグループ」：選択を外し、次に描く線から新しいグループにする（選んでいたグループのすぐ次にできる） */
+  startNewGroup: () => void
   setTimelineHidden: (v: boolean) => void
   setLiveUnit: (u: 'stroke' | 'part') => void
   setTime: (t: number) => void
@@ -153,8 +158,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   livePart: null,
   liveMode: 'brush',
   livePath: null,
-  sameGroup: readSameGroup(),
   drawChain: null,
+  lineBrushWidth: null,
   timelineHidden: false,
   liveUnit: 'part', // 直すは、いつも1本の線ごと（グループをまとめて扱うのは、タイムライン・描き順・設定）
   time: 0,
@@ -172,7 +177,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     const prev = get().project
     const next = fn(prev)
     if (next === prev) return
-    const snap: Snapshot = { project: prev, selection: get().selection }
+    const snap: Snapshot = { project: prev, selection: get().selection, livePart: get().livePart }
     const now = Date.now()
     const merge = mergeKey !== undefined && mergeKey === lastMerge.key && now - lastMerge.at < 800
     lastMerge = { key: mergeKey, at: now }
@@ -346,7 +351,8 @@ export const useEditor = create<EditorState>((set, get) => ({
       project: snap.project,
       selection: snap.selection,
       past: past.slice(0, -1),
-      future: [{ project, selection }, ...future],
+      future: [{ project, selection, livePart: get().livePart }, ...future],
+      ...restoreLivePart(snap),
       dirty: snap.project !== project || get().dirty,
       ...(snap.project.pageIndex !== project.pageIndex ? { selectedId: null, time: 0, playing: false } : {})
     })
@@ -359,7 +365,8 @@ export const useEditor = create<EditorState>((set, get) => ({
     set({
       project: snap.project,
       selection: snap.selection,
-      past: [...past, { project, selection }],
+      past: [...past, { project, selection, livePart: get().livePart }],
+      ...restoreLivePart(snap),
       future: future.slice(1),
       dirty: snap.project !== project || get().dirty,
       ...(snap.project.pageIndex !== project.pageIndex ? { selectedId: null, time: 0, playing: false } : {})
@@ -399,22 +406,36 @@ export const useEditor = create<EditorState>((set, get) => ({
       selectedId,
       drawChain: selectedId ? null : s.drawChain,
       livePart: !selectedId ? null : s.livePart?.strokeId === selectedId ? s.livePart : { strokeId: selectedId, part: 0 },
+      lineBrushWidth: s.livePart?.strokeId === selectedId ? s.lineBrushWidth : null,
       livePath: s.livePart?.strokeId === selectedId ? s.livePath : null
     })),
   setLiveMode: (liveMode) => set((s) => ({ liveMode, livePath: null, drawChain: liveMode === s.liveMode ? s.drawChain : null })),
   setLivePath: (livePath) => set({ livePath }),
   setDrawChain: (drawChain) => set({ drawChain }),
-  setSameGroup: (sameGroup) => {
-    try {
-      localStorage.setItem(SAME_GROUP_KEY, sameGroup ? 'on' : 'off')
-    } catch {
-      // 保存できなくても、切り替え自体は行う
-    }
-    set({ sameGroup, drawChain: null })
+  setLineBrushWidth: (lineBrushWidth) => set({ lineBrushWidth }),
+  startNewGroup: () => {
+    const s = get()
+    // 選んでいたグループのすぐ次（次のグループの前）にできるよう、その位置を覚えておく
+    const i = s.project.strokes.findIndex((x) => x.id === s.selectedId)
+    const next = i >= 0 ? s.project.strokes[i + 1] : undefined
+    set({
+      selectedId: null,
+      livePart: null,
+      livePath: null,
+      drawChain: null,
+      lineBrushWidth: null,
+      insertBefore: i >= 0 && next ? { id: next.id } : null
+    })
   },
   setTimelineHidden: (timelineHidden) => set({ timelineHidden }),
   setLiveUnit: (liveUnit) => set((s) => ({ liveUnit, livePart: s.livePart ? { ...s.livePart, part: liveUnit === 'stroke' ? 0 : s.livePart.part } : null })),
-  setLivePart: (livePart) => set(livePart ? { livePart, selectedId: livePart.strokeId, drawChain: null } : { livePart }),
+  setLivePart: (livePart) =>
+    set((s) => {
+      const same = !!livePart && s.livePart?.strokeId === livePart.strokeId && s.livePart.part === livePart.part
+      return livePart
+        ? { livePart, selectedId: livePart.strokeId, drawChain: null, lineBrushWidth: same ? s.lineBrushWidth : null }
+        : { livePart, lineBrushWidth: null }
+    }),
   setTime: (time) => set({ time }),
   setPlaying: (playing) => set(playing ? { playing, viewMode: 'preview' } : { playing }),
   setViewMode: (viewMode) => set({ viewMode }),

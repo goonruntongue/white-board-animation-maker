@@ -115,9 +115,11 @@ export function splitStrokeAt(stroke: Stroke, partIndex: number, secondId: strin
 }
 
 /** 1本の線だけを手描きで置き換え、他の線と元の再生時間を保つ。 */
-export function replaceStrokePart(stroke: Stroke, partIndex: number, recording: StrokePoint[]): Stroke | null {
+export function replaceStrokePart(stroke: Stroke, partIndex: number, recording: StrokePoint[], width?: number): Stroke | null {
   const part = strokeParts(stroke)[partIndex]
   if (!part || !recording.length) return null
+  // 描き直す太さ（省略時は元の線の太さ）
+  const w = Math.max(1, Math.round(width ?? part.width))
   const prep = prepareStroke(stroke)
   const duration = Math.max(50, stroke.duration)
   const timed = stroke.points.map((p, i) => ({ ...p, t: prep.param[i] * duration }))
@@ -128,14 +130,55 @@ export function replaceStrokePart(stroke: Stroke, partIndex: number, recording: 
   const replacement = recording.map((p, i) => {
     const ratio = span > 0 ? (p.t - t0) / span : recording.length > 1 ? i / (recording.length - 1) : 0
     const point: StrokePoint = { x: p.x, y: p.y, t: start + (end - start) * ratio }
-    if (i === 0 && part.start > 0) { point.b = 1; point.w = part.width }
+    if (i === 0 && part.start > 0) { point.b = 1; point.w = w }
     return point
   })
-  return {
+  const result: Stroke = {
     ...stroke,
     points: [...timed.slice(0, part.start), ...replacement, ...timed.slice(part.end + 1)],
     useRecordedTiming: true,
-    clip: addRevealMark(stroke.clip, recording, part.width, partIndex)
+    clip: addRevealMark(stroke.clip, recording, w, partIndex)
+  }
+  // 最初の線の太さはグループの基本の太さなので、ほかの線の見た目を変えずに付け替える
+  return partIndex === 0 && w !== Math.round(stroke.revealWidth) ? setPartWidth(result, 0, w) : result
+}
+
+/**
+ * 線を、partIndex 番目の線のすぐ後ろに入れる（ブラシの「追加」）。入れた線は partIndex + 1 番目になる。
+ * 時刻は、前の線を描き終えてから少し間をあけ（ペンを上げて移動する時間）、なぞった速さで描く。後ろの線はその分だけ遅れる。
+ * 線ごとの表示範囲（消しゴムの跡など）の番号も1つずらす。
+ */
+export function insertStrokePartAfter(stroke: Stroke, partIndex: number, recording: StrokePoint[], width: number): Stroke | null {
+  const parts = strokeParts(stroke)
+  const part = parts[partIndex]
+  if (!part || recording.length === 0) return null
+  const LIFT = 350
+  const w = Math.max(1, Math.round(width))
+  const timed = pinWidths(timedPoints(stroke), stroke.revealWidth)
+  const startT = timed[part.end].t + LIFT
+  const t0 = recording[0].t
+  const span = Math.max(150, recording[recording.length - 1].t - t0)
+  const inserted: StrokePoint[] = recording.map((p, i) => ({
+    x: Math.round(p.x * 10) / 10,
+    y: Math.round(p.y * 10) / 10,
+    t: Math.round(startT + Math.max(0, p.t - t0)),
+    ...(i === 0 ? { b: 1 as const, ...(w !== Math.round(stroke.revealWidth) ? { w } : {}) } : {})
+  }))
+  if (inserted.length === 1) inserted.push({ ...inserted[0], x: inserted[0].x + 0.1, t: inserted[0].t + 50, b: undefined, w: undefined })
+  const shift = LIFT + span
+  const after = timed.slice(part.end + 1).map((p) => ({ ...p, t: Math.round(p.t + shift) }))
+  const points = [...timed.slice(0, part.end + 1).map((p) => ({ ...p, t: Math.round(p.t) })), ...inserted, ...after].map((p) => {
+    const { b, w: pw, ...rest } = p
+    return { ...rest, ...(b ? { b } : {}), ...(pw !== undefined ? { w: pw } : {}) } as StrokePoint
+  })
+  const at = partIndex + 1
+  const marks = recording.map((p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 }))
+  return {
+    ...stroke,
+    points,
+    duration: Math.max(50, Math.round(stroke.duration + shift)),
+    useRecordedTiming: true,
+    clip: addRevealMark(remapClipLines(stroke.clip, (l) => (l >= at ? l + 1 : l)), marks, w, at)
   }
 }
 

@@ -40,3 +40,40 @@ export function useBrushTarget(): BrushTarget {
     () => target
   )
 }
+
+// ---------------------------------------------------------------------------
+// 「描き直したら次の線へ進む」（▼ のメニューで切り替え。既定はオン）
+// ---------------------------------------------------------------------------
+const ADVANCE_KEY = 'wbam.redoAdvance'
+const advanceListeners = new Set<() => void>()
+let advance = ((): boolean => {
+  try {
+    return localStorage.getItem(ADVANCE_KEY) !== 'off'
+  } catch {
+    return true
+  }
+})()
+
+export function getRedoAdvance(): boolean {
+  return advance
+}
+
+export function setRedoAdvance(v: boolean): void {
+  advance = v
+  try {
+    localStorage.setItem(ADVANCE_KEY, v ? 'on' : 'off')
+  } catch {
+    // 保存できなくても、切り替え自体は行う
+  }
+  advanceListeners.forEach((l) => l())
+}
+
+export function useRedoAdvance(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      advanceListeners.add(cb)
+      return () => advanceListeners.delete(cb)
+    },
+    () => advance
+  )
+}

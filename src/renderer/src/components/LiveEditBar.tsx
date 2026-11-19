@@ -9,7 +9,8 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useShallow } from 'zustand/react/shallow'
 import { setAutoSelect, useAutoSelect } from '../lib/autoSelect'
-import { setBrushTarget, useBrushTarget, type BrushTarget } from '../lib/brushTarget'
+import { setBrushTarget, setRedoAdvance, useRedoAdvance, type BrushTarget } from '../lib/brushTarget'
+import { selectedLine, useBrushWidth, useEffectiveBrushTarget } from '../lib/brushMode'
 import { usePathTool, type PathTool } from '../lib/pathTool'
 import { ActionSheet } from './phone/ActionSheet'
 import {
@@ -131,13 +132,25 @@ export function stepLivePart(dir: -1 | 1): void {
   st.setLivePart({ strokeId: strokes[si].id, part })
 }
 
+/**
+ * ブラシ・消しゴムの大きさ（[いまの値, 変える関数, 名前]）。
+ * ブラシで線を選んでいるときは、その線を描き直す・その線の後ろに足すときの太さ（はじめはその線の太さ）。
+ * 欄に出ている太さ＝カーソルの円の大きさ＝描かれる線の太さ
+ */
+function useSize(kind: 'brush' | 'eraser'): [number, (v: number) => void, string] {
+  const brushW = useBrushWidth()
+  const lineSelected = useEditor((s) => !!selectedLine(s))
+  const eraserW = useEditor((s) => s.project.settings.eraserWidth)
+  const clamp = (v: number): number => Math.max(4, Math.min(MAX, Math.round(v)))
+  if (kind === 'eraser') return [eraserW, (v) => useEditor.getState().updateSettings({ eraserWidth: clamp(v) }), '消しゴムの大きさ']
+  if (lineSelected) return [brushW, (v) => useEditor.getState().setLineBrushWidth(clamp(v)), '選んだ線を描く太さ']
+  return [brushW, (v) => useEditor.getState().updateSettings({ defaultRevealWidth: clamp(v) }), 'ブラシの太さ']
+}
+
 /** ブラシ・消しゴムの大きさ：プリセット（細・中・太・極太・特大）。スマホはドロップダウン、PC はボタン */
 function SizePresets({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' }): React.JSX.Element {
-  const key = kind === 'brush' ? 'defaultRevealWidth' : 'eraserWidth'
-  const w = useEditor((s) => s.project.settings[key])
+  const [w, set, label] = useSize(kind)
   const presets = kind === 'brush' ? PEN_PRESETS : ERASER_PRESETS
-  const set = (v: number): void => useEditor.getState().updateSettings({ [key]: Math.max(4, Math.min(MAX, Math.round(v))) })
-  const label = kind === 'brush' ? 'ブラシの太さ' : '消しゴムの大きさ'
   if (phone) {
     const match = presets.find((p) => p.width === w)
     return (
@@ -164,10 +177,8 @@ function SizePresets({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser'
 
 /** ブラシ・消しゴムの大きさのスライダー（対数目盛り） */
 function SizeSlider({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' }): React.JSX.Element {
-  const key = kind === 'brush' ? 'defaultRevealWidth' : 'eraserWidth'
-  const w = useEditor((s) => s.project.settings[key])
-  const set = (v: number): void => useEditor.getState().updateSettings({ [key]: Math.max(4, Math.min(MAX, Math.round(v))) })
-  const label = kind === 'brush' ? 'ブラシ' : '消しゴム'
+  const [w, set, sizeLabel] = useSize(kind)
+  const label = kind === 'brush' ? (sizeLabel === 'ブラシの太さ' ? 'ブラシ' : '線の太さ') : '消しゴム'
   return (
     <>
       {!phone && <span className="tb-label">{label}</span>}
@@ -178,7 +189,7 @@ function SizeSlider({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' 
         max={1000}
         value={toLog(w)}
         style={{ '--fill': `${toLog(w) / 10}%` } as React.CSSProperties}
-        aria-label={`${label}の大きさ`}
+        aria-label={sizeLabel}
         onChange={(e) => set(fromLog(Number(e.target.value)))}
       />
       <span className={phone ? 'pc-value' : 'live-value'}>{w}</span>
@@ -197,69 +208,64 @@ function ToolSize({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' })
 }
 
 /**
- * 「同一グループ」：オンの間、描いた線を1つのグループにまとめる（オンにするたびに、新しいグループから始める）。
- * ブラシのときは、線を選んでいてもいなくても出す。線を選んでいるときにオンにすると、選択を外す（選んでいるとブラシは描き直し・追加になるため）
+ * 「新しいグループ」：選択を外し、次になぞった線から新しいグループにする。
+ * 新しいグループは、いま選んでいるグループのすぐ次（次のグループの前）にできる。何も選んでいなければ、押せない
  */
-function SameGroupKey({ phone }: { phone: boolean }): React.JSX.Element {
-  const on = useEditor((s) => s.sameGroup)
-  // オンの間、いま描き足しているグループの番号（まだ描いていなければ 0 ＝ 次の線から新しいグループ）
-  const chainNo = useEditor((s) => (s.sameGroup && s.drawChain ? s.project.strokes.findIndex((x) => x.id === s.drawChain?.id) + 1 : 0))
-  const note = !on ? 'オフ' : chainNo > 0 ? `#${chainNo} に追加中` : '次は新しいグループ'
+function NewGroupKey({ phone }: { phone: boolean }): React.JSX.Element {
+  const no = useEditor((s) => s.project.strokes.findIndex((x) => x.id === s.selectedId) + 1)
   const onClick = (): void => {
     const st = useEditor.getState()
-    const deselect = !on && !!st.livePart
-    if (deselect) {
-      if (st.rerecordId) st.setRerecord(null)
-      st.setLivePart(null)
-    }
-    st.setSameGroup(!on)
-    st.notify(
-      on
-        ? '同一グループをオフにしました。1本ごとに新しいグループになります'
-        : deselect
-          ? '線の選択を外し、同一グループをオンにしました。これから描く線を1つのグループにまとめます'
-          : '同一グループをオンにしました。これから描く線を1つのグループにまとめます'
-    )
+    if (st.rerecordId) st.setRerecord(null)
+    st.startNewGroup()
+    st.notify(`次になぞった線から、新しいグループになります（#${no} のすぐ次にできます）`)
   }
-  const title = 'オンの間に描いた線を、1つのグループにまとめます（すでに描いた線は変わりません）。次のグループに移るときは「区切る」を押します。オフにすると、1本ごとに別のグループになります'
+  const title = no > 0 ? `選択を外し、次になぞった線から新しいグループにします（#${no} のすぐ次にできます）` : '何も選んでいないので、なぞるとそのまま新しいグループになります'
   return phone ? (
-    <>
-      <button className={`pc-key text same-group ${on ? 'on' : ''}`} aria-pressed={on} onClick={onClick} title={title}>
-        同一グループ
-        <small>{note}</small>
-      </button>
-      <BreakKey phone chainNo={chainNo} />
-    </>
+    <button className="pc-key text" disabled={no === 0} onClick={onClick} data-tip={title}>
+      <Icon name="plusPen" size={18} />
+      <small>新しいグループ</small>
+    </button>
   ) : (
-    <>
-      <button className={`tool-btn live-redo same-group ${on ? 'on' : ''}`} aria-pressed={on} onClick={onClick} title={title}>
-        <span>同一グループ</span>
-        {on && <small className="same-group-note">{chainNo > 0 ? `#${chainNo} に追加中` : '次は新しいグループ'}</small>}
-      </button>
-      <BreakKey phone={false} chainNo={chainNo} />
-    </>
+    <button className="tool-btn live-redo" disabled={no === 0} onClick={onClick} title={title}>
+      <Icon name="plusPen" />
+      <span>新しいグループ</span>
+    </button>
   )
 }
 
 /**
- * 「区切る」：同一グループがオンのまま、次に描く線から新しいグループにする（オフ→オンの2回押しの代わり）。
- * 同一グループがオンで、グループに描き足している最中（#n に追加中）だけ押せる
+ * 「描き直す／追加」の切り替え（ブラシで線を選んでいるとき）。1回押しで切り替えられるよう、▼ のメニューに入れずに並べる。
+ * PC は Shift を押しながらなぞると、その1回だけ「追加」になる
  */
-function BreakKey({ phone, chainNo }: { phone: boolean; chainNo: number }): React.JSX.Element {
-  const onClick = (): void => {
+function BrushTargetSeg({ phone }: { phone: boolean }): React.JSX.Element | null {
+  const target = useEffectiveBrushTarget()
+  const lineSelected = useEditor((s) => !!selectedLine(s))
+  if (!lineSelected) return null
+  const pick = (v: BrushTarget): void => {
     const st = useEditor.getState()
-    st.setDrawChain(null)
-    st.notify(`#${chainNo} を区切りました。次に描く線から、新しいグループになります`)
+    // 一から描いている途中で「描き直す」を選んだら、自動の「追加」をやめる
+    if (v === 'redo' && st.drawChain) st.setDrawChain(null)
+    setBrushTarget(v)
   }
-  const title = chainNo > 0 ? `#${chainNo} への描き足しをここで終え、次に描く線から新しいグループにします（同一グループはオンのまま）` : '同一グループがオンで、グループに描き足している間に押せます'
-  return phone ? (
-    <button className="pc-key text" disabled={chainNo === 0} onClick={onClick} title={title}>
-      区切る
-    </button>
-  ) : (
-    <button className="tool-btn live-redo" disabled={chainNo === 0} onClick={onClick} title={title}>
-      <span>区切る</span>
-    </button>
+  const items: { id: BrushTarget; label: string; tip: string }[] = [
+    { id: 'redo', label: '描き直す', tip: '描き直す：なぞると、選んでいる線が置き換わります（描き直したら次の線へ進みます）' },
+    { id: 'add', label: '追加', tip: '追加：なぞった線を、選んでいる線のすぐ後ろに足します（PC は Shift を押しながらなぞっても、その1回だけ追加）' }
+  ]
+  return (
+    <div className={phone ? 'pc-seg' : 'brush-seg'} role="radiogroup" aria-label="線を選んでいるときのブラシ">
+      {items.map((it) => (
+        <button
+          key={it.id}
+          role="radio"
+          aria-checked={target === it.id}
+          className={phone ? `pc-key text ${target === it.id ? 'on' : ''}` : `tool-btn mode-btn ${target === it.id ? 'on' : ''}`}
+          data-tip={it.tip}
+          onClick={() => pick(it.id)}
+        >
+          {phone ? it.label : <span>{it.label}</span>}
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -342,8 +348,9 @@ const Caret = (): React.JSX.Element => (
  * 線を選んでいるときは、ボタンの名前が「描き直す」「線を追加」に変わり、押す前に何が起きるか分かる。
  */
 function BrushKey({ phone, on, onPick }: { phone: boolean; on: boolean; onPick: () => void }): React.JSX.Element {
-  const target = useBrushTarget()
+  const target = useEffectiveBrushTarget()
   const selected = useEditor((s) => !!s.livePart)
+  const advance = useRedoAdvance()
   const [menu, setMenu] = useState<DOMRect | null>(null)
   const redo = target === 'redo'
   // ボタンの表示とアイコンは、▼ で選んだ項目（描き直す／追加）にいつも合わせる
@@ -356,7 +363,7 @@ function BrushKey({ phone, on, onPick }: { phone: boolean; on: boolean; onPick: 
     (selected ? '' : '。線を選んでいないときは、新しいグループを描く')
   const options = [
     { id: 'redo' as const, icon: 'penRedo' as const, label: '選んだ線を描き直す', note: 'なぞると、選んでいる線が置き換わります（おすすめ）' },
-    { id: 'add' as const, icon: 'plusPen' as const, label: '線を追加', note: '選んでいるグループの最後に線を足します' }
+    { id: 'add' as const, icon: 'plusPen' as const, label: '線を追加', note: '選んでいる線のすぐ後ろに線を足します（Shift を押しながらなぞっても）' }
   ]
   const open = (e: React.MouseEvent<HTMLButtonElement>): void => setMenu(e.currentTarget.getBoundingClientRect())
   const choose = (v: BrushTarget): void => {
@@ -396,7 +403,16 @@ function BrushKey({ phone, on, onPick }: { phone: boolean; on: boolean; onPick: 
           <ActionSheet
             title="線を選んでいるときのブラシ"
             onClose={() => setMenu(null)}
-            actions={options.map((o) => ({ icon: o.icon, label: o.label, note: o.note, active: target === o.id, onSelect: () => choose(o.id) }))}
+            actions={[
+              ...options.map((o) => ({ icon: o.icon, label: o.label, note: o.note, active: target === o.id, onSelect: () => choose(o.id) })),
+              {
+                icon: advance ? ('check' as const) : ('x' as const),
+                label: advance ? '描き直したら次の線へ進む：オン' : '描き直したら次の線へ進む：オフ',
+                note: '押すと切り替わります（オフにすると、同じ線にとどまって何度も描き直せます）',
+                active: advance,
+                onSelect: () => setRedoAdvance(!advance)
+              }
+            ]}
           />
         )}
       </span>
@@ -420,6 +436,11 @@ function BrushKey({ phone, on, onPick }: { phone: boolean; on: boolean; onPick: 
                 <small>{o.note}</small>
               </button>
             ))}
+            <label className="toggle help-toggle" title="オフにすると、描き直したあとも同じ線にとどまり、何度でも描き直せます">
+              <span>描き直したら次の線へ進む</span>
+              <input type="checkbox" checked={advance} onChange={(e) => setRedoAdvance(e.target.checked)} />
+              <span className="switch" />
+            </label>
           </div>,
           document.body
         )}
@@ -490,7 +511,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
       mode === 'path'
         ? '編集したい線を押して選びます'
         : mode === 'brush'
-        ? 'なぞって描きます。「同一グループ」がオンの間は1つのグループに、オフなら1本ごとに別のグループになります。線を選んでいれば、その線を描き直します（▼ で「線を追加」）'
+        ? 'なぞると新しいグループを描きます。続けてなぞると、そのグループに線が足されます（次のグループへは「新しいグループ」）'
         : mode === 'erase'
           ? 'なぞった所にあるグループを消します'
           : `絵の上を押して${what}を選びます。ドラッグで動かし、太さ・大きさも変えられます`
@@ -505,14 +526,11 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
         </ScrollRow>
         <ScrollRow className="pc-row">
           {brushing || mode === 'erase' ? <SizeSlider phone kind={brushing ? 'brush' : 'eraser'} /> : <span className="pc-hint">{hint}</span>}
-          {brushing && <SameGroupKey phone />}
         </ScrollRow>
       </div>
     ) : (
       <div className="tb-group live-bar">
         <ModeSwitch phone={false} />
-        {/* 同一グループは、バーが長くてもスクロールの先に隠れないよう、操作の切り替えのすぐ右に置く */}
-        {brushing && <SameGroupKey phone={false} />}
         {mode === 'move' && <AutoSelectCheck phone={false} />}
         {unitSwitch}
         {size ?? <span className="live-hint">{hint}</span>}
@@ -535,11 +553,12 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
           {sized && <SizePresets phone kind={kind} />}
         </ScrollRow>
         <ScrollRow className="pc-row">
-          {/* 選択を外す（×）と同一グループは、横にスクロールしなくても見えるよう、先頭に置く */}
+          {/* 選択を外す（×）・描き直す／追加・新しいグループは、横にスクロールしなくても見えるよう、先頭に置く */}
           <button className="pc-key" aria-label="選択を外す" onClick={clear}>
             <Icon name="x" size={18} />
           </button>
-          {brushLike && <SameGroupKey phone />}
+          {brushLike && <BrushTargetSeg phone />}
+          {brushLike && <NewGroupKey phone />}
           <span className="pc-label">{label}</span>
           <button className="pc-key" aria-label={`前の${what}を選ぶ`} onClick={() => stepLivePart(-1)}>
             <Icon name="up" size={18} />
@@ -594,7 +613,8 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
   return (
     <div className="tb-group live-bar" title={`選んだ${what}の編集。絵は、この${what}を描き終えた瞬間を表示しています`}>
       <ModeSwitch phone={false} />
-      {brushLike && <SameGroupKey phone={false} />}
+      {brushLike && <BrushTargetSeg phone={false} />}
+      {brushLike && <NewGroupKey phone={false} />}
       {mode === 'move' && <AutoSelectCheck phone={false} />}
       {unitSwitch}
       <span className="tb-label">{label}</span>

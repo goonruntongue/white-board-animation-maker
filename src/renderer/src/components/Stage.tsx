@@ -2,9 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { captureImage, importImageDialog, importSampleImage, openAutoTrace, togglePlay } from '../commands'
 import { appendToStroke, simplifyPoints, strokeFromRecording } from '../engine/project'
 import { getAutoSelect } from '../lib/autoSelect'
-import { getBrushTarget } from '../lib/brushTarget'
+import { getRedoAdvance } from '../lib/brushTarget'
+import { brushWidthFor, effectiveBrushTarget, selectedLine } from '../lib/brushMode'
 import { getPathTool } from '../lib/pathTool'
-import { hitPart, replaceStrokePart, strokeParts, transformPart, transformStroke } from '../engine/strokeParts'
+import { hitPart, insertStrokePartAfter, replaceStrokePart, strokeParts, transformPart, transformStroke } from '../engine/strokeParts'
 import { fitPath, fitTolerance, insertAnchor, nearestOnPath, partPoints, removeAnchor, type PathNode } from '../engine/pathEdit'
 import { revealLine, updatePathNodes } from '../livePath'
 import { addEraserMark, addRevealMark, combine, flattenShapes, isDegenerate, normalizeBox, untagClipLines, type SelectionOp } from '../engine/selection'
@@ -34,8 +35,10 @@ interface Recording {
   liveBrush?: boolean
   /** ブラシの「描き直す」：appendTo のグループの、この番号の線を置き換える */
   redoPart?: number
-  /** 何も選ばずにブラシで続けて書いた線：直前に描いたグループへ入れる（選択はしない） */
-  chain?: boolean
+  /** ブラシの「追加」：appendTo のグループの、この番号の線のすぐ後ろに入れる */
+  insertAfter?: number
+  /** なぞる太さ（ブラシの大きさ。線を選んでいれば、その線の太さ） */
+  width?: number
 }
 
 /** 続けて書いた線を同じグループにまとめる条件：前の線を書き終えてからの時間と、書き始めの近さ（画像の対角線に対する割合） */
@@ -517,11 +520,10 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     const rec = recording.current
     if (rec && rec.points.length) {
       const replacing = rerecordId && rerecordPart !== null ? project.strokes.find((s) => s.id === rerecordId) : undefined
-      const w = replacing ? (strokeParts(replacing)[rerecordPart!]?.width ?? replacing.revealWidth) : useEditor.getState().project.settings.defaultRevealWidth
+      const w = replacing ? (strokeParts(replacing)[rerecordPart!]?.width ?? replacing.revealWidth) : (rec.width ?? useEditor.getState().project.settings.defaultRevealWidth)
       const target = rec.appendTo ? project.strokes.find((s) => s.id === rec.appendTo) : undefined
-      // 描き足しは、描き足し先の軌跡の色で見せる（範囲の制限も、その軌跡のものを使う）
-      // ブラシで足すときは、範囲を広げるので制限なしで見せる
-      if (replacing && assets.image) {
+      // なぞっている最中も、ペン先が通った所から絵が見えていく（再生と同じ見え方）。録り直し・手描きのブラシのどちらも
+      if ((replacing || live) && assets.image) {
         let sc = scratch.current
         if (!sc) sc = scratch.current = document.createElement('canvas')
         if (sc.width !== imgW) sc.width = imgW
@@ -537,8 +539,12 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         s.drawImage(assets.image, 0, 0, imgW, imgH)
         s.globalCompositeOperation = 'source-over'
         ctx.drawImage(sc, 0, 0)
+        // ペン先の通り道も細く重ねて、どこをなぞったかを分かるようにする
+        ctx.strokeStyle = target ? target.color : '#1f6feb'
+        ctx.lineWidth = 1.5 * px
+        polyline(ctx, rec.points)
       } else {
-        drawClippedBand(ctx, rec.points, w, target ? target.color + '55' : 'rgba(31,111,235,0.32)', rec.liveBrush ? null : target ? selectedClipMask : selMask)
+        drawClippedBand(ctx, rec.points, w, target ? target.color + '55' : 'rgba(31,111,235,0.32)', target ? selectedClipMask : selMask)
         ctx.strokeStyle = target ? target.color : '#1f6feb'
         ctx.lineWidth = 2 * px
         polyline(ctx, rec.points)
@@ -587,7 +593,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     const cur = cursor.current
     if (cur && (tool === 'draw' || tool === 'erase' || liveErasing || liveBrushing) && viewMode === 'edit') {
       const erasing = tool === 'erase' || liveErasing
-      const w = erasing ? project.settings.eraserWidth : project.settings.defaultRevealWidth
+      // ブラシのカーソルの円は、実際に描かれる太さ（線を選んでいれば、その線の太さ）
+      const w = erasing ? project.settings.eraserWidth : liveBrushing ? brushWidthFor(useEditor.getState()) : project.settings.defaultRevealWidth
       if (erasing) ctx.setLineDash([4 * px, 3 * px])
       ctx.strokeStyle = 'rgba(0,0,0,0.55)'
       ctx.lineWidth = 1 * px
@@ -1030,21 +1037,17 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         // ブラシ：線を選んでいれば、そのグループに線を足す（ペンもそこを通り、表示範囲も広がる）。
         // 何も選んでいなければ、なぞった線で新しいグループを作る（なぞった速さで再生。範囲を選んでいれば、その範囲に限る）
         if (st.playing) st.setPlaying(false)
-        const targetId = st.livePart?.strokeId
-        const chain = st.drawChain
-        const chainTo =
-          !targetId && st.sameGroup && chain && !st.insertBefore && st.project.strokes.some((x) => x.id === chain.id)
-            ? chain.id
-            : undefined
-        // 線を選んでいて「描き直す」なら、その線を置き換える。「追加」なら、グループの最後に足す
-        const redoPart = targetId && getBrushTarget() === 'redo' ? st.livePart?.part : undefined
-        recording.current = targetId
-          ? redoPart !== undefined
-            ? { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }], appendTo: targetId, redoPart }
-            : { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }], appendTo: targetId, liveBrush: true }
-          : chainTo
-            ? { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }], appendTo: chainTo, chain: true }
-            : { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }] }
+        const line = selectedLine(st)
+        const width = brushWidthFor(st)
+        const base = { pointerId: e.pointerId, start: e.timeStamp, points: [{ ...p, t: 0 }], width }
+        // 線を選んでいれば：「描き直す」はその線を置き換え、「追加」はその線のすぐ後ろに入れる（PC は Shift を押しながらなら、その1回だけ「追加」）。
+        // 何も選んでいなければ：新しいグループを作る（選んでいたグループのすぐ次。続けてなぞると、そのグループに描き足していく）
+        const mode = line ? (e.shiftKey ? 'add' : effectiveBrushTarget(st)) : null
+        recording.current = line
+          ? mode === 'redo'
+            ? { ...base, appendTo: line.strokeId, redoPart: line.part }
+            : { ...base, appendTo: line.strokeId, insertAfter: line.part }
+          : base
         capture(e)
         if (e.pointerType === 'touch') requestAnimationFrame(() => showLoupe(e.clientX, e.clientY))
         drawOverlay()
@@ -1277,41 +1280,41 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       } else if (rec.appendTo) {
         const target = st.project.strokes.find((s) => s.id === rec.appendTo)
         if (target && rec.redoPart !== undefined) {
-          // ブラシで描き直す：選んでいる線を、なぞった線に置き換える（選んだまま。続けてなぞれば、また描き直す）
-          const updated = replaceStrokePart(target, rec.redoPart, simplifyPoints(rec.points))
+          // ブラシで描き直す：選んでいる線を、なぞった線に置き換える（太さは、ブラシの大きさの欄に出ている太さ）
+          const part = rec.redoPart
+          const updated = replaceStrokePart(target, part, simplifyPoints(rec.points), rec.width)
           if (updated) {
             st.updateStroke(target.id, updated)
-            st.setLivePart({ strokeId: target.id, part: rec.redoPart })
-            st.notify(`線 ${rec.redoPart + 1} を描き直しました`)
+            const count = strokeParts(updated).length
+            // 描き直したら次の線へ進む（▼ でオフにできる）。描き損じたら「元に戻す」で、この線に戻ってやり直せる
+            if (getRedoAdvance() && part + 1 < count) {
+              st.setLivePart({ strokeId: target.id, part: part + 1 })
+              st.notify(`線 ${part + 1} を描き直しました → 線 ${part + 2} へ（描き損じたら ↶ で戻ってやり直せます）`)
+            } else {
+              st.setLivePart({ strokeId: target.id, part })
+              st.notify(`線 ${part + 1} を描き直しました`)
+            }
             haptic()
           } else st.notify('線が見つかりませんでした')
-        } else if (target && rec.liveBrush) {
-          // ブラシで足す：ペンの通り道を足し、表示範囲もなぞった所まで広げる
-          const w = st.project.settings.defaultRevealWidth
-          const marks: Pt[] = []
-          for (const q of rec.points) {
-            const last = marks[marks.length - 1]
-            if (!last || Math.hypot(q.x - last.x, q.y - last.y) >= 1.5) marks.push({ x: Math.round(q.x * 10) / 10, y: Math.round(q.y * 10) / 10 })
-          }
-          // 足した線（グループの最後の線）だけに効く表示範囲にする
-          st.updateStroke(target.id, { ...appendToStroke(target, rec.points, w), clip: addRevealMark(target.clip, marks, w, strokeParts(target).length) })
-          haptic()
-        } else if (target && rec.chain) {
-          // 「同一グループ」で描いた線：同じグループに入れ、選ばない（続けて描けば、また同じグループへ）
-          st.updateStroke(target.id, appendToStroke(target, rec.points, st.project.settings.defaultRevealWidth))
-          haptic()
-        } else if (target) {
-          st.updateStroke(target.id, appendToStroke(target, rec.points, st.project.settings.defaultRevealWidth))
-          st.select(target.id)
-          haptic()
+        } else if (target && rec.insertAfter !== undefined) {
+          // ブラシで足す：選んでいる線のすぐ後ろに入れ、足した線を選ぶ（続けてなぞれば、さらにその後ろに足していく）
+          const wasFresh = st.drawChain?.id === target.id
+          const updated = insertStrokePartAfter(target, rec.insertAfter, simplifyPoints(rec.points), rec.width ?? target.revealWidth)
+          if (updated) {
+            st.updateStroke(target.id, updated)
+            st.setLivePart({ strokeId: target.id, part: rec.insertAfter + 1 })
+            if (wasFresh) st.setDrawChain({ id: target.id })
+            haptic()
+          } else st.notify('線が見つかりませんでした')
         }
       } else {
         const created = strokeFromRecording(st.project, rec.points, st.project.strokes.length, st.selection)
         st.addStroke(created)
-        // 手描きのブラシで描いたときは、何も選ばない状態に戻す。「同一グループ」がオンなら、次に描く線もこのグループに入る
+        // 手描きのブラシで一から描いたときは、このグループの線を選んだままにする。
+        // 続けてなぞると自動で「追加」になり、このグループに線が足されていく（「新しいグループ」で次のグループへ）
         if (st.tool === 'live') {
-          st.select(null)
-          st.setDrawChain(st.sameGroup ? { id: created.id } : null)
+          st.setLivePart({ strokeId: created.id, part: 0 })
+          st.setDrawChain({ id: created.id })
         }
         haptic()
       }
@@ -1510,7 +1513,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
               st.setLiveMode('brush')
               st.setLivePart(null)
               setCoachClosed(true)
-              st.notify('ブラシで画像をなぞると描けます。「同一グループ」がオンの間は、描いた線が1つのグループにまとまります（次のグループに移るときは「区切る」）。2本指で拡大・移動できます')
+              st.notify('ブラシで画像をなぞると描けます。続けてなぞると同じグループに線が足されます（次のグループへは「新しいグループ」）。2本指で拡大・移動できます')
             }}
           >
             <Icon name="pen" size={13} /> 自分で描く
