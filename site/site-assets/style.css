@@ -29,14 +29,14 @@
   .actions a { width: 100%; }
 }
 
-/* ダウンロード（Windows / Mac） */
+/* ダウンロード（Windows / Mac は、ボタン2つを右に並べる） */
 .start-options a.button { grid-column: 2; grid-row: 1 / 3; font-size: 11px; padding: 9px 14px; gap: 6px; }
-.start-options .mac .dl { grid-column: 2; grid-row: 1 / 3; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-.start-options .mac .dl a.button { grid-column: auto; grid-row: auto; }
+.start-options .multi .dl { grid-column: 2; grid-row: 1 / 3; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.start-options .multi .dl a.button { grid-column: auto; grid-row: auto; }
 .dl-note { margin: 4px 2px 0; font-size: 10.5px !important; line-height: 1.8 !important; color: #8f9b90 !important; }
 @media (max-width: 760px) {
-  .start-options .mac { grid-template-columns: 1fr; }
-  .start-options .mac .dl { grid-column: 1; grid-row: auto; justify-content: flex-start; margin-top: 10px; }
+  .start-options .multi { grid-template-columns: 1fr; }
+  .start-options .multi .dl { grid-column: 1; grid-row: auto; justify-content: flex-start; margin-top: 10px; }
 }
 
 /* このサイトについて（フッターのボタンと、QR コードのダイアログ） */
