@@ -8,6 +8,7 @@ import { ThemeSwitch } from './ThemeSwitch'
 import { HelpMenu } from './HelpMenu'
 import { LiveEditBar } from './LiveEditBar'
 import { ScrollRow } from './ScrollRow'
+import { useBarLayout } from '../lib/barLayout'
 
 const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
   { id: 'erase', icon: 'eraser', label: 'グループから消す', key: 'E' },
@@ -17,7 +18,36 @@ const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
 ]
 
 
+/** いまの道具のオプション（選択ツールなら合成モード、手描きなら手描きのバー、それ以外はペン先サイズ） */
+function ToolOptions(): React.JSX.Element {
+  const tool = useEditor((s) => s.tool)
+  const hasImage = useEditor((s) => !!s.project.image)
+  return SELECTION_TOOLS.includes(tool) ? (
+    <SelectionModeBar />
+  ) : tool === 'live' || tool === 'draw' ? (
+    <LiveEditBar />
+  ) : (
+    <PenSizePicker disabled={!hasImage} kind={tool === 'erase' ? 'eraser' : 'pen'} />
+  )
+}
+
+/**
+ * PC のオプションバーを2段目に出すとき（歯車のメニューの「オプションバー：2段」。既定）。
+ * ツールバーのすぐ下に、いまの道具のオプションだけを1行で並べる（入りきらなければ横にスクロール）
+ */
+export function OptionsBar(): React.JSX.Element {
+  return (
+    <div className="options-bar" role="toolbar" aria-label="オプションバー">
+      <ScrollRow className="ob-scroll" wheel label="オプション">
+        <ToolOptions />
+      </ScrollRow>
+    </div>
+  )
+}
+
 export function Toolbar(): React.JSX.Element {
+  // 2段のときは、オプションはツールバーの下の段（OptionsBar）に出す
+  const twoRows = useBarLayout() === 'two'
   const tool = useEditor((s) => s.tool)
   const canUndo = useEditor((s) => s.past.length > 0)
   const canRedo = useEditor((s) => s.future.length > 0)
@@ -93,14 +123,8 @@ export function Toolbar(): React.JSX.Element {
         </button>
       </div>
 
-      {/* オプションバー：選択ツールなら合成モード、それ以外はペン先サイズ */}
-      {SELECTION_TOOLS.includes(tool) ? (
-        <SelectionModeBar />
-      ) : tool === 'live' || tool === 'draw' ? (
-        <LiveEditBar />
-      ) : (
-        <PenSizePicker disabled={!hasImage} kind={tool === 'erase' ? 'eraser' : 'pen'} />
-      )}
+      {/* オプションバー（1段のときだけ、ここに並べる） */}
+      {!twoRows && <ToolOptions />}
 
       <div className="doc-title">
         {name}

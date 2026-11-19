@@ -173,6 +173,7 @@ kbd {
 
 /* 筐体パネル（ヘアライン＋梨地） */
 .toolbar,
+.options-bar,
 .panel,
 .timeline,
 .statusbar {
@@ -4827,4 +4828,37 @@ button {
 }
 .help-pop > button small {
   padding-left: 16px;
+}
+
+/* ---------- PC：オプションバーを2段目に（歯車のメニュー「オプションバー：2段」。既定） ---------- */
+.app.pc-two {
+  grid-template-rows: 54px auto 1fr auto 28px;
+}
+.options-bar {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 46px;
+  padding: 0 12px 0 14px;
+  border-bottom: 1px solid var(--line-strong);
+  box-shadow: inset 0 1px 0 var(--hilite);
+}
+.hscroll-ob-scroll {
+  flex: 1 1 auto;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.ob-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 2px;
+}
+.ob-scroll > * {
+  flex: none;
 }

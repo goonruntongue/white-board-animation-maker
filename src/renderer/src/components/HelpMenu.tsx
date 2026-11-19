@@ -130,6 +130,11 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
             <input type="checkbox" checked={showOnStartup} onChange={(e) => setShowTourOnStartup(e.target.checked)} />
             <span className="switch" />
           </label>
+          <label className="toggle help-toggle" title="オンにすると、いまの道具のオプションを、ツールバーの下の段に分けて並べます（画面が狭くても隠れにくい）">
+            <span>オプションバーを2段にする</span>
+            <input type="checkbox" checked={barLayout === 'two'} onChange={(e) => setBarLayout(e.target.checked ? 'two' : 'one')} />
+            <span className="switch" />
+          </label>
           <hr />
           <button role="menuitem" onClick={() => run(() => setAgent(true))}>
             <Icon name="sparkle" /> AI エージェントに作ってもらう

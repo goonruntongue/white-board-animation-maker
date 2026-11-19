@@ -29,7 +29,7 @@ import { StrokeList } from './components/StrokeList'
 import { Timeline } from './components/Timeline'
 import { HintLayer } from './components/HintLayer'
 import { Toast } from './components/Toast'
-import { Toolbar } from './components/Toolbar'
+import { OptionsBar, Toolbar } from './components/Toolbar'
 import { UsageGuide } from './components/UsageGuide'
 import { Tour } from './components/Tour'
 import { getTourPrefs, GUIDE_EVENT, TOUR_EVENT } from './lib/tour'
@@ -305,7 +305,7 @@ export default function App(): React.JSX.Element {
 
   return (
     <div
-      className={`app ${isPhone ? 'phone' : ''} ${hasImage ? 'has-image' : ''} ${rerecording ? 'rerecording' : ''} ${isPhone && timelineHidden ? 'tl-hidden' : ''} ${isPhone && barLayout === 'one' ? 'bar-one' : ''}`}
+      className={`app ${isPhone ? 'phone' : ''} ${hasImage ? 'has-image' : ''} ${rerecording ? 'rerecording' : ''} ${isPhone && timelineHidden ? 'tl-hidden' : ''} ${isPhone && barLayout === 'one' ? 'bar-one' : ''} ${!isPhone && barLayout === 'two' ? 'pc-two' : ''}`}
       data-sheet={mobileSheet ?? undefined}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('Files')) {
@@ -324,7 +324,10 @@ export default function App(): React.JSX.Element {
           <PhoneContextBar />
         </>
       ) : (
-        <Toolbar />
+        <>
+          <Toolbar />
+          {barLayout === 'two' && <OptionsBar />}
+        </>
       )}
       <div className="workspace">
         <StrokeList />
