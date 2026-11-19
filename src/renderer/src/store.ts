@@ -23,14 +23,14 @@ const HISTORY_LIMIT = 100
 
 /** 元に戻す・やり直すで、選んでいた線をその時点に戻す（その線がもうなければ、選択を外す） */
 function restoreLivePart(snap: Snapshot): Partial<EditorState> {
-  if (snap.livePart === undefined) return {}
+  if (snap.livePart === undefined) return { emptyGroupId: null }
   const lp = snap.livePart
   const stroke = lp ? snap.project.strokes.find((x) => x.id === lp.strokeId) : undefined
-  if (!lp || !stroke) return { livePart: null, livePath: null, drawChain: null }
-  return { livePart: lp, selectedId: lp.strokeId, livePath: null, drawChain: null, lineBrushWidth: null }
+  if (!lp || !stroke) return { livePart: null, livePath: null, drawChain: null, emptyGroupId: null }
+  return { livePart: lp, selectedId: lp.strokeId, livePath: null, drawChain: null, emptyGroupId: null, lineBrushWidth: null }
 }
 
-const PAGE_RESET = { selectedId: null, livePart: null, livePath: null, selection: null, time: 0, playing: false, rerecordId: null, rerecordPart: null, insertBefore: null, viewMode: 'edit' as const }
+const PAGE_RESET = { selectedId: null, livePart: null, livePath: null, selection: null, time: 0, playing: false, rerecordId: null, rerecordPart: null, insertBefore: null, emptyGroupId: null, viewMode: 'edit' as const }
 let lastMerge: { key?: string; at: number } = { at: 0 }
 
 interface EditorState {
@@ -57,6 +57,8 @@ interface EditorState {
    * 自分で線を選ぶ・「新しいグループ」を押す・操作を切り替える・プロジェクトを開くと、なくなる
    */
   drawChain: { id: string } | null
+  /** 線を全部消して、線1から描き直しているグループ（なぞるまでは、元の線は消えて見えるだけ。なぞった線が線1になる） */
+  emptyGroupId: string | null
   /**
    * ブラシで線を選んでいるときの太さ（描き直す・追加の太さ）。null なら選んでいる線の太さ。
    * 選ぶ線が変わると null に戻る（その線の太さから始まる）
@@ -132,6 +134,8 @@ interface EditorState {
   setLineBrushWidth: (w: number | null) => void
   /** 「新しいグループ」：選択を外し、次に描く線から新しいグループにする（選んでいたグループのすぐ次にできる） */
   startNewGroup: () => void
+  /** 選んだグループの線を全部消して、線1から描き直す（なぞるまでは元の線を残し、見えなくするだけ） */
+  startEmptyGroup: (id: string | null) => void
   setTimelineHidden: (v: boolean) => void
   setLiveUnit: (u: 'stroke' | 'part') => void
   setTime: (t: number) => void
@@ -159,6 +163,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   liveMode: 'brush',
   livePath: null,
   drawChain: null,
+  emptyGroupId: null,
   lineBrushWidth: null,
   timelineHidden: false,
   liveUnit: 'part', // 直すは、いつも1本の線ごと（グループをまとめて扱うのは、タイムライン・描き順・設定）
@@ -389,7 +394,8 @@ export const useEditor = create<EditorState>((set, get) => ({
       playing: false,
       viewMode: 'edit',
       rerecordId: null,
-      drawChain: null
+      drawChain: null,
+      emptyGroupId: null
     }),
   markSaved: (filePath) => set({ filePath, dirty: false }),
   setTool: (tool) =>
@@ -398,18 +404,19 @@ export const useEditor = create<EditorState>((set, get) => ({
         ? { tool, lastSelTool: tool }
         : tool === 'live'
           ? { tool, playing: false, viewMode: 'edit' } // 手描きは、止めた状態の絵の上で行う
-          : { tool }
+          : { tool, emptyGroupId: null }
     ),
   // グループを選ぶと、その最初の線も選ばれる（同じグループの線を選んでいれば、そのまま）
   select: (selectedId) =>
     set((s) => ({
       selectedId,
       drawChain: selectedId ? null : s.drawChain,
+      emptyGroupId: s.emptyGroupId === selectedId ? s.emptyGroupId : null,
       livePart: !selectedId ? null : s.livePart?.strokeId === selectedId ? s.livePart : { strokeId: selectedId, part: 0 },
       lineBrushWidth: s.livePart?.strokeId === selectedId ? s.lineBrushWidth : null,
       livePath: s.livePart?.strokeId === selectedId ? s.livePath : null
     })),
-  setLiveMode: (liveMode) => set((s) => ({ liveMode, livePath: null, drawChain: liveMode === s.liveMode ? s.drawChain : null })),
+  setLiveMode: (liveMode) => set((s) => ({ liveMode, livePath: null, drawChain: liveMode === s.liveMode ? s.drawChain : null, emptyGroupId: liveMode === 'brush' ? s.emptyGroupId : null })),
   setLivePath: (livePath) => set({ livePath }),
   setDrawChain: (drawChain) => set({ drawChain }),
   setLineBrushWidth: (lineBrushWidth) => set({ lineBrushWidth }),
@@ -423,17 +430,24 @@ export const useEditor = create<EditorState>((set, get) => ({
       livePart: null,
       livePath: null,
       drawChain: null,
+      emptyGroupId: null,
       lineBrushWidth: null,
       insertBefore: i >= 0 && next ? { id: next.id } : null
     })
   },
+  startEmptyGroup: (id) =>
+    set(
+      id
+        ? { emptyGroupId: id, selectedId: id, livePart: null, livePath: null, drawChain: null, lineBrushWidth: null, insertBefore: null, rerecordId: null, rerecordPart: null, tool: 'live', liveMode: 'brush', viewMode: 'edit', playing: false }
+        : { emptyGroupId: null }
+    ),
   setTimelineHidden: (timelineHidden) => set({ timelineHidden }),
   setLiveUnit: (liveUnit) => set((s) => ({ liveUnit, livePart: s.livePart ? { ...s.livePart, part: liveUnit === 'stroke' ? 0 : s.livePart.part } : null })),
   setLivePart: (livePart) =>
     set((s) => {
       const same = !!livePart && s.livePart?.strokeId === livePart.strokeId && s.livePart.part === livePart.part
       return livePart
-        ? { livePart, selectedId: livePart.strokeId, drawChain: null, lineBrushWidth: same ? s.lineBrushWidth : null }
+        ? { livePart, selectedId: livePart.strokeId, drawChain: null, emptyGroupId: null, lineBrushWidth: same ? s.lineBrushWidth : null }
         : { livePart, lineBrushWidth: null }
     }),
   setTime: (time) => set({ time }),

@@ -41,6 +41,7 @@ export function StrokeActions({ strokeId, onClose }: { strokeId: string; onClose
       }
     },
     { icon: 'record', label: '録り直す', note: 'もう一度なぞって置き換える', onSelect: () => (st.select(stroke.id), st.setRerecord(stroke.id)) },
+    { icon: 'eraser', label: '全部消して線1から', note: '線を全部消して、手描きのブラシで線1から描き直す（名前・順番・待機はそのまま）', onSelect: () => (st.startEmptyGroup(stroke.id), st.setMobileSheet(null)) },
     { icon: 'up', label: '前へ移動', note: '描く順番を1つ早く', disabled: index === 0, onSelect: () => st.moveStroke(stroke.id, index - 1) },
     { icon: 'down', label: '後ろへ移動', note: '描く順番を1つ遅く', disabled: index === count - 1, onSelect: () => st.moveStroke(stroke.id, index + 1) },
     { icon: 'layers', label: '複製', note: 'すぐ後ろにコピーを作る', onSelect: () => st.duplicateStroke(stroke.id) },

@@ -234,6 +234,9 @@ function StrokeInspector(): React.JSX.Element | null {
           <button className="btn" onClick={() => setRerecord(stroke.id)}>
             <Icon name="record" /> 録り直す
           </button>
+          <button className="btn" title="線を全部消して、手描きのブラシで線1から描き直します（名前・順番・待機はそのまま）" onClick={() => useEditor.getState().startEmptyGroup(stroke.id)}>
+            <Icon name="eraser" /> 全部消して線1から
+          </button>
           <button className="btn danger" onClick={() => removeStroke(stroke.id)}>
             <Icon name="trash" /> 削除
           </button>

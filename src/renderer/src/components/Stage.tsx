@@ -37,6 +37,8 @@ interface Recording {
   redoPart?: number
   /** ブラシの「追加」：appendTo のグループの、この番号の線のすぐ後ろに入れる */
   insertAfter?: number
+  /** 線を全部消したグループ：なぞった線を、そのグループの線1にする */
+  refill?: string
   /** なぞる太さ（ブラシの大きさ。線を選んでいれば、その線の太さ） */
   width?: number
 }
@@ -137,6 +139,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const selectedId = useEditor((s) => s.selectedId)
   const rerecordId = useEditor((s) => s.rerecordId)
   const rerecordPart = useEditor((s) => s.rerecordPart)
+  const emptyGroupId = useEditor((s) => s.emptyGroupId)
+  const emptyGroupName = useEditor((s) => s.project.strokes.find((x) => x.id === s.emptyGroupId)?.name)
   const selection = useEditor((s) => s.selection)
   const livePart = useEditor((s) => s.livePart)
   const liveMode = useEditor((s) => s.liveMode)
@@ -220,6 +224,11 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const isSelTool = SELECTION_TOOLS.includes(tool)
 
   const timeline = useMemo(() => buildTimeline(project), [project])
+  // 線を全部消して描き直しているグループは、なぞるまで見えなくする（元の線は残っていて、なぞった時点で置き換わる）
+  const shownProject = useMemo(
+    () => (emptyGroupId ? { ...project, strokes: project.strokes.map((x) => (x.id === emptyGroupId ? { ...x, hidden: true } : x)) } : project),
+    [project, emptyGroupId]
+  )
   const selMask = useMemo(() => (selection && image ? rasterizeClip(selection, imgW, imgH) : null), [selection, image, imgW, imgH])
   const selectedStroke = project.strokes.find((s) => s.id === selectedId)
   const selectedClipMask = useMemo(
@@ -305,13 +314,13 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       return
     }
     if (!rendererRef.current || rendererRef.current.canvas !== canvas) {
-      rendererRef.current = new WBRenderer(canvas, project, assets, { scale: renderScale })
+      rendererRef.current = new WBRenderer(canvas, shownProject, assets, { scale: renderScale })
     } else {
       rendererRef.current.setAssets(assets)
       rendererRef.current.setScale(renderScale)
-      rendererRef.current.setProject(project)
+      rendererRef.current.setProject(shownProject)
     }
-  }, [project, assets, image, renderScale])
+  }, [shownProject, assets, image, renderScale])
 
   // 描き直しは1コマに1回まとめる（スライダーやドラッグで続けて変わっても、描くのは最後の状態だけ）。
   // 予約済みの描画は取り消さず、中身だけ最新に差し替える（取り消すと、再生中のように毎コマ変わるときに
@@ -1043,7 +1052,10 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         // 線を選んでいれば：「描き直す」はその線を置き換え、「追加」はその線のすぐ後ろに入れる（PC は Shift を押しながらなら、その1回だけ「追加」）。
         // 何も選んでいなければ：新しいグループを作る（選んでいたグループのすぐ次。続けてなぞると、そのグループに描き足していく）
         const mode = line ? (e.shiftKey ? 'add' : effectiveBrushTarget(st)) : null
-        recording.current = line
+        const refill = st.emptyGroupId && st.project.strokes.some((x) => x.id === st.emptyGroupId) ? st.emptyGroupId : null
+        recording.current = refill
+          ? { ...base, refill }
+          : line
           ? mode === 'redo'
             ? { ...base, appendTo: line.strokeId, redoPart: line.part }
             : { ...base, appendTo: line.strokeId, insertAfter: line.part }
@@ -1277,6 +1289,24 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         st.setRerecord(null)
         st.notify('グループを録り直しました')
         }
+      } else if (rec.refill) {
+        // 線を全部消したグループ：なぞった線を線1にする（名前・待機・順番などはそのまま）。続けてなぞると、線2・線3…と足されていく
+        const target = st.project.strokes.find((s) => s.id === rec.refill)
+        if (target) {
+          const fresh = strokeFromRecording(st.project, rec.points, 0, st.selection)
+          st.updateStroke(target.id, {
+            points: fresh.points,
+            duration: fresh.duration,
+            revealWidth: rec.width ?? fresh.revealWidth,
+            // 消した線の範囲・消しゴムは、もう要らない
+            clip: st.selection ?? undefined
+          })
+          st.startEmptyGroup(null)
+          st.setLivePart({ strokeId: target.id, part: 0 })
+          st.setDrawChain({ id: target.id })
+          st.notify(`${target.name} の線 1 を描きました。続けてなぞると、線 2・線 3… と足されます`)
+          haptic()
+        } else st.startEmptyGroup(null)
       } else if (rec.appendTo) {
         const target = st.project.strokes.find((s) => s.id === rec.appendTo)
         if (target && rec.redoPart !== undefined) {
@@ -1462,6 +1492,17 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
             <small className="stage-banner-sub">2本指でつまむと拡大・移動できます</small>
           </span>
           <button className="btn small" onClick={() => useEditor.getState().setRerecord(null)}>
+            キャンセル
+          </button>
+        </div>
+      )}
+      {image && emptyGroupId && !rerecordId && (
+        <div className="stage-banner">
+          <span>
+            {emptyGroupName} の線を全部消しました。線 1 からなぞってください
+            <small className="stage-banner-sub">なぞるまでは元に戻せます（キャンセルで元の線に戻ります）</small>
+          </span>
+          <button className="btn small" onClick={() => useEditor.getState().startEmptyGroup(null)}>
             キャンセル
           </button>
         </div>

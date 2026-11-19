@@ -237,6 +237,40 @@ function NewGroupKey({ phone }: { phone: boolean }): React.JSX.Element {
  * 「描き直す／追加」の切り替え（ブラシで線を選んでいるとき）。1回押しで切り替えられるよう、▼ のメニューに入れずに並べる。
  * PC は Shift を押しながらなぞると、その1回だけ「追加」になる
  */
+/**
+ * 「全部消して線1から」：選んでいるグループの線を全部消して、線1から描き直す。
+ * なぞるまでは元の線を残して見えなくするだけ（キャンセルや別の線を選べば元どおり。なぞった後も ↶ で戻せる）
+ */
+function EmptyGroupKey({ phone }: { phone: boolean }): React.JSX.Element {
+  const id = useEditor((s) => s.selectedId)
+  const on = useEditor((s) => !!s.emptyGroupId)
+  const name = useEditor((s) => s.project.strokes.find((x) => x.id === s.selectedId)?.name)
+  const onClick = (): void => {
+    const st = useEditor.getState()
+    if (on) return st.startEmptyGroup(null)
+    if (!id) return
+    st.startEmptyGroup(id)
+    st.notify(`${name} の線を全部消しました。線 1 からなぞってください（なぞるまでは、キャンセルで元に戻ります）`)
+  }
+  const title = on
+    ? 'やめて、元の線に戻します'
+    : id
+      ? `${name} の線を全部消して、線 1 から描き直します（グループの名前・順番・待機はそのまま）`
+      : 'グループを選ぶと押せます'
+  const label = on ? '消すのをやめる' : '全部消して線1から'
+  return phone ? (
+    <button className={`pc-key text ${on ? 'on' : ''}`} disabled={!id && !on} onClick={onClick} data-tip={title}>
+      <Icon name="eraser" size={18} />
+      <small>{label}</small>
+    </button>
+  ) : (
+    <button className={`tool-btn live-redo ${on ? 'on' : ''}`} disabled={!id && !on} onClick={onClick} title={title}>
+      <Icon name="eraser" />
+      <span>{label}</span>
+    </button>
+  )
+}
+
 function BrushTargetSeg({ phone }: { phone: boolean }): React.JSX.Element | null {
   const target = useEffectiveBrushTarget()
   const lineSelected = useEditor((s) => !!selectedLine(s))
@@ -559,6 +593,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
           </button>
           {brushLike && <BrushTargetSeg phone />}
           {brushLike && <NewGroupKey phone />}
+          {brushLike && <EmptyGroupKey phone />}
           <span className="pc-label">{label}</span>
           <button className="pc-key" aria-label={`前の${what}を選ぶ`} onClick={() => stepLivePart(-1)}>
             <Icon name="up" size={18} />
@@ -615,6 +650,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
       <ModeSwitch phone={false} />
       {brushLike && <BrushTargetSeg phone={false} />}
       {brushLike && <NewGroupKey phone={false} />}
+      {brushLike && <EmptyGroupKey phone={false} />}
       {mode === 'move' && <AutoSelectCheck phone={false} />}
       {unitSwitch}
       <span className="tb-label">{label}</span>
