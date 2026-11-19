@@ -346,15 +346,16 @@ function BrushKey({ phone, on, onPick }: { phone: boolean; on: boolean; onPick: 
   const selected = useEditor((s) => !!s.livePart)
   const [menu, setMenu] = useState<DOMRect | null>(null)
   const redo = target === 'redo'
-  const label = !selected ? 'ブラシ' : redo ? '描き直す' : '線を追加'
-  const icon = selected && redo ? 'record' : 'plusPen'
-  const hint = !selected
-    ? 'ブラシ：なぞって新しいグループを描く（線を選んでいるときの動きは ▼ で選べます）'
-    : redo
+  // ボタンの表示とアイコンは、▼ で選んだ項目（描き直す／追加）にいつも合わせる
+  const label = redo ? '描き直す' : '追加'
+  const icon = redo ? 'penRedo' : 'plusPen'
+  const hint =
+    (redo
       ? 'ブラシ（描き直す）：なぞると、選んでいる線がその線に置き換わる'
-      : 'ブラシ（線を追加）：なぞった線を、選んでいるグループの最後に足す'
+      : 'ブラシ（追加）：なぞった線を、選んでいるグループの最後に足す') +
+    (selected ? '' : '。線を選んでいないときは、新しいグループを描く')
   const options = [
-    { id: 'redo' as const, icon: 'record' as const, label: '選んだ線を描き直す', note: 'なぞると、選んでいる線が置き換わります（おすすめ）' },
+    { id: 'redo' as const, icon: 'penRedo' as const, label: '選んだ線を描き直す', note: 'なぞると、選んでいる線が置き換わります（おすすめ）' },
     { id: 'add' as const, icon: 'plusPen' as const, label: '線を追加', note: '選んでいるグループの最後に線を足します' }
   ]
   const open = (e: React.MouseEvent<HTMLButtonElement>): void => setMenu(e.currentTarget.getBoundingClientRect())
@@ -384,7 +385,7 @@ function BrushKey({ phone, on, onPick }: { phone: boolean; on: boolean; onPick: 
   if (phone) {
     return (
       <span className="brush-split">
-        <button role="radio" aria-checked={on} className={`pc-key ${on ? 'on' : ''}`} onClick={onPick}>
+        <button role="radio" aria-checked={on} className={`pc-key ${on ? 'on' : ''}`} data-tip={hint} onClick={onPick}>
           <Icon name={icon} size={18} />
           <small>{label}</small>
         </button>
