@@ -81,6 +81,11 @@ interface Block {
 const GRID_W = 560 // 解析用に縮小した幅
 const MERGE: Record<AutoDetail, number> = { fine: 0.008, normal: 0.016, coarse: 0.032 } // 太らせる量（幅に対する比）
 const SPEED: Record<AutoSpeed, number> = { slow: 0.38, normal: 0.65, fast: 1.1 } // 1秒に進む距離（幅に対する比）
+
+/** 自動で線を作るときのペンの速さ（画像の px / 秒） */
+export function autoPenSpeed(imageWidth: number, speed: AutoSpeed = 'normal'): number {
+  return Math.max(1, imageWidth) * (SPEED[speed] ?? SPEED.normal)
+}
 const LIFT_MS = 220 // ペンを上げて次の書き始めへ移る時間
 /** natural：横に太らせる量（文字の高さに対する比）。0.7 なら字間はつながり、単語より広い間はつながりにくい */
 const NATURAL_MERGE: Record<AutoDetail, number> = { fine: 0.35, normal: 0.7, coarse: 1.4 }

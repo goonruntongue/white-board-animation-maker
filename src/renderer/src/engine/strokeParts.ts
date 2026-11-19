@@ -380,6 +380,38 @@ export function partTimings(stroke: Stroke): PartTiming[] {
  * 時刻とミリ秒が 1:1 になるので、決めた秒数どおりに再生される（作品全体の速さの倍率はかかる）。
  */
 export function setPartTimings(stroke: Stroke, timings: PartTiming[]): Stroke {
+  return applyPartTimings(stroke, timings)
+}
+
+/** 線の長さ（ペンが実際に動いた道のり。画像の px） */
+export function partLength(stroke: Stroke, partIndex: number): number {
+  const part = strokeParts(stroke)[partIndex]
+  if (!part) return 0
+  let len = 0
+  for (let j = part.start + 1; j <= part.end; j++) len += Math.hypot(stroke.points[j].x - stroke.points[j - 1].x, stroke.points[j].y - stroke.points[j - 1].y)
+  return len
+}
+
+/** ペンの速さ（px / 秒）で描いたときの、その長さの線を描く時間（ms）。点のように短い線でも 0.1 秒は取る */
+export function drawMsAt(length: number, pxPerSec: number): number {
+  return Math.max(100, Math.round((length / Math.max(1, pxPerSec)) * 1000))
+}
+
+/** 1本の線の描く時間だけを変える（線の中の緩急・ほかの線の時間・線と線の間はそのまま。後ろの線はずれる） */
+export function setPartDraw(stroke: Stroke, partIndex: number, drawMs: number): Stroke {
+  const timings = partTimings(stroke)
+  if (!timings[partIndex]) return stroke
+  timings[partIndex] = { ...timings[partIndex], draw: drawMs }
+  return applyPartTimings(stroke, timings)
+}
+
+/** グループのすべての線を、ペンの速さ（px / 秒）にそろえる（線と線の間はそのまま） */
+export function paceAllParts(stroke: Stroke, pxPerSec: number): Stroke {
+  const timings = partTimings(stroke).map((tm, i) => ({ ...tm, draw: drawMsAt(partLength(stroke, i), pxPerSec) }))
+  return applyPartTimings(stroke, timings)
+}
+
+function applyPartTimings(stroke: Stroke, timings: PartTiming[]): Stroke {
   const prep = prepareStroke(stroke)
   const pts = stroke.points
   const points: StrokePoint[] = pts.map((p) => ({ ...p }))

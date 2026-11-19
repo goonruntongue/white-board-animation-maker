@@ -11,6 +11,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { setAutoSelect, useAutoSelect } from '../lib/autoSelect'
 import { setBrushTarget, setRedoAdvance, useRedoAdvance, type BrushTarget } from '../lib/brushTarget'
 import { selectedLine, useBrushWidth, useEffectiveBrushTarget } from '../lib/brushMode'
+import { setKeepTracedPace, useKeepTracedPace } from '../lib/pace'
 import { usePathTool, type PathTool } from '../lib/pathTool'
 import { ActionSheet } from './phone/ActionSheet'
 import {
@@ -385,6 +386,7 @@ function BrushKey({ phone, on, onPick }: { phone: boolean; on: boolean; onPick: 
   const target = useEffectiveBrushTarget()
   const selected = useEditor((s) => !!s.livePart)
   const advance = useRedoAdvance()
+  const keepPace = useKeepTracedPace()
   const [menu, setMenu] = useState<DOMRect | null>(null)
   const redo = target === 'redo'
   // ボタンの表示とアイコンは、▼ で選んだ項目（描き直す／追加）にいつも合わせる
@@ -445,6 +447,13 @@ function BrushKey({ phone, on, onPick }: { phone: boolean; on: boolean; onPick: 
                 note: '押すと切り替わります（オフにすると、同じ線にとどまって何度も描き直せます）',
                 active: advance,
                 onSelect: () => setRedoAdvance(!advance)
+              },
+              {
+                icon: keepPace ? ('check' as const) : ('x' as const),
+                label: keepPace ? 'なぞった速さのまま残す：オン' : 'なぞった速さのまま残す：オフ',
+                note: 'オフ（最初の状態）なら、なぞった線は自動で作った線と同じ速さで描かれます。オンなら、なぞった時間のまま',
+                active: keepPace,
+                onSelect: () => setKeepTracedPace(!keepPace)
               }
             ]}
           />
@@ -473,6 +482,11 @@ function BrushKey({ phone, on, onPick }: { phone: boolean; on: boolean; onPick: 
             <label className="toggle help-toggle" title="オフにすると、描き直したあとも同じ線にとどまり、何度でも描き直せます">
               <span>描き直したら次の線へ進む</span>
               <input type="checkbox" checked={advance} onChange={(e) => setRedoAdvance(e.target.checked)} />
+              <span className="switch" />
+            </label>
+            <label className="toggle help-toggle" title="オフ（最初の状態）なら、なぞった線は自動で作った線と同じ速さで描かれます。オンなら、丁寧になぞった時間のまま残します">
+              <span>なぞった速さのまま残す</span>
+              <input type="checkbox" checked={keepPace} onChange={(e) => setKeepTracedPace(e.target.checked)} />
               <span className="switch" />
             </label>
           </div>,

@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { importHandDialog, importImageDialog, replaceImageDialog, selectHandPreset } from '../commands'
 import { clearEraserMarks, countEraserMarks, untagClipLines } from '../engine/selection'
 import { countParts } from '../engine/project'
-import { partTimings, setPartTimings, type PartTiming } from '../engine/strokeParts'
+import { paceAllParts, partTimings, setPartTimings, type PartTiming } from '../engine/strokeParts'
+import { autoPace } from '../lib/pace'
 import { getHandPresets } from '../engine/handPresets'
 import { dataUrlBytes, formatBytes } from '../lib/imageTools'
 import { useEditor } from '../store'
@@ -100,6 +101,21 @@ function PartTimingSection({ strokeId }: { strokeId: string }): React.JSX.Elemen
             </span>
           </div>
         ))}
+      </div>
+      <div className="btn-row">
+        <button
+          className="btn"
+          title="線ごとの描く時間を、線の長さに合わせて、自動で線を作ったときと同じペンの速さにそろえます（手で決めた描く時間も上書きします。線と線の間はそのまま。元に戻すで戻せます）"
+          onClick={() => {
+            const st = useEditor.getState()
+            const cur = st.project.strokes.find((x) => x.id === strokeId)
+            if (!cur) return
+            st.updateStroke(strokeId, paceAllParts(cur, autoPace(st.project.image?.width ?? 1920)))
+            st.notify('すべての線を、自動で作った線と同じ速さにそろえました（元に戻すで戻せます）')
+          }}
+        >
+          <Icon name="play" /> すべての線を自動の速さにそろえる
+        </button>
       </div>
     </Section>
   )

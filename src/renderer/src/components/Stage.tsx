@@ -3,9 +3,10 @@ import { captureImage, importImageDialog, importSampleImage, openAutoTrace, togg
 import { appendToStroke, simplifyPoints, strokeFromRecording } from '../engine/project'
 import { getAutoSelect } from '../lib/autoSelect'
 import { getRedoAdvance } from '../lib/brushTarget'
+import { pacedRecording, tracedDrawMs } from '../lib/pace'
 import { brushWidthFor, effectiveBrushTarget, selectedLine } from '../lib/brushMode'
 import { getPathTool } from '../lib/pathTool'
-import { hitPart, insertStrokePartAfter, replaceStrokePart, strokeParts, transformPart, transformStroke } from '../engine/strokeParts'
+import { hitPart, insertStrokePartAfter, replaceStrokePart, setPartDraw, strokeParts, transformPart, transformStroke } from '../engine/strokeParts'
 import { fitPath, fitTolerance, insertAnchor, nearestOnPath, partPoints, removeAnchor, type PathNode } from '../engine/pathEdit'
 import { revealLine, updatePathNodes } from '../livePath'
 import { addEraserMark, addRevealMark, combine, flattenShapes, isDegenerate, normalizeBox, untagClipLines, type SelectionOp } from '../engine/selection'
@@ -131,6 +132,15 @@ function draftShape(d: Draft): ClipShape | null {
   return normalizeBox({ kind: d.kind, mode: 'add' as const, x: d.start.x, y: d.start.y, w: d.cur.x - d.start.x, h: d.cur.y - d.start.y })
 }
 
+/** 指で触る画面か（マウスがない＝なぞる前のカーソルの円が出ない） */
+function touchScreen(): boolean {
+  try {
+    return window.matchMedia('(pointer: coarse)').matches
+  } catch {
+    return false
+  }
+}
+
 export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): React.JSX.Element {
   const project = useEditor((s) => s.project)
   const tool = useEditor((s) => s.tool)
@@ -140,6 +150,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   const rerecordId = useEditor((s) => s.rerecordId)
   const rerecordPart = useEditor((s) => s.rerecordPart)
   const emptyGroupId = useEditor((s) => s.emptyGroupId)
+  const lineBrushWidth = useEditor((s) => s.lineBrushWidth)
   const emptyGroupName = useEditor((s) => s.project.strokes.find((x) => x.id === s.emptyGroupId)?.name)
   const selection = useEditor((s) => s.selection)
   const livePart = useEditor((s) => s.livePart)
@@ -600,7 +611,9 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     }
 
     const cur = cursor.current
-    if (cur && (tool === 'draw' || tool === 'erase' || liveErasing || liveBrushing) && viewMode === 'edit') {
+    // 指で触る画面では、指を離したあとに前の位置の円が残らないよう、なぞっている間だけ出す
+    const fingerUp = touchScreen() && !recording.current && !erasing.current
+    if (cur && !fingerUp && (tool === 'draw' || tool === 'erase' || liveErasing || liveBrushing) && viewMode === 'edit') {
       const erasing = tool === 'erase' || liveErasing
       // ブラシのカーソルの円は、実際に描かれる太さ（線を選んでいれば、その線の太さ）
       const w = erasing ? project.settings.eraserWidth : liveBrushing ? brushWidthFor(useEditor.getState()) : project.settings.defaultRevealWidth
@@ -616,7 +629,29 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       ctx.stroke()
       ctx.setLineDash([])
     }
-  }, [image, assets.image, imgW, imgH, sScale, viewMode, project, selectedId, rerecordId, rerecordPart, tool, selection, selMask, selectedClipMask, liveClipMask, drawClippedBand, live, livePart, liveErasing, liveBrushing, liveWhole, livePathing, livePath])
+
+    // 指で触る画面には、なぞる前のカーソルがない：ブラシで線を選んでいる間は、その線の書き始めに描く太さの円を出しておく
+    // （大きさの欄で変えると、円もすぐ変わる。指を置く場所の目安にもなる）
+    if (liveBrushing && viewMode === 'edit' && !recording.current && touchScreen()) {
+      const st = useEditor.getState()
+      const line = selectedLine(st)
+      const stroke = line ? project.strokes.find((x) => x.id === line.strokeId) : undefined
+      const part = stroke && line ? strokeParts(stroke)[line.part] : undefined
+      const p0 = stroke && part ? stroke.points[part.start] : undefined
+      if (p0) {
+        const w = brushWidthFor(st)
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)'
+        ctx.lineWidth = 1.5 * px
+        ctx.beginPath()
+        ctx.arc(p0.x, p0.y, w / 2, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)'
+        ctx.beginPath()
+        ctx.arc(p0.x, p0.y, w / 2 + 1.5 * px, 0, Math.PI * 2)
+        ctx.stroke()
+      }
+    }
+  }, [image, assets.image, imgW, imgH, sScale, viewMode, project, selectedId, rerecordId, rerecordPart, tool, selection, selMask, selectedClipMask, liveClipMask, drawClippedBand, live, livePart, liveErasing, liveBrushing, liveWhole, livePathing, livePath, lineBrushWidth])
 
   useEffect(() => drawOverlay(), [drawOverlay])
 
@@ -1293,7 +1328,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         // 線を全部消したグループ：なぞった線を線1にする（名前・待機・順番などはそのまま）。続けてなぞると、線2・線3…と足されていく
         const target = st.project.strokes.find((s) => s.id === rec.refill)
         if (target) {
-          const fresh = strokeFromRecording(st.project, rec.points, 0, st.selection)
+          // なぞった時間ではなく、自動で作った線と同じペンの速さで描く（▼「なぞった速さのまま残す」なら、なぞった時間）
+          const fresh = strokeFromRecording(st.project, pacedRecording(rec.points, imgW), 0, st.selection)
           st.updateStroke(target.id, {
             points: fresh.points,
             duration: fresh.duration,
@@ -1312,7 +1348,10 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         if (target && rec.redoPart !== undefined) {
           // ブラシで描き直す：選んでいる線を、なぞった線に置き換える（太さは、ブラシの大きさの欄に出ている太さ）
           const part = rec.redoPart
-          const updated = replaceStrokePart(target, part, simplifyPoints(rec.points), rec.width)
+          // 描く時間は、元の線の時間ではなく、なぞった線の長さから決める（自動で作った線と同じペンの速さ。後ろの線はその分ずれる）
+          const traced = simplifyPoints(rec.points)
+          const replaced = replaceStrokePart(target, part, traced, rec.width)
+          const updated = replaced ? setPartDraw(replaced, part, tracedDrawMs(traced, imgW)) : null
           if (updated) {
             st.updateStroke(target.id, updated)
             const count = strokeParts(updated).length
@@ -1329,7 +1368,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
         } else if (target && rec.insertAfter !== undefined) {
           // ブラシで足す：選んでいる線のすぐ後ろに入れ、足した線を選ぶ（続けてなぞれば、さらにその後ろに足していく）
           const wasFresh = st.drawChain?.id === target.id
-          const updated = insertStrokePartAfter(target, rec.insertAfter, simplifyPoints(rec.points), rec.width ?? target.revealWidth)
+          const updated = insertStrokePartAfter(target, rec.insertAfter, pacedRecording(simplifyPoints(rec.points), imgW), rec.width ?? target.revealWidth)
           if (updated) {
             st.updateStroke(target.id, updated)
             st.setLivePart({ strokeId: target.id, part: rec.insertAfter + 1 })
@@ -1338,7 +1377,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
           } else st.notify('線が見つかりませんでした')
         }
       } else {
-        const created = strokeFromRecording(st.project, rec.points, st.project.strokes.length, st.selection)
+        // 手描きのブラシは、自動で作った線と同じペンの速さで描く（録り直し・範囲の「描く」は、なぞった時間のまま）
+        const created = strokeFromRecording(st.project, st.tool === 'live' ? pacedRecording(rec.points, imgW) : rec.points, st.project.strokes.length, st.selection)
         st.addStroke(created)
         // 手描きのブラシで一から描いたときは、このグループの線を選んだままにする。
         // 続けてなぞると自動で「追加」になり、このグループに線が足されていく（「新しいグループ」で次のグループへ）
