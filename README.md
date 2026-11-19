@@ -184,6 +184,10 @@ PRD の MVP（8章）はひと通り動く状態です。
 - [x] 自動の描き順を「どこから描くか（文字の大きさ・領域・段組みの判定）」と「どう描くか（自然に描く／線をたどる／範囲を塗る）」に分離。線をたどるときはペンの太さを線の太さから自動選択
 - [ ] グループの点編集（ベジェ）、SVG対応 など（PRD 9章）
 
+## デスクトップ版の配布
+
+Windows（`.exe`）・Mac（`.dmg`、Apple シリコン / Intel）・Linux（`.AppImage`）のインストーラーを GitHub のリリースに置き、紹介サイトのダウンロードボタンから「最新版」を配る。`v` で始まるタグを push すると `.github/workflows/release.yml` が3つの OS で作って載せる。版ごとの記録は [docs/releases.md](docs/releases.md)。
+
 ## AI 連携（MCP）
 
 デスクトップ版と Web 版は、MCP（Model Context Protocol）のエンドポイントを持ちます。Claude Code・Codex などの MCP クライアントから、画像の読み込み・描き順の自動作成・グループの並べ替えや描き直し・1コマの確認・書き出し（.wbanim / MP4 / WebM / GIF / HTML）までを操作できます。

@@ -1,6 +1,6 @@
 # デスクトップ版のインストーラーを作って GitHub のリリースに載せる。
 #   ・v で始まるタグ（例：v0.1.0）を push すると動く。手動（Actions の画面の Run workflow）でも動かせる
-#   ・Windows は windows のマシン、Mac は macOS のマシンで作る（Mac 版は Windows では作れないため）
+#   ・Windows は windows のマシン、Mac は macOS のマシン、Linux は ubuntu のマシンで作る（それぞれの OS でしか作れないため）
 #   ・ファイル名は毎回同じなので、紹介サイトの「最新版」リンク（releases/latest/download/…）が変わらない
 name: Release desktop apps
 
@@ -29,14 +29,14 @@ jobs:
         run: |
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "Whiteboard Animation Maker $TAG" \
-              --notes "デスクトップ版のインストーラーです。Windows は WhiteboardAnimationMaker-Setup.exe、Mac は Apple シリコン（M1 以降）が arm64、Intel が x64 の .dmg を使ってください。"
+              --notes "デスクトップ版のインストーラーです。Windows は WhiteboardAnimationMaker-Setup.exe、Mac は Apple シリコン（M1 以降）が arm64、Intel が x64 の .dmg、Linux は WhiteboardAnimationMaker-linux-x86_64.AppImage を使ってください。"
 
   build:
     needs: release
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -53,11 +53,14 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist:mac -- --publish never
+      - name: Linux 版を作る（AppImage）
+        if: runner.os == 'Linux'
+        run: npm run dist:linux -- --publish never
       - name: リリースに載せる
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          files=$(ls release/WhiteboardAnimationMaker-* | grep -E '\.(exe|dmg)$')
+          files=$(ls release/WhiteboardAnimationMaker-* | grep -E '\.(exe|dmg|AppImage)$')
           echo "$files"
           gh release upload "$TAG" $files --clobber --repo "$GITHUB_REPOSITORY"

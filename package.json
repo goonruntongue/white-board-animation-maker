@@ -18,7 +18,8 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
     "dist:win": "npm run build && electron-builder --win",
-    "dist:mac": "npm run build && electron-builder --mac"
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux"
   },
   "build": {
     "appId": "com.goonruntongue.whiteboard-animation-maker",
@@ -71,6 +72,19 @@
     },
     "dmg": {
       "title": "Whiteboard Animation Maker"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon/app-icon-mac.png",
+      "category": "Graphics",
+      "artifactName": "WhiteboardAnimationMaker-linux-x86_64.${ext}"
     }
   },
   "devDependencies": {
