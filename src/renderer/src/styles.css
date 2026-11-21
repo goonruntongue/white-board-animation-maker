@@ -1601,6 +1601,59 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   z-index: 5;
   margin-top: 5px;
 }
+/* タイムラインの表示倍率（Photoshop のナビゲーター風：倍率・小さい山・スライダー・大きい山）。左に寄せ、ほかのボタンは右へ */
+.timeline-actions > .tl-zoom {
+  margin-left: 0;
+  margin-right: auto;
+}
+.tl-zoom {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 4px;
+  border-radius: 8px;
+  background: var(--well);
+  box-shadow: var(--well-shadow);
+}
+.tl-zoom-value {
+  min-width: 58px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: var(--lcd-bg);
+  color: var(--lcd-fg);
+  text-shadow: var(--lcd-glow);
+  font: 700 12px var(--mono);
+  text-align: right;
+  box-shadow: var(--well-shadow);
+}
+.tl-zoom-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.tl-zoom-btn:hover:not(:disabled) {
+  color: var(--text-0);
+  background: var(--well-deep);
+}
+.tl-zoom-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.tl-zoom-range {
+  width: 160px;
+}
+.phone .tl-zoom-range {
+  width: 110px;
+}
 .timeline-insert, .timeline-delete {
   border: 1px solid var(--line-strong);
   border-radius: 6px;
@@ -4887,4 +4940,142 @@ button {
 }
 .brush-seg .tool-btn {
   padding: 0 10px;
+}
+
+/* ============================== キーボードショートカット ============================== */
+.shortcuts-modal {
+  width: min(720px, calc(100vw - 32px));
+}
+.sc-lead {
+  margin: 0 0 12px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.sc-tools {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.sc-search {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--well);
+  color: var(--text-0);
+  font: inherit;
+}
+.sc-message {
+  margin: 0 0 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--well);
+  color: var(--accent-text);
+  font-size: 12.5px;
+}
+.sc-group {
+  margin: 14px 0 0;
+}
+.sc-group h3 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--text-2);
+}
+.sc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+.sc-row:hover {
+  background: var(--well);
+}
+.sc-row.recording {
+  background: var(--well);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.sc-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-0);
+}
+.sc-label small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.sc-keys {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  max-width: 60%;
+}
+.sc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 2px 2px 6px;
+  border-radius: 6px;
+  background: var(--well-deep);
+}
+.sc-combo {
+  display: inline-flex;
+  gap: 3px;
+}
+.sc-remove,
+.sc-add,
+.sc-reset {
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sc-remove {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+}
+.sc-remove:hover,
+.sc-add:hover,
+.sc-reset:hover {
+  color: var(--accent-text);
+}
+.sc-add {
+  padding: 3px 6px;
+  border-radius: 6px;
+}
+.sc-reset {
+  padding: 3px 6px;
+  text-decoration: underline;
+}
+.sc-wait {
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+.sc-none {
+  color: var(--text-3);
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .sc-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sc-keys {
+    max-width: none;
+    justify-content: flex-start;
+  }
 }

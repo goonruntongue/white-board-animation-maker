@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { rewind, togglePlay } from '../commands'
 import { formatTime } from '../engine/project'
 import { buildTimeline } from '../engine/wb-engine'
@@ -9,6 +9,8 @@ import { ScrollRow } from './ScrollRow'
 import { useIsPhone } from '../lib/useMedia'
 import { StrokeActions } from './phone/StrokeActions'
 import { useLongPress } from '../lib/useLongPress'
+import { BASE_PX_PER_SEC, ZOOM_MAX, commitTimelineZoom, onTimelineZoomRequest, requestTimelineZoom, useTimelineZoom } from '../lib/timelineZoom'
+import { keyHint, useShortcutsVersion } from '../lib/shortcuts'
 
 const SKIP_KEY = 'wbam.skipLastLineConfirm'
 function readSkip(): boolean {
@@ -128,6 +130,66 @@ export function Timeline(): React.JSX.Element {
   const total = Math.max(1, timeline.total)
   const trackRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  // ---- 表示倍率（100% ＝ 1秒が 55px。下限は全体が見える倍率） ----
+  const [vpW, setVpW] = useState(0)
+  useEffect(() => {
+    const vp = scrollRef.current
+    if (!vp) return
+    const update = (): void => setVpW(vp.clientWidth)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(vp)
+    return () => ro.disconnect()
+  }, [])
+  const storedZoom = useTimelineZoom()
+  const sec = total / 1000
+  const fitZoom = vpW > 0 ? Math.min(ZOOM_MAX, Math.max(0.01, (vpW - 8) / (sec * BASE_PX_PER_SEC))) : 1
+  const zoom = Math.max(storedZoom, fitZoom)
+  const trackWidth = Math.min(200000, Math.ceil(sec * BASE_PX_PER_SEC * zoom))
+  // 倍率を変える前の「目印の位置の時刻」。描き直した後に、その時刻が同じ所に来るようにスクロールする
+  const zoomAnchor = useRef<{ ratio: number; ax: number } | null>(null)
+  const zoomLatest = useRef({ zoom, fitZoom, total })
+  zoomLatest.current = { zoom, fitZoom, total }
+  useEffect(
+    () =>
+      onTimelineZoomRequest(({ zoom: want, anchorX }) => {
+        const { zoom: cur, fitZoom: fz, total: tot } = zoomLatest.current
+        const next = want <= 0 ? fz : Math.max(fz, Math.min(ZOOM_MAX, want))
+        const vp = scrollRef.current
+        const track = trackRef.current
+        if (vp && track && track.offsetWidth > 0) {
+          const r = vp.getBoundingClientRect()
+          const playX = (useEditor.getState().time / Math.max(1, tot)) * track.offsetWidth - vp.scrollLeft
+          // 目印：ホイールならカーソルの所、それ以外は再生位置（見えていれば）か、まん中
+          const ax = anchorX !== undefined ? anchorX - r.left : playX >= 0 && playX <= vp.clientWidth ? playX : vp.clientWidth / 2
+          zoomAnchor.current = { ratio: (vp.scrollLeft + ax) / track.offsetWidth, ax }
+        }
+        // 下限（全体表示）は表示の側で当てはめるので、覚えるのは求められた倍率のまま
+        commitTimelineZoom(next)
+        if (Math.abs(next - cur) < 1e-9) zoomAnchor.current = null
+      }),
+    []
+  )
+  useLayoutEffect(() => {
+    const a = zoomAnchor.current
+    const vp = scrollRef.current
+    const track = trackRef.current
+    if (!a || !vp || !track) return
+    zoomAnchor.current = null
+    vp.scrollLeft = Math.max(0, a.ratio * track.offsetWidth - a.ax)
+  }, [trackWidth])
+  // Ctrl（Mac は ⌘）＋ホイールで拡大・縮小（トラックパッドのピンチも、ここに届く）
+  useEffect(() => {
+    const vp = scrollRef.current
+    if (!vp) return
+    const onWheel = (e: WheelEvent): void => {
+      if (!(e.ctrlKey || e.metaKey) || e.deltaY === 0) return
+      e.preventDefault()
+      requestTimelineZoom({ zoom: zoomLatest.current.zoom * Math.exp(-e.deltaY * 0.0025), anchorX: e.clientX })
+    }
+    vp.addEventListener('wheel', onWheel, { passive: false })
+    return () => vp.removeEventListener('wheel', onWheel)
+  }, [])
   const [menuFor, setMenuFor] = useState<string | null>(null)
   const [drop, setDrop] = useState<{ id: string; beforeId: string | null; x: number } | null>(null)
   const [multiMode, setMultiMode] = useState(false)
@@ -288,14 +350,15 @@ export function Timeline(): React.JSX.Element {
   }
   useEffect(() => () => { if (scrub.current) cancelAnimationFrame(scrub.current.raf) }, [])
 
-  // 目盛り
+  // 目盛り：表示倍率に合わせて、目盛りどうしが 50px 以上あく刻みにする
   const ticks = useMemo(() => {
-    const sec = total / 1000
-    const step = sec <= 10 ? 1 : sec <= 30 ? 2 : sec <= 90 ? 5 : sec <= 240 ? 10 : 30
+    const pps = Math.max(trackWidth, vpW) / Math.max(0.001, sec)
+    const steps = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600]
+    const step = steps.find((x) => x * pps >= 50) ?? 600
     const out: number[] = []
-    for (let s = 0; s <= sec; s += step) out.push(s)
+    for (let i = 0; i * step <= sec + 1e-9; i++) out.push(Math.round(i * step * 1000) / 1000)
     return out
-  }, [total])
+  }, [sec, trackWidth, vpW])
 
   const { setViewMode, select } = useEditor.getState()
   const isPhone = useIsPhone()
@@ -325,7 +388,7 @@ export function Timeline(): React.JSX.Element {
         <div className="timeline-scroll" ref={scrollRef} aria-label="タイムライン（横スクロール可能）" tabIndex={0}>
         <div
         className="timeline-track-inner"
-        style={{ minWidth: `${Math.min(100000, Math.ceil(total / 1000 * 55))}px` }}
+        style={{ minWidth: `${trackWidth}px` }}
         ref={trackRef}
         onPointerDown={(e) => {
           ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
@@ -338,7 +401,7 @@ export function Timeline(): React.JSX.Element {
         <div className="ruler scrub" title="なぞって再生位置を動かす" {...scrubHandlers} onPointerCancel={scrubHandlers.onPointerUp}>
           {ticks.map((s) => (
             <span key={s} className="tick" style={{ left: `${((s * 1000) / total) * 100}%` }}>
-              {s}s
+              {Number.isInteger(s) ? s : s.toFixed(Math.round(s * 10) === s * 10 ? 1 : 2)}s
             </span>
           ))}
         </div>
@@ -426,6 +489,7 @@ export function Timeline(): React.JSX.Element {
         })()}
         {/* はみ出したら横にスクロール（端に矢印が出る） */}
         <ScrollRow className="timeline-actions" label="タイムラインの操作" onPointerDown={(e) => e.stopPropagation()} onPointerMove={(e) => e.stopPropagation()}>
+          {!isPhone && <TimelineZoom zoom={zoom} min={fitZoom} />}
           {partsInline}
           {multiIds.length < 2 && selectedLine && selectedLine.part > 0 && <button className="timeline-insert" title="選んだ線の手前で、グループを2つに分ける（描くタイミングはそのまま）" onClick={() => {
             const st = useEditor.getState()
@@ -447,6 +511,7 @@ export function Timeline(): React.JSX.Element {
           <button className="timeline-delete" disabled={!selectedLine || multiIds.length > 1} onClick={deleteLine} title="選択した線を削除（元に戻せます）">
             <Icon name="trash" size={16} /> 選択した線を削除
           </button>
+          {isPhone && <TimelineZoom zoom={zoom} min={fitZoom} />}
         </ScrollRow>
       </div>
       {menuFor && <StrokeActions strokeId={menuFor} onClose={() => setMenuFor(null)} />}
@@ -553,6 +618,89 @@ function TimelineClip(props: {
     >
       <span>{props.index + 1}</span>
       {props.partPositions.map((position, i) => <i key={i} className="timeline-part-mark" style={{ left: `${position * 100}%` }} />)}
+    </div>
+  )
+}
+
+/** 小さい山・大きい山（Photoshop のナビゲーターと同じ印） */
+const Mountain = ({ size }: { size: 'small' | 'large' }): React.JSX.Element =>
+  size === 'small' ? (
+    <svg width="14" height="10" viewBox="0 0 14 10" aria-hidden="true">
+      <path d="M1 9 L5 4 L7.5 6.5 L9.5 4.5 L13 9 Z" fill="currentColor" />
+    </svg>
+  ) : (
+    <svg width="22" height="14" viewBox="0 0 22 14" aria-hidden="true">
+      <path d="M1 13 L8 3 L12 8 L15 5 L21 13 Z" fill="currentColor" />
+    </svg>
+  )
+
+/**
+ * タイムラインの表示倍率（Photoshop のナビゲーターのように：倍率の数値・縮小・スライダー・拡大）。
+ * 数値の上でホイール、押して選んで ↑↓ キーでも変えられる。下限は全体が見える倍率
+ */
+function TimelineZoom({ zoom, min }: { zoom: number; min: number }): React.JSX.Element {
+  useShortcutsVersion()
+  const max = ZOOM_MAX
+  const lo = Math.log(Math.min(min, max))
+  const hi = Math.log(max)
+  const span = hi - lo
+  const pos = span > 0 ? Math.round(((Math.log(zoom) - lo) / span) * 1000) : 0
+  const valueRef = useRef<HTMLSpanElement>(null)
+  const zoomRef = useRef(zoom)
+  zoomRef.current = zoom
+  const set = (z: number): void => requestTimelineZoom({ zoom: z })
+  useEffect(() => {
+    const el = valueRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent): void => {
+      if (e.deltaY === 0) return
+      e.preventDefault()
+      requestTimelineZoom({ zoom: zoomRef.current * (e.deltaY < 0 ? 1.25 : 0.8) })
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+  const pct = zoom * 100
+  const label = pct >= 100 ? `${Math.round(pct)}%` : `${pct.toFixed(pct >= 10 ? 1 : 2)}%`
+  return (
+    <div className="tl-zoom" role="group" aria-label="タイムラインの表示倍率">
+      <span
+        ref={valueRef}
+        className="tl-zoom-value size-value"
+        role="spinbutton"
+        tabIndex={0}
+        aria-label="タイムラインの表示倍率"
+        aria-valuenow={Math.round(pct)}
+        title="タイムラインの表示倍率：マウスホイール、または押してから ↑↓ キーで変えられます（タイムラインの上で Ctrl＋ホイールでも）"
+        onPointerDown={(e) => e.currentTarget.focus()}
+        onKeyDown={(e) => {
+          const f = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 1.25 : e.key === 'ArrowDown' || e.key === 'ArrowLeft' ? 0.8 : 0
+          if (!f) return
+          e.preventDefault()
+          e.stopPropagation()
+          set(zoom * f)
+        }}
+      >
+        {label}
+      </span>
+      <button className="tl-zoom-btn" title={`縮小${keyHint('timeline.zoomOut')}`} aria-label="タイムラインを縮小" disabled={zoom <= min * 1.001} onClick={() => set(zoom / 1.5)}>
+        <Mountain size="small" />
+      </button>
+      <input
+        className="tl-zoom-range"
+        type="range"
+        min={0}
+        max={1000}
+        value={pos}
+        disabled={span <= 0}
+        style={{ '--fill': `${pos / 10}%` } as React.CSSProperties}
+        aria-label="タイムラインの表示倍率"
+        title={`ドラッグで拡大・縮小。左端で全体表示${keyHint('timeline.fit')}`}
+        onChange={(e) => set(Math.exp(lo + (Number(e.target.value) / 1000) * span))}
+      />
+      <button className="tl-zoom-btn" title={`拡大${keyHint('timeline.zoomIn')}`} aria-label="タイムラインを拡大" disabled={zoom >= max * 0.999} onClick={() => set(zoom * 1.5)}>
+        <Mountain size="large" />
+      </button>
     </div>
   )
 }

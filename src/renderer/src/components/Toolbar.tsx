@@ -8,13 +8,14 @@ import { ThemeSwitch } from './ThemeSwitch'
 import { HelpMenu } from './HelpMenu'
 import { LiveEditBar } from './LiveEditBar'
 import { ScrollRow } from './ScrollRow'
+import { keyHint, useShortcutsVersion } from '../lib/shortcuts'
 import { useBarLayout } from '../lib/barLayout'
 
-const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
-  { id: 'erase', icon: 'eraser', label: 'グループから消す', key: 'E' },
-  { id: 'select', icon: 'cursor', label: 'グループを選ぶ', key: 'V' },
-  { id: 'live', icon: 'liveEdit', label: '手描き', key: 'W' },
-  { id: 'pan', icon: 'hand', label: '移動', key: 'H' }
+const TOOLS: { id: Tool; icon: IconName; label: string; shortcut: string }[] = [
+  { id: 'erase', icon: 'eraser', label: 'グループから消す', shortcut: 'tool.groupErase' },
+  { id: 'select', icon: 'cursor', label: 'グループを選ぶ', shortcut: 'tool.groupSelect' },
+  { id: 'live', icon: 'liveEdit', label: '手描き', shortcut: 'tool.live' },
+  { id: 'pan', icon: 'hand', label: '移動', shortcut: 'tool.hand' }
 ]
 
 
@@ -55,6 +56,7 @@ export function Toolbar(): React.JSX.Element {
   const name = useEditor((s) => s.project.name)
   const hasImage = useEditor((s) => !!s.project.image)
   const { setTool, undo, redo } = useEditor.getState()
+  useShortcutsVersion()
 
   return (
     <header className="toolbar">
@@ -68,28 +70,28 @@ export function Toolbar(): React.JSX.Element {
       {/* 道具とオプションバーは、入りきらなければ横にスクロールする（右端の保存・書き出しはいつも見える） */}
       <ScrollRow className="tb-scroll" wheel label="道具とオプション">
       <div className="tb-group">
-        <button className="icon-btn" title="新規 (Ctrl+N)" onClick={newProject}>
+        <button className="icon-btn" title={`新規${keyHint('file.new')}`} onClick={newProject}>
           <Icon name="file" />
         </button>
-        <button className="icon-btn" title="開く (Ctrl+O)" onClick={() => void openProject()}>
+        <button className="icon-btn" title={`開く${keyHint('file.open')}`} onClick={() => void openProject()}>
           <Icon name="folder" />
         </button>
-        <button className="icon-btn" title="保存 (Ctrl+S)" onClick={() => void saveProject()}>
+        <button className="icon-btn" title={`保存${keyHint('file.save')}`} onClick={() => void saveProject()}>
           <Icon name="save" />
         </button>
         <button className="icon-btn" title="自動バックアップから復元" onClick={() => useEditor.getState().openDialog('recovery')}>
           <Icon name="history" />
         </button>
-        <button className="icon-btn" data-tour="import-alt" title="画像を読み込む (Ctrl+I)" onClick={() => void importImageDialog()}>
+        <button className="icon-btn" data-tour="import-alt" title={`画像を読み込む${keyHint('file.import')}`} onClick={() => void importImageDialog()}>
           <Icon name="image" />
         </button>
       </div>
 
       <div className="tb-group">
-        <button className="icon-btn" title="元に戻す (Ctrl+Z)" disabled={!canUndo} onClick={undo}>
+        <button className="icon-btn" title={`元に戻す${keyHint('edit.undo')}`} disabled={!canUndo} onClick={undo}>
           <Icon name="undo" />
         </button>
-        <button className="icon-btn" title="やり直す (Ctrl+Y)" disabled={!canRedo} onClick={redo}>
+        <button className="icon-btn" title={`やり直す${keyHint('edit.redo')}`} disabled={!canRedo} onClick={redo}>
           <Icon name="redo" />
         </button>
       </div>
@@ -100,7 +102,7 @@ export function Toolbar(): React.JSX.Element {
             key={t.id}
             className={`tool-btn ${tool === t.id || (t.id === 'live' && tool === 'draw') ? 'on' : ''}`}
             data-tour={t.id === 'live' ? 'draw' : undefined}
-            title={`${t.label} (${t.key})`}
+            title={`${t.label}${keyHint(t.shortcut)}`}
             disabled={!hasImage}
             onClick={() => setTool(t.id)}
           >
@@ -136,10 +138,10 @@ export function Toolbar(): React.JSX.Element {
       <div className="tb-group end">
         <ThemeSwitch />
         <HelpMenu />
-        <button className="btn" onClick={() => openExport('video')} title="動画・GIF として書き出す">
+        <button className="btn" onClick={() => openExport('video')} title={`動画・GIF として書き出す${keyHint('file.exportVideo')}`}>
           <Icon name="film" /> 動画・GIF
         </button>
-        <button className="btn primary" data-tour="export" onClick={() => openExport('html')} title="単一HTMLとして書き出す (Ctrl+E)">
+        <button className="btn primary" data-tour="export" onClick={() => openExport('html')} title={`単一HTMLとして書き出す${keyHint('file.exportHtml')}`}>
           <Icon name="code" /> HTMLを書き出す
         </button>
       </div>

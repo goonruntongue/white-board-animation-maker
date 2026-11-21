@@ -12,7 +12,8 @@ import { setAutoSelect, useAutoSelect } from '../lib/autoSelect'
 import { setBrushTarget, setRedoAdvance, useRedoAdvance, type BrushTarget } from '../lib/brushTarget'
 import { selectedLine, useBrushWidth, useEffectiveBrushTarget } from '../lib/brushMode'
 import { setKeepTracedPace, useKeepTracedPace } from '../lib/pace'
-import { usePathTool, type PathTool } from '../lib/pathTool'
+import { useEffectivePathTool, type PathTool } from '../lib/pathTool'
+import { keyHint, useShortcutsVersion } from '../lib/shortcuts'
 import { ActionSheet } from './phone/ActionSheet'
 import {
   setPartWidth,
@@ -29,7 +30,7 @@ import { Icon } from './Icon'
 
 /** パス編集のオプションバーに出す、いまの道具の使い方 */
 const PATH_HINT: Record<PathTool, string> = {
-  direct: 'アンカー・ハンドルをドラッグ／線の上をダブルクリックで追加／Alt＋ドラッグで角に',
+  direct: 'アンカー・ハンドルをドラッグ／線の上をダブルクリックで追加／Alt を押しているあいだはアンカーポイントの切り替え',
   convert: 'アンカーを押すと角に／アンカーからドラッグでなめらかに／ハンドルは片側だけ動く',
   addDel: '線の上を押すとアンカーを追加／アンカーの上を押すと削除'
 }
@@ -363,6 +364,7 @@ const MODES = [
 function ModeSwitch({ phone }: { phone: boolean }): React.JSX.Element {
   // 描き直し中（内部では描くツール）は、ブラシで描いている扱いで表示する
   const mode = useEditor((s) => (s.tool === 'draw' ? 'brush' : s.liveMode))
+  useShortcutsVersion()
   const setMode = (m: 'move' | 'brush' | 'erase' | 'path'): void => {
     const st = useEditor.getState()
     // 描き直しの途中なら、やめてから切り替える
@@ -392,7 +394,7 @@ function ModeSwitch({ phone }: { phone: boolean }): React.JSX.Element {
         m.id === 'brush' ? (
           <BrushKey key={m.id} phone={false} on={mode === 'brush'} onPick={() => setMode('brush')} />
         ) : (
-          <button key={m.id} className={`icon-btn ${mode === m.id ? 'on' : ''}`} aria-pressed={mode === m.id} title={m.hint} onClick={() => setMode(m.id)}>
+          <button key={m.id} className={`icon-btn ${mode === m.id ? 'on' : ''}`} aria-pressed={mode === m.id} title={m.hint + keyHint(`tool.${m.id}`)} onClick={() => setMode(m.id)}>
             <Icon name={m.icon} />
           </button>
         )
@@ -511,7 +513,7 @@ function BrushKey({ phone, on, onPick }: { phone: boolean; on: boolean; onPick: 
   }
   return (
     <span className="brush-split">
-      <button className={`icon-btn ${on ? 'on' : ''}`} aria-pressed={on} title={hint} onClick={onPick}>
+      <button className={`icon-btn ${on ? 'on' : ''}`} aria-pressed={on} title={hint + keyHint('tool.brush')} onClick={onPick}>
         <Icon name={icon} />
       </button>
       <button className={`icon-btn brush-caret ${on ? 'on' : ''}`} title="線を選んでいるときのブラシの動き（描き直す／線を追加）" aria-haspopup="menu" aria-expanded={!!menu} onClick={(e) => (menu ? setMenu(null) : open(e))}>
@@ -595,7 +597,7 @@ export function LiveEditBar({ phone = false }: { phone?: boolean }): React.JSX.E
   const hasAnchor = useEditor((s) => s.livePath?.selected != null)
   const clear = (): void => useEditor.getState().setLivePart(null)
   const pathing = mode === 'path'
-  const pathTool = usePathTool()
+  const pathTool = useEffectivePathTool()
   const whole = unit === 'stroke' && !pathing
   // 直すは、いつも1本の線ごと（単位の切り替えはない）
   const unitSwitch = null

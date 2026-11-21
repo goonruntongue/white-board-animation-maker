@@ -12,6 +12,9 @@ import { openGuide, setShowTourOnStartup, startTour, useTourPrefs } from '../lib
 import { useEditor } from '../store'
 import { Icon } from './Icon'
 import { ActionSheet } from './phone/ActionSheet'
+import { ShortcutsDialog } from './ShortcutsDialog'
+import { PREFS_EVENT, SHORTCUTS_EVENT } from '../lib/panels'
+import { keyHint, useShortcutsVersion } from '../lib/shortcuts'
 
 export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Element {
   const [open, setOpen] = useState(false)
@@ -26,6 +29,24 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
   // AI エージェントに渡す指示文（スキルとして登録させてから作らせる）
   const [agent, setAgent] = useState(false)
   const agentDialog = outside(agent && <AgentPromptDialog onClose={() => setAgent(false)} />)
+  // キーボードショートカットの一覧と割り当ての変更
+  const [shortcuts, setShortcuts] = useState(false)
+  const shortcutsDialog = outside(shortcuts && <ShortcutsDialog onClose={() => setShortcuts(false)} />)
+  // Ctrl+K（環境設定）でこのメニューを開く・閉じる。Ctrl+Alt+Shift+K でキーボードショートカット
+  useEffect(() => {
+    const onPrefs = (): void => setOpen((v) => !v)
+    const onShortcuts = (): void => {
+      setOpen(false)
+      setShortcuts(true)
+    }
+    window.addEventListener(PREFS_EVENT, onPrefs)
+    window.addEventListener(SHORTCUTS_EVENT, onShortcuts)
+    return () => {
+      window.removeEventListener(PREFS_EVENT, onPrefs)
+      window.removeEventListener(SHORTCUTS_EVENT, onShortcuts)
+    }
+  }, [])
+  useShortcutsVersion()
   const { showOnStartup } = useTourPrefs()
   const barLayout = useBarLayout()
   const wrap = useRef<HTMLDivElement>(null)
@@ -85,6 +106,7 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
                 note: barLayout === 'two' ? '押すと1段（1列に並べて横にスクロール）に切り替わります' : '押すと2段（操作の切り替えと、選んだ線の操作を分ける）に切り替わります',
                 onSelect: () => setBarLayout(barLayout === 'two' ? 'one' : 'two')
               },
+              { icon: 'code' as const, label: 'キーボードショートカット', note: 'キーの一覧と、割り当ての変更（キーボードをつないだとき）', onSelect: () => setShortcuts(true) },
               { icon: 'sparkle' as const, label: 'AI エージェントに作ってもらう', note: 'Claude Code・Codex などに渡す指示文をコピー', onSelect: () => setAgent(true) },
               { icon: 'sparkle' as const, label: 'AI 連携（MCP）', note: 'Claude などの AI から、このアプリを操作する', onSelect: () => setMcp(true) },
               ...(isDesktop
@@ -96,6 +118,7 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
         {aboutDialog}
         {mcpDialog}
         {agentDialog}
+        {shortcutsDialog}
       </>
     )
   }
@@ -105,7 +128,7 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
       <button
         className={`icon-btn help-btn ${open ? 'on' : ''}`}
         data-tour="help"
-        title="ヘルプと設定（ツアー・使い方ガイド）"
+        title={`ヘルプと設定（ツアー・使い方ガイド）${keyHint('edit.prefs')}`}
         aria-label="ヘルプと設定"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
@@ -135,6 +158,10 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
             <input type="checkbox" checked={barLayout === 'two'} onChange={(e) => setBarLayout(e.target.checked ? 'two' : 'one')} />
             <span className="switch" />
           </label>
+          <button role="menuitem" onClick={() => run(() => setShortcuts(true))}>
+            <Icon name="code" /> キーボードショートカット
+            <small>一覧と割り当ての変更{keyHint('edit.shortcuts')}</small>
+          </button>
           <hr />
           <button role="menuitem" onClick={() => run(() => setAgent(true))}>
             <Icon name="sparkle" /> AI エージェントに作ってもらう
@@ -157,6 +184,7 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
       {aboutDialog}
       {mcpDialog}
       {agentDialog}
+      {shortcutsDialog}
     </div>
   )
 }

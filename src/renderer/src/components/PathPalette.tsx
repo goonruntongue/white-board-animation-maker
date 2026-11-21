@@ -1,8 +1,9 @@
 // パス編集中に絵の上に浮かぶ道具パネル（Illustrator / Photoshop の道具と同じ3つ）。
 // 上の取っ手をドラッグして好きな所へ動かせる（位置は端末ごとに覚える）。
 import { useEffect, useRef, useState } from 'react'
-import { setPathTool, usePathTool, type PathTool } from '../lib/pathTool'
+import { setPathTool, useEffectivePathTool, type PathTool } from '../lib/pathTool'
 import { Icon, type IconName } from './Icon'
+import { keyHint, useShortcutsVersion } from '../lib/shortcuts'
 
 const POS_KEY = 'wbam.pathPalettePos'
 
@@ -11,19 +12,19 @@ const TOOLS: { id: PathTool; icon: IconName; label: string; tip: string }[] = [
     id: 'direct',
     icon: 'directSelect',
     label: 'パス選択',
-    tip: 'パス選択：アンカー（四角）を押して選び、ドラッグで動かします。選んだアンカーのハンドルをドラッグすると曲がり具合が変わります（A）'
+    tip: 'パス選択：アンカー（四角）を押して選び、ドラッグで動かします。選んだアンカーのハンドルをドラッグすると曲がり具合が変わります。Alt を押しているあいだは、アンカーポイントの切り替えになります'
   },
   {
     id: 'convert',
     icon: 'convertAnchor',
     label: 'アンカーポイントの切り替え',
-    tip: 'アンカーポイントの切り替え：アンカーを押すと角に、アンカーからドラッグするとなめらかな曲線になります。ハンドルのドラッグは片側だけ動きます（Shift+C）'
+    tip: 'アンカーポイントの切り替え：アンカーを押すと角に、アンカーからドラッグするとなめらかな曲線になります。ハンドルのドラッグは片側だけ動きます'
   },
   {
     id: 'addDel',
     icon: 'penAddDel',
     label: 'アンカーポイントの追加・削除',
-    tip: 'アンカーポイントの追加・削除：線の上を押すとアンカーを足し、アンカーの上を押すと消します（+ / -）'
+    tip: 'アンカーポイントの追加・削除：線の上を押すとアンカーを足し、アンカーの上を押すと消します'
   }
 ]
 
@@ -38,7 +39,9 @@ function readPos(): { x: number; y: number } {
 }
 
 export function PathPalette(): React.JSX.Element {
-  const tool = usePathTool()
+  // Alt を押しているあいだは、一時的に切り替わった道具を光らせる
+  const tool = useEffectivePathTool()
+  useShortcutsVersion()
   const [pos, setPos] = useState(readPos)
   const ref = useRef<HTMLDivElement>(null)
   const drag = useRef<{ id: number; dx: number; dy: number } | null>(null)
@@ -109,7 +112,7 @@ export function PathPalette(): React.JSX.Element {
           className={`path-palette-btn ${tool === t.id ? 'on' : ''}`}
           aria-label={t.label}
           aria-pressed={tool === t.id}
-          data-tip={t.tip}
+          data-tip={t.tip + keyHint(`path.${t.id}`)}
           onClick={() => setPathTool(t.id)}
         >
           <Icon name={t.icon} size={20} />

@@ -123,17 +123,17 @@ function buildMenu(): void {
     {
       label: 'ファイル',
       submenu: [
-        { label: '新規プロジェクト', accelerator: 'CmdOrCtrl+N', click: () => send('new') },
-        { label: 'プロジェクトを開く…', accelerator: 'CmdOrCtrl+O', click: () => send('open') },
-        { label: '保存', accelerator: 'CmdOrCtrl+S', click: () => send('save') },
-        { label: '名前を付けて保存…', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('save-as') },
+        { label: '新規プロジェクト', accelerator: 'CmdOrCtrl+N', click: () => send('new'), registerAccelerator: false },
+        { label: 'プロジェクトを開く…', accelerator: 'CmdOrCtrl+O', click: () => send('open'), registerAccelerator: false },
+        { label: '保存', accelerator: 'CmdOrCtrl+S', click: () => send('save'), registerAccelerator: false },
+        { label: '名前を付けて保存…', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('save-as'), registerAccelerator: false },
         { label: '自動バックアップから復元…', click: () => send('recovery') },
         { type: 'separator' },
-        { label: '画像を読み込む…', accelerator: 'CmdOrCtrl+I', click: () => send('import-image') },
+        { label: '画像を読み込む…', accelerator: 'CmdOrCtrl+I', click: () => send('import-image'), registerAccelerator: false },
         { label: '手・ペン素材を読み込む…', click: () => send('import-hand') },
         { type: 'separator' },
-        { label: 'HTMLとして書き出す…', accelerator: 'CmdOrCtrl+E', click: () => send('export-html') },
-        { label: '動画・GIF として書き出す…', accelerator: 'CmdOrCtrl+Shift+E', click: () => send('export-video') },
+        { label: 'HTMLとして書き出す…', accelerator: 'CmdOrCtrl+E', click: () => send('export-html'), registerAccelerator: false },
+        { label: '動画・GIF として書き出す…', accelerator: 'CmdOrCtrl+Shift+E', click: () => send('export-video'), registerAccelerator: false },
         // Mac の終了はアプリ名のメニューにある
         ...(isMac ? [] : ([{ type: 'separator' }, { role: 'quit', label: '終了' }] as MenuItemConstructorOptions[]))
       ]
@@ -143,14 +143,17 @@ function buildMenu(): void {
       submenu: [
         // Undo/Redo/Delete はレンダラー側のキーボード処理に任せる（入力欄での標準動作を壊さないため）
         { label: '元に戻す', accelerator: 'CmdOrCtrl+Z', click: () => send('undo'), registerAccelerator: false },
-        { label: 'やり直す', accelerator: 'CmdOrCtrl+Y', click: () => send('redo'), registerAccelerator: false },
+        { label: 'やり直す', accelerator: 'CmdOrCtrl+Shift+Z', click: () => send('redo'), registerAccelerator: false },
         { type: 'separator' },
         { label: '描き順を自動で作る…', click: () => send('auto-trace') },
         { type: 'separator' },
         { label: '選択中の軌跡を削除', accelerator: 'Delete', click: () => send('delete-stroke'), registerAccelerator: false },
         { type: 'separator' },
         { role: 'copy', label: 'コピー' },
-        { role: 'paste', label: '貼り付け' }
+        { role: 'paste', label: '貼り付け' },
+        { type: 'separator' },
+        { label: '環境設定…', accelerator: 'CmdOrCtrl+K', click: () => send('prefs'), registerAccelerator: false },
+        { label: 'キーボードショートカット…', accelerator: 'CmdOrCtrl+Alt+Shift+K', click: () => send('shortcuts'), registerAccelerator: false }
       ]
     },
     {
@@ -177,7 +180,7 @@ function buildMenu(): void {
       label: 'ヘルプ',
       submenu: [
         { label: 'ツアーを始める', click: () => send('tour') },
-        { label: '使い方ガイド', accelerator: 'F1', click: () => send('guide') },
+        { label: '使い方ガイド', accelerator: 'F1', click: () => send('guide'), registerAccelerator: false },
         { label: 'サンプル画像を使う', click: () => send('sample') }
       ]
     },

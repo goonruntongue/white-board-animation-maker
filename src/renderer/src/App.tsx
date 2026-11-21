@@ -7,6 +7,7 @@ import {
   importImageDialog,
   importImageFile,
   newProject,
+  openAutoTrace,
   openExport,
   openProject,
   rewind,
@@ -32,7 +33,10 @@ import { Toast } from './components/Toast'
 import { OptionsBar, Toolbar } from './components/Toolbar'
 import { UsageGuide } from './components/UsageGuide'
 import { Tour } from './components/Tour'
-import { getTourPrefs, GUIDE_EVENT, TOUR_EVENT } from './lib/tour'
+import { getTourPrefs, GUIDE_EVENT, openGuide, TOUR_EVENT } from './lib/tour'
+import { comboFromEvent, findShortcuts } from './lib/shortcuts'
+import { openPrefs, openShortcuts } from './lib/panels'
+import { fitTimelineZoom, stepTimelineZoom } from './lib/timelineZoom'
 import { buildTimeline } from './engine/wb-engine'
 import { isDesktop, setWindowTitle } from './lib/platform'
 import { runToolForAi } from './automation'
@@ -49,6 +53,143 @@ function isTyping(target: EventTarget | null): boolean {
   if (!el) return false
   const tag = el.tagName
   return (tag === 'INPUT' && !['checkbox', 'range', 'color'].includes((el as HTMLInputElement).type)) || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
+}
+
+/** 手描きの操作に切り替える（描き直しの途中ならやめてから） */
+function liveMode(m: 'move' | 'brush' | 'erase' | 'path'): void {
+  const st = useEditor.getState()
+  if (!st.project.image) return
+  if (st.rerecordId) st.setRerecord(null)
+  if (st.tool !== 'live') st.setTool('live')
+  st.setLiveMode(m)
+}
+
+/** ブラシ・消しゴムの大きさを [ ] で変える（手描きで線を選んでいれば、その線の太さ） */
+function stepSize(dir: -1 | 1): void {
+  const st = useEditor.getState()
+  if (st.tool === 'live') {
+    const lp = st.livePart
+    const stroke = lp ? st.project.strokes.find((s) => s.id === lp.strokeId) : undefined
+    const part = stroke && lp ? strokeParts(stroke)[lp.part] : undefined
+    if (part) return setLiveWidth(Math.max(1, Math.round(part.width * (dir < 0 ? 0.88 : 1.14))) + (dir > 0 && part.width < 8 ? 1 : 0))
+  }
+  const sizeKey = st.tool === 'erase' ? 'eraserWidth' : 'defaultRevealWidth'
+  const w = st.project.settings[sizeKey]
+  st.updateSettings({ [sizeKey]: Math.max(PEN_MIN, Math.min(PEN_MAX, Math.round(w * (dir < 0 ? 0.85 : 1.18)))) })
+}
+
+/** ショートカットの操作を実行する。その場面で効かないときは false（キーをほかに回す） */
+function runShortcut(id: string): boolean | void {
+  const st = useEditor.getState()
+  const hasImage = !!st.project.image
+  switch (id) {
+    // ツール
+    case 'tool.move':
+      return liveMode('move')
+    case 'tool.brush':
+      return liveMode('brush')
+    case 'tool.erase':
+      return liveMode('erase')
+    case 'tool.path':
+      return liveMode('path')
+    case 'tool.live':
+      return void (hasImage && st.setTool('live'))
+    case 'tool.groupSelect':
+      return void (hasImage && st.setTool('select'))
+    case 'tool.groupErase':
+      return void (hasImage && st.setTool('erase'))
+    case 'tool.hand':
+      return void (hasImage && st.setTool('pan'))
+    case 'tool.rect':
+      return startRange('rect')
+    case 'tool.ellipse':
+      return startRange('ellipse')
+    case 'tool.lasso':
+      return startRange('lasso')
+    // パス編集
+    case 'path.direct':
+      return setPathTool('direct')
+    case 'path.convert':
+      return setPathTool('convert')
+    case 'path.addDel':
+      return setPathTool('addDel')
+    // 線・グループ
+    case 'line.prevGroup':
+      return selectRelative(-1)
+    case 'line.nextGroup':
+      return selectRelative(1)
+    case 'line.prev':
+    case 'line.next':
+      if (st.tool !== 'live') return false
+      return stepLivePart(id === 'line.prev' ? -1 : 1)
+    case 'size.down':
+      return stepSize(-1)
+    case 'size.up':
+      return stepSize(1)
+    case 'edit.newGroup':
+      if (!hasImage) return false
+      if (st.rerecordId) st.setRerecord(null)
+      st.startNewGroup()
+      return st.notify('次になぞった線から、新しいグループになります')
+    case 'edit.delete':
+      return deleteSelected()
+    // 再生・表示
+    case 'play.toggle':
+      return togglePlay()
+    case 'play.rewind':
+      return rewind()
+    case 'view.toggle':
+      return st.setViewMode(st.viewMode === 'edit' ? 'preview' : 'edit')
+    case 'page.prev':
+      return st.gotoPage(st.project.pageIndex - 1)
+    case 'page.next':
+      return st.gotoPage(st.project.pageIndex + 1)
+    // タイムライン
+    case 'timeline.zoomIn':
+      return stepTimelineZoom(1.5)
+    case 'timeline.zoomOut':
+      return stepTimelineZoom(1 / 1.5)
+    case 'timeline.fit':
+      return fitTimelineZoom()
+    // 選択範囲（Ctrl+A は範囲の道具のときだけ。ほかでは使わない）
+    case 'sel.all':
+      if (!SELECTION_TOOLS.includes(st.tool)) return false
+      return selectAll()
+    case 'sel.deselect':
+      return deselect()
+    case 'sel.invert':
+      return invertSelection()
+    // 編集
+    case 'edit.undo':
+      return st.undo()
+    case 'edit.redo':
+      return st.redo()
+    case 'edit.autoTrace':
+      return void (hasImage && openAutoTrace())
+    case 'edit.prefs':
+      return openPrefs()
+    case 'edit.shortcuts':
+      return openShortcuts()
+    // ファイル
+    case 'file.new':
+      return newProject()
+    case 'file.open':
+      return void openProject()
+    case 'file.save':
+      return void saveProject(false)
+    case 'file.saveAs':
+      return void saveProject(true)
+    case 'file.import':
+      return void importImageDialog()
+    case 'file.exportHtml':
+      return openExport('html')
+    case 'file.exportVideo':
+      return openExport('video')
+    // ヘルプ
+    case 'help.guide':
+      return openGuide()
+  }
+  return false
 }
 
 export default function App(): React.JSX.Element {
@@ -180,116 +321,47 @@ export default function App(): React.JSX.Element {
     []
   )
 
-  // ---- キーボードショートカット ----
+  // ---- キーボードショートカット（割り当ては lib/shortcuts.ts。キーボードショートカットの画面で変えられる） ----
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (isTyping(e.target) || useEditor.getState().dialog || guideSection !== undefined) return
       const st = useEditor.getState()
-      const mod = e.ctrlKey || e.metaKey
-      const k = e.key.toLowerCase()
+      const inPath = st.tool === 'live' && st.liveMode === 'path'
+      // パス編集の Alt：押しているあいだだけアンカーポイントの切り替え。Windows で Alt を離したときにメニューへ移らないようにする
+      if (e.key === 'Alt' && inPath) return void e.preventDefault()
 
-      if (mod) {
-        if (k === 'z' && !e.shiftKey) return void (e.preventDefault(), st.undo())
-        if ((k === 'z' && e.shiftKey) || k === 'y') return void (e.preventDefault(), st.redo())
-        // 選択範囲（Photoshop と同じキー）
-        if (k === 'd' && !e.shiftKey) return void (e.preventDefault(), deselect())
-        // 選択ツールのときだけ Ctrl+A でキャンバス全体を選択（入力欄では通常の全選択のまま）
-        if (k === 'a' && SELECTION_TOOLS.includes(st.tool)) return void (e.preventDefault(), selectAll())
-        if (k === 'i' && e.shiftKey) return void (e.preventDefault(), invertSelection())
-        // デスクトップ版ではメニューのアクセラレータが処理する
-        if (isDesktop) return
-        if (k === 's') return void (e.preventDefault(), saveProject(e.shiftKey))
-        if (k === 'o') return void (e.preventDefault(), openProject())
-        if (k === 'n') return void (e.preventDefault(), newProject())
-        if (k === 'i') return void (e.preventDefault(), importImageDialog())
-        if (k === 'e') return void (e.preventDefault(), openExport(e.shiftKey ? 'video' : 'html'))
-        return
-      }
-
-      switch (e.code) {
-        case 'Space':
-          e.preventDefault()
-          return togglePlay()
-        case 'Home':
-          e.preventDefault()
-          return rewind()
-        case 'PageUp':
-          e.preventDefault()
-          return st.gotoPage(st.project.pageIndex - 1)
-        case 'PageDown':
-          e.preventDefault()
-          return st.gotoPage(st.project.pageIndex + 1)
-        case 'Delete':
-        case 'Backspace':
-          e.preventDefault()
-          return deleteSelected()
-        case 'Tab':
-          e.preventDefault()
-          return st.setViewMode(st.viewMode === 'edit' ? 'preview' : 'edit')
-        case 'ArrowUp':
-          e.preventDefault()
-          return selectRelative(-1)
-        case 'ArrowDown':
-          e.preventDefault()
-          return selectRelative(1)
-        case 'Enter':
-        case 'NumpadEnter':
+      // 変えられないキー
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (e.code === 'Enter' || e.code === 'NumpadEnter') {
           // 範囲の道具：囲み終えたら Enter で前の道具に戻る（多角形の投げ縄を打っている途中は、絵の側で確定する）
           if (SELECTION_TOOLS.includes(st.tool)) return void (e.preventDefault(), finishRange())
-          break
-        case 'Escape':
+        } else if (e.code === 'Escape') {
           if (st.rerecordId) return st.setRerecord(null)
           if (st.livePart) return st.setLivePart(null)
           return st.select(null)
-      }
-      // ペン先サイズ: [ で小さく / ] で大きく。
-      // e.code は物理キー位置（US配列基準）なので、JIS配列では [ が「@」キーになってしまう。
-      // 入力される文字（e.key）で判定し、念のため keyCode（[ = 219, ] = 221）も見る。
-      // 消しゴムツールのときは消しゴムの大きさ、それ以外はペン先
-      const sizeKey = st.tool === 'erase' ? 'eraserWidth' : 'defaultRevealWidth'
-      const bracket = e.key === '[' || e.keyCode === 219 ? -1 : e.key === ']' || e.keyCode === 221 ? 1 : 0
-      // ライブ編集で線を選んでいるときは、[ ] でその線の太さ、 , . で前後の線へ
-      if (st.tool === 'live') {
-        const lp = st.livePart
-        const stroke = lp ? st.project.strokes.find((s) => s.id === lp.strokeId) : undefined
-        const part = stroke && lp ? strokeParts(stroke)[lp.part] : undefined
-        if (bracket !== 0 && part) {
-          e.preventDefault()
-          return setLiveWidth(Math.max(1, Math.round(part.width * (bracket < 0 ? 0.88 : 1.14))) + (bracket > 0 && part.width < 8 ? 1 : 0))
         }
-        if (e.key === ',' || e.key === '.') {
-          e.preventDefault()
-          return stepLivePart(e.key === ',' ? -1 : 1)
-        }
-        // パス編集の道具（Illustrator と同じキー）：A パス選択 / Shift+C アンカーポイントの切り替え / + − 追加・削除
-        if (st.liveMode === 'path') {
-          if (k === 'a' && !e.shiftKey) return void (e.preventDefault(), setPathTool('direct'))
-          if (k === 'c' && e.shiftKey) return void (e.preventDefault(), setPathTool('convert'))
-          if (e.key === '+' || e.key === '=' || e.key === '-' || e.key === ';') return void (e.preventDefault(), setPathTool('addDel'))
-        }
+        // 大きさのプリセット（1〜5）。消しゴムのときは消しゴムの大きさ
+        const sizeKey = st.tool === 'erase' ? 'eraserWidth' : 'defaultRevealWidth'
+        const preset = (st.tool === 'erase' ? ERASER_PRESETS : PEN_PRESETS).find((p) => p.key === e.key)
+        if (preset) return void (e.preventDefault(), st.updateSettings({ [sizeKey]: preset.width }))
       }
-      if (bracket !== 0) {
-        e.preventDefault()
-        const w = st.project.settings[sizeKey]
-        const next = Math.max(PEN_MIN, Math.min(PEN_MAX, Math.round(w * (bracket < 0 ? 0.85 : 1.18))))
-        return st.updateSettings({ [sizeKey]: next })
+
+      const combo = comboFromEvent(e)
+      if (!combo) return
+      for (const id of findShortcuts(combo, inPath)) {
+        if (runShortcut(id) !== false) return void e.preventDefault()
       }
-      const preset = (st.tool === 'erase' ? ERASER_PRESETS : PEN_PRESETS).find((p) => p.key === e.key)
-      if (preset) return st.updateSettings({ [sizeKey]: preset.width })
-      if (k === 'd') {
-        // 描く＝直すのブラシ（何も選んでいなければ、新しいグループを描く）
-        st.setTool('live')
-        st.setLiveMode('brush')
-      }
-      else if (k === 'e') st.setTool('erase')
-      else if (k === 'm') startRange(e.shiftKey ? 'ellipse' : 'rect')
-      else if (k === 'l') startRange('lasso')
-      else if (k === 'v') st.setTool('select')
-      else if (k === 'h') st.setTool('pan')
-      else if (k === 'w') st.setTool('live')
+    }
+    const onKeyUp = (e: KeyboardEvent): void => {
+      const st = useEditor.getState()
+      if (e.key === 'Alt' && st.tool === 'live' && st.liveMode === 'path') e.preventDefault()
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keyup', onKeyUp)
+    }
   }, [guideSection])
 
   // ---- ドラッグ＆ドロップ ----

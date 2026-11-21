@@ -1,4 +1,5 @@
 // メニュー・ツールバー・ショートカットから共通で呼ぶ操作。
+import { openPrefs, openShortcuts } from './lib/panels'
 import { builtinHand } from './engine/handAsset'
 import { defaultHand, findPreset } from './engine/handPresets'
 import { allPages, createProject, parseProject, PROJECT_EXT, serializeProject } from './engine/project'
@@ -355,5 +356,9 @@ export function runMenuCommand(cmd: string, payload?: unknown): void {
       return get().setTool('ellipse')
     case 'tool-lasso':
       return get().setTool('lasso')
+    case 'prefs':
+      return openPrefs()
+    case 'shortcuts':
+      return openShortcuts()
   }
 }

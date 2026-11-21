@@ -5,7 +5,7 @@ import { getAutoSelect } from '../lib/autoSelect'
 import { getRedoAdvance } from '../lib/brushTarget'
 import { pacedRecording, tracedDrawMs } from '../lib/pace'
 import { brushWidthFor, effectiveBrushTarget, selectedLine } from '../lib/brushMode'
-import { getPathTool } from '../lib/pathTool'
+import { effectivePathTool, getPathTool } from '../lib/pathTool'
 import { hitPart, insertStrokePartAfter, replaceStrokePart, setPartDraw, strokeParts, transformPart, transformStroke } from '../engine/strokeParts'
 import { fitPath, fitTolerance, insertAnchor, nearestOnPath, partPoints, removeAnchor, type PathNode } from '../engine/pathEdit'
 import { revealLine, updatePathNodes } from '../livePath'
@@ -883,8 +883,9 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       if (touches.current.size > 2 || gestureLock.current) return
     }
     const st = useEditor.getState()
-    // 選択ツールでは Alt は「除外」に使うので、移動は中ボタン／移動ツールのみ
-    const wantsPan = e.button === 1 || tool === 'pan' || (e.button === 0 && e.altKey && !isSelTool)
+    // 選択ツールでは Alt は「除外」、パス編集では「アンカーポイントの切り替え（押しているあいだ）」に使うので、移動は中ボタン／移動ツールのみ
+    const altForPath = tool === 'live' && st.liveMode === 'path'
+    const wantsPan = e.button === 1 || tool === 'pan' || (e.button === 0 && e.altKey && !isSelTool && !altForPath)
     if (wantsPan) {
       e.preventDefault()
       panDrag.current = { pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y }
@@ -973,7 +974,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
           // ハンドル（選んだアンカーと両どなり）→ アンカーの順に当たりを調べる
           const nodes = lp.nodes
           const sel = lp.selected
-          const ptool = getPathTool()
+          // Alt を押しているあいだは、パス選択がアンカーポイントの切り替えになる（Illustrator / Photoshop と同じ）
+          const ptool = effectivePathTool(getPathTool(), e.altKey)
           // アンカーポイントの追加・削除：アンカーの上なら消し、線の上ならアンカーを足す（それ以外は何もしない）
           if (ptool === 'addDel') {
             let hitAnchor = -1

@@ -3,6 +3,7 @@
 //  ・convert … アンカーポイントの切り替え：押すと角に、ドラッグでなめらかに。ハンドルは片側だけ動く
 //  ・addDel  … アンカーポイントの追加・削除：線の上で追加、アンカーの上で削除
 import { useSyncExternalStore } from 'react'
+import { useAltHeld } from './modifiers'
 
 export type PathTool = 'direct' | 'convert' | 'addDel'
 
@@ -42,4 +43,14 @@ export function usePathTool(): PathTool {
     },
     () => tool
   )
+}
+
+/** Alt を押しているあいだは、パス選択を一時的にアンカーポイントの切り替えにする（Illustrator / Photoshop と同じ） */
+export function effectivePathTool(base: PathTool, alt: boolean): PathTool {
+  return alt && base === 'direct' ? 'convert' : base
+}
+
+/** いま効いているパスの道具（表示用。Alt を押しているあいだの切り替えも含む） */
+export function useEffectivePathTool(): PathTool {
+  return effectivePathTool(usePathTool(), useAltHeld())
 }
