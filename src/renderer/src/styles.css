@@ -540,6 +540,18 @@ kbd {
   text-align: center;
   box-shadow: var(--well-shadow);
 }
+/* 大きさの数値：押して選び、ホイール・↑↓ で変える */
+.size-value {
+  cursor: ns-resize;
+  user-select: none;
+  outline: none;
+  transition: box-shadow 0.12s;
+}
+.size-value:hover,
+.size-value:focus-visible,
+.size-value:focus {
+  box-shadow: var(--well-shadow), 0 0 0 2px var(--accent);
+}
 .live-hint {
   padding: 0 6px;
   font-size: 12px;

@@ -5,7 +5,7 @@
 //  ・消しゴム：なぞった所を、選んだ軌跡では見せない
 // 絵（ステージ）は「選んだ軌跡（線）を描き終えた瞬間」を見せているので、変えるとその場で見え方が変わる。
 import { ScrollRow } from './ScrollRow'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useShallow } from 'zustand/react/shallow'
 import { setAutoSelect, useAutoSelect } from '../lib/autoSelect'
@@ -193,8 +193,56 @@ function SizeSlider({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' 
         aria-label={sizeLabel}
         onChange={(e) => set(fromLog(Number(e.target.value)))}
       />
-      <span className={phone ? 'pc-value' : 'live-value'}>{w}</span>
+      <SizeValue phone={phone} value={w} set={set} label={sizeLabel} />
     </>
+  )
+}
+
+/**
+ * 大きさの数値。押すと選ばれて、マウスホイール・↑↓ キーで 1 ずつ（Shift を押しながらなら 10 ずつ）変えられる。
+ * ホイールは、選ばずに数値の上に乗せただけでも効く
+ */
+function SizeValue({ phone, value, set, label }: { phone: boolean; value: number; set: (v: number) => void; label: string }): React.JSX.Element {
+  const ref = useRef<HTMLSpanElement>(null)
+  const latest = useRef({ value, set })
+  latest.current = { value, set }
+  // ホイールでページがスクロールしないよう、passive でない登録にする
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const onWheel = (e: WheelEvent): void => {
+      if (e.deltaY === 0) return
+      e.preventDefault()
+      const { value: v, set: s } = latest.current
+      s(v + (e.deltaY < 0 ? 1 : -1) * (e.shiftKey ? 10 : 1))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+  const onKeyDown = (e: React.KeyboardEvent): void => {
+    const step = e.shiftKey ? 10 : 1
+    const d = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? step : e.key === 'ArrowDown' || e.key === 'ArrowLeft' ? -step : e.key === 'PageUp' ? 10 : e.key === 'PageDown' ? -10 : 0
+    if (!d) return
+    e.preventDefault()
+    e.stopPropagation() // 線の移動など、↑↓ のショートカットに渡さない
+    set(value + d)
+  }
+  return (
+    <span
+      ref={ref}
+      className={`${phone ? 'pc-value' : 'live-value'} size-value`}
+      role="spinbutton"
+      tabIndex={0}
+      aria-label={label}
+      aria-valuenow={value}
+      aria-valuemin={4}
+      aria-valuemax={MAX}
+      title={`${label}：マウスホイール、または押してから ↑↓ キーで 1 ずつ変えられます（Shift で 10 ずつ）`}
+      onPointerDown={(e) => e.currentTarget.focus()}
+      onKeyDown={onKeyDown}
+    >
+      {value}
+    </span>
   )
 }
 
