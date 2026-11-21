@@ -44,8 +44,8 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: 'line.nextGroup', group: '線・グループ', label: '次のグループを選ぶ', keys: ['ArrowDown'] },
   { id: 'line.prev', group: '線・グループ', label: '前の線（手描き）', keys: [','] },
   { id: 'line.next', group: '線・グループ', label: '次の線（手描き）', keys: ['.'] },
-  { id: 'size.down', group: '線・グループ', label: 'ブラシ・消しゴム（選んだ線）を細く', keys: ['['] },
-  { id: 'size.up', group: '線・グループ', label: 'ブラシ・消しゴム（選んだ線）を太く', keys: [']'] },
+  { id: 'size.down', group: '線・グループ', label: 'ブラシ・消しゴムを小さく', keys: ['['], note: 'ブラシはこれから描く太さ（すでにある線は変わりません）。選ぶ・動かす・パス編集では、選んでいる線の太さ' },
+  { id: 'size.up', group: '線・グループ', label: 'ブラシ・消しゴムを大きく', keys: [']'] },
   { id: 'edit.newGroup', group: '線・グループ', label: '新しいグループ（次になぞった線から）', keys: ['Ctrl+Shift+N'], note: 'Photoshop の「新規レイヤー」と同じキー' },
   { id: 'edit.delete', group: '線・グループ', label: '削除（範囲の中・選んだグループ・アンカー）', keys: ['Delete', 'Backspace'] },
   // ---- 再生・表示 ----

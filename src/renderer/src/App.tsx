@@ -35,6 +35,7 @@ import { UsageGuide } from './components/UsageGuide'
 import { Tour } from './components/Tour'
 import { getTourPrefs, GUIDE_EVENT, openGuide, TOUR_EVENT } from './lib/tour'
 import { comboFromEvent, findShortcuts } from './lib/shortcuts'
+import { brushWidthFor, selectedLine } from './lib/brushMode'
 import { openPrefs, openShortcuts } from './lib/panels'
 import { fitTimelineZoom, stepTimelineZoom } from './lib/timelineZoom'
 import { buildTimeline } from './engine/wb-engine'
@@ -64,9 +65,22 @@ function liveMode(m: 'move' | 'brush' | 'erase' | 'path'): void {
   st.setLiveMode(m)
 }
 
-/** ブラシ・消しゴムの大きさを [ ] で変える（手描きで線を選んでいれば、その線の太さ） */
+/**
+ * [ ] で大きさを変える。
+ *  ・ブラシ：これから描くブラシの太さ（線を選んでいれば、その線を描き直す・足すときの太さ。すでにある線の太さは変えない）
+ *  ・消しゴム：消しゴムの大きさ
+ *  ・選ぶ・動かす／パス編集：選んでいる線の太さ
+ */
 function stepSize(dir: -1 | 1): void {
   const st = useEditor.getState()
+  const scaled = (w: number): number => Math.max(PEN_MIN, Math.min(PEN_MAX, Math.round(w * (dir < 0 ? 0.85 : 1.18)) + (dir > 0 && w < 8 ? 1 : 0)))
+  if (st.tool === 'live' && st.liveMode === 'brush') {
+    const next = scaled(brushWidthFor(st))
+    if (selectedLine(st)) st.setLineBrushWidth(next)
+    else st.updateSettings({ defaultRevealWidth: next })
+    return
+  }
+  if (st.tool === 'live' && st.liveMode === 'erase') return st.updateSettings({ eraserWidth: scaled(st.project.settings.eraserWidth) })
   if (st.tool === 'live') {
     const lp = st.livePart
     const stroke = lp ? st.project.strokes.find((s) => s.id === lp.strokeId) : undefined
