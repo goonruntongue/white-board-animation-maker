@@ -16,6 +16,13 @@
 
 ---
 
+## v0.1.7（2026-11-21）
+
+すべて GitHub Actions で作成（Windows・Windows インストール不要版・Mac arm64 / x64・Linux）。
+
+主な変更（v0.1.6 から）：
+- ブラシ・消しゴムの大きさの数値を、マウスホイール（Shift で 10 ずつ）や、押して選んでから ↑↓ キー（Shift・PageUp / PageDown で 10 ずつ）で変えられるようにする
+
 ## v0.1.6（2026-11-19）
 
 すべて GitHub Actions で作成（Windows・Windows インストール不要版・Mac arm64 / x64・Linux）。
