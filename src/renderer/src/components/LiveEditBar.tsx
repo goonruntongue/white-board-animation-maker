@@ -13,7 +13,7 @@ import { setBrushTarget, setRedoAdvance, useRedoAdvance, type BrushTarget } from
 import { selectedLine, useBrushWidth, useEffectiveBrushTarget } from '../lib/brushMode'
 import { setKeepTracedPace, useKeepTracedPace } from '../lib/pace'
 import { useEffectivePathTool, type PathTool } from '../lib/pathTool'
-import { keyHint, useShortcutsVersion } from '../lib/shortcuts'
+import { formatCombo, keyHint, keysFor, useShortcutsVersion } from '../lib/shortcuts'
 import { ActionSheet } from './phone/ActionSheet'
 import {
   setPartWidth,
@@ -169,7 +169,7 @@ function SizePresets({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser'
   return (
     <div className="live-presets" role="radiogroup" aria-label={label}>
       {presets.map((p) => (
-        <button key={p.width} role="radio" aria-checked={w === p.width} className={`live-preset ${w === p.width ? 'on' : ''}`} title={`${p.label} ${p.width}px（${p.key} キー）`} onClick={() => set(p.width)}>
+        <button key={p.width} role="radio" aria-checked={w === p.width} className={`live-preset ${w === p.width ? 'on' : ''}`} title={`${p.label} ${p.width}px（${p.key} キー）${sizeKeysHint()}`} onClick={() => set(p.width)}>
           {p.label}
         </button>
       ))}
@@ -177,10 +177,20 @@ function SizePresets({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser'
   )
 }
 
+/** ツールチップ用：「［ ／ ］ キーでも小さく・大きくできます」。キーを外していれば空 */
+function sizeKeysHint(): string {
+  const down = keysFor('size.down')[0]
+  const up = keysFor('size.up')[0]
+  if (!down && !up) return ''
+  if (down && up) return `。${formatCombo(down)} キーで小さく、${formatCombo(up)} キーで大きくできます`
+  return down ? `。${formatCombo(down)} キーで小さくできます` : `。${formatCombo(up!)} キーで大きくできます`
+}
+
 /** ブラシ・消しゴムの大きさのスライダー（対数目盛り） */
 function SizeSlider({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' }): React.JSX.Element {
   const [w, set, sizeLabel] = useSize(kind)
   const label = kind === 'brush' ? (sizeLabel === 'ブラシの太さ' ? 'ブラシ' : '線の太さ') : '消しゴム'
+  useShortcutsVersion()
   return (
     <>
       {!phone && <span className="tb-label">{label}</span>}
@@ -192,6 +202,7 @@ function SizeSlider({ phone, kind }: { phone: boolean; kind: 'brush' | 'eraser' 
         value={toLog(w)}
         style={{ '--fill': `${toLog(w) / 10}%` } as React.CSSProperties}
         aria-label={sizeLabel}
+        title={phone ? undefined : `${sizeLabel}${sizeKeysHint()}`}
         onChange={(e) => set(fromLog(Number(e.target.value)))}
       />
       <SizeValue phone={phone} value={w} set={set} label={sizeLabel} />
@@ -238,7 +249,7 @@ function SizeValue({ phone, value, set, label }: { phone: boolean; value: number
       aria-valuenow={value}
       aria-valuemin={4}
       aria-valuemax={MAX}
-      title={`${label}：マウスホイール、または押してから ↑↓ キーで 1 ずつ変えられます（Shift で 10 ずつ）`}
+      title={`${label}：マウスホイール、または押してから ↑↓ キーで 1 ずつ変えられます（Shift で 10 ずつ）${sizeKeysHint()}`}
       onPointerDown={(e) => e.currentTarget.focus()}
       onKeyDown={onKeyDown}
     >
