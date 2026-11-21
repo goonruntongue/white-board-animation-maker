@@ -4,7 +4,7 @@
 // 通信は Streamable HTTP の最小限：POST で JSON-RPC を受け、JSON で返す（ストリームは使わない）。
 
 export const MCP_PROTOCOL_VERSION = '2025-06-18'
-export const SERVER_INFO = { name: 'whiteboard-animation-maker', title: 'Whiteboard Animation Maker', version: '0.1.7' }
+export const SERVER_INFO = { name: 'whiteboard-animation-maker', title: 'Whiteboard Animation Maker', version: '0.1.8' }
 
 /** 道具の実行結果（MCP の content と同じ形） */
 export type ToolContent = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }

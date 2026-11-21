@@ -1,7 +1,7 @@
 {
   "name": "whiteboard-animation-maker",
   "productName": "Whiteboard Animation Maker",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "ホワイトボード清書画像から「手が描いていく」アニメーションを作るデスクトップアプリ",
   "main": "./out/main/index.js",
   "author": "goonruntongue",
