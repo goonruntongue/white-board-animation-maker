@@ -4894,6 +4894,10 @@ button {
 }
 .help-pop > button small {
   padding-left: 16px;
+  /* 長い説明でもメニューの外へはみ出さない（入りきらなければ … で切る） */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ---------- PC：オプションバーを2段目に（歯車のメニュー「オプションバー：2段」。既定） ---------- */

@@ -158,9 +158,9 @@ export function HelpMenu({ phone = false }: { phone?: boolean }): React.JSX.Elem
             <input type="checkbox" checked={barLayout === 'two'} onChange={(e) => setBarLayout(e.target.checked ? 'two' : 'one')} />
             <span className="switch" />
           </label>
-          <button role="menuitem" onClick={() => run(() => setShortcuts(true))}>
+          <button role="menuitem" title="キーの一覧と、割り当ての変更" onClick={() => run(() => setShortcuts(true))}>
             <Icon name="code" /> キーボードショートカット
-            <small>一覧と割り当ての変更{keyHint('edit.shortcuts')}</small>
+            <small>{keyHint('edit.shortcuts').replace(/[（）]/g, '')}</small>
           </button>
           <hr />
           <button role="menuitem" onClick={() => run(() => setAgent(true))}>
