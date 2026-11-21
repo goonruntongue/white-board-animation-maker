@@ -1359,6 +1359,11 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
             if (getRedoAdvance() && part + 1 < count) {
               st.setLivePart({ strokeId: target.id, part: part + 1 })
               st.notify(`線 ${part + 1} を描き直しました → 線 ${part + 2} へ（描き損じたら ↶ で戻ってやり直せます）`)
+            } else if (getRedoAdvance()) {
+              // グループの最後の線を描き直したら、進む先の「次の線」はまだない。続けてなぞると、その後ろに足していく（自動で「追加」）
+              st.setLivePart({ strokeId: target.id, part })
+              st.setDrawChain({ id: target.id })
+              st.notify(`グループ内の最後の線でした。続けてなぞると線 ${count + 1} として足されます`)
             } else {
               st.setLivePart({ strokeId: target.id, part })
               st.notify(`線 ${part + 1} を描き直しました`)

@@ -492,7 +492,7 @@ function BrushKey({ phone, on, onPick }: { phone: boolean; on: boolean; onPick: 
               {
                 icon: advance ? ('check' as const) : ('x' as const),
                 label: advance ? '描き直したら次の線へ進む：オン' : '描き直したら次の線へ進む：オフ',
-                note: '押すと切り替わります（オフにすると、同じ線にとどまって何度も描き直せます）',
+                note: '押すと切り替わります。グループの最後の線を描き直したら、続けてなぞると線が足されます（オフにすると、同じ線にとどまって何度も描き直せます）',
                 active: advance,
                 onSelect: () => setRedoAdvance(!advance)
               },
@@ -527,7 +527,7 @@ function BrushKey({ phone, on, onPick }: { phone: boolean; on: boolean; onPick: 
                 <small>{o.note}</small>
               </button>
             ))}
-            <label className="toggle help-toggle" title="オフにすると、描き直したあとも同じ線にとどまり、何度でも描き直せます">
+            <label className="toggle help-toggle" title="オンなら、描き直すと次の線を選びます。グループの最後の線を描き直したら、続けてなぞると線が足されます（自動で「追加」）。オフにすると、描き直したあとも同じ線にとどまり、何度でも描き直せます">
               <span>描き直したら次の線へ進む</span>
               <input type="checkbox" checked={advance} onChange={(e) => setRedoAdvance(e.target.checked)} />
               <span className="switch" />
