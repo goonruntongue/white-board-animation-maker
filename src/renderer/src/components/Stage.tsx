@@ -88,6 +88,12 @@ const RENDER_LEVELS = [0.25, 0.375, 0.5, 0.625, 0.75, 1]
 const DRAG_THRESHOLD = 4 // 画面px。これ未満の移動はクリックとみなす
 const CLOSE_RADIUS = 9 // 画面px。多角形の始点にこれだけ近づいたら閉じる
 
+/** 端での自動スクロール：流れ始める端からの距離・速さ（px/秒）・絵の端をどこまで見せたら止めるか */
+const EDGE_ZONE = 48
+const EDGE_GAIN = 12
+const EDGE_MAX_SPEED = 2400
+const EDGE_STOP = 24
+
 function distToSegment(px: number, py: number, a: Pt, b: Pt): number {
   const dx = b.x - a.x
   const dy = b.y - a.y
@@ -1139,6 +1145,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       setView((v) => ({ ...v, x: pan.vx + e.clientX - pan.sx, y: pan.vy + e.clientY - pan.sy }))
       return
     }
+    noteEdge(e)
     const p = toImage(e.clientX, e.clientY)
     const pd = pathDrag.current
     if (pd && pd.pointerId === e.pointerId) {
@@ -1230,6 +1237,71 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       erasing.current?.pointerId === e.pointerId
     if (e.pointerType === 'touch' && held) showLoupe(e.clientX, e.clientY)
   }
+
+  // ---- 押したまま画面の端へ来たら、その方向へ表示を流す（拡大して塗っているとき、はみ出した先を見ながら続けられる） ----
+  // 端の内側 EDGE_ZONE px に入るか外へ出ると流れ始め、端に近いほど・外へ出るほど速い。絵の端が見えたら止まる。
+  // 流れているあいだは、同じ位置で動かしたことにして、線・消しゴム・範囲・パスの操作をマウスの下へ伸ばす
+  const edgeScroll = useRef<{ pointerId: number; clientX: number; clientY: number; pointerType: string; altKey: boolean; shiftKey: boolean; raf: number; last: number } | null>(null)
+  const moveRef = useRef(onPointerMove)
+  moveRef.current = onPointerMove
+  const geomRef = useRef({ left, top, dispW, dispH })
+  geomRef.current = { left, top, dispW, dispH }
+  const heldBy = (id: number): boolean =>
+    recording.current?.pointerId === id ||
+    erasing.current?.pointerId === id ||
+    draft.current?.pointerId === id ||
+    pathDrag.current?.pointerId === id ||
+    (liveDrag.current?.pointerId === id && liveDrag.current.moved)
+  const edgeStep = (t: number): void => {
+    const s = edgeScroll.current
+    const el = containerRef.current
+    if (!s || !el || !heldBy(s.pointerId) || pinch.current) {
+      edgeScroll.current = null
+      return
+    }
+    const dt = Math.min(50, Math.max(0, t - s.last)) / 1000
+    s.last = t
+    const r = el.getBoundingClientRect()
+    const g = geomRef.current
+    const speed = (dist: number): number => (dist < EDGE_ZONE ? Math.min(EDGE_MAX_SPEED, (EDGE_ZONE - dist) * EDGE_GAIN) : 0)
+    // 表示（絵）を動かす向き：左端に寄ったら絵を右へ
+    let vx = speed(s.clientX - r.left) - speed(r.right - s.clientX)
+    let vy = speed(s.clientY - r.top) - speed(r.bottom - s.clientY)
+    if (vx > 0 && g.left >= EDGE_STOP) vx = 0
+    if (vx < 0 && g.left + g.dispW <= r.width - EDGE_STOP) vx = 0
+    if (vy > 0 && g.top >= EDGE_STOP) vy = 0
+    if (vy < 0 && g.top + g.dispH <= r.height - EDGE_STOP) vy = 0
+    if (vx || vy) {
+      // いまの表示での位置を先に足してから、表示を動かす
+      moveRef.current({
+        pointerId: s.pointerId,
+        clientX: s.clientX,
+        clientY: s.clientY,
+        pointerType: s.pointerType,
+        altKey: s.altKey,
+        shiftKey: s.shiftKey,
+        nativeEvent: { clientX: s.clientX, clientY: s.clientY, timeStamp: performance.now() }
+      } as unknown as React.PointerEvent)
+      setView((v) => ({ ...v, x: v.x + vx * dt, y: v.y + vy * dt }))
+    }
+    s.raf = requestAnimationFrame(edgeStep)
+  }
+  function noteEdge(e: React.PointerEvent): void {
+    // 指（タッチ）は、端まで描くつもりでも流れると困るので使わない
+    if (e.pointerType === 'touch' || !heldBy(e.pointerId)) return
+    const s = edgeScroll.current
+    if (s && s.pointerId === e.pointerId) {
+      Object.assign(s, { clientX: e.clientX, clientY: e.clientY, altKey: e.altKey, shiftKey: e.shiftKey })
+      return
+    }
+    if (s) cancelAnimationFrame(s.raf)
+    const n = { pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY, pointerType: e.pointerType, altKey: e.altKey, shiftKey: e.shiftKey, raf: 0, last: performance.now() }
+    edgeScroll.current = n
+    n.raf = requestAnimationFrame(edgeStep)
+  }
+  useEffect(() => () => {
+    if (edgeScroll.current) cancelAnimationFrame(edgeScroll.current.raf)
+  }, [])
 
   const onPointerUp = (e: React.PointerEvent): void => {
     hideLoupe()
