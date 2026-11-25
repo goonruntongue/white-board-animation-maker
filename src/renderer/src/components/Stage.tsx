@@ -89,9 +89,15 @@ const DRAG_THRESHOLD = 4 // 画面px。これ未満の移動はクリックと�
 const CLOSE_RADIUS = 9 // 画面px。多角形の始点にこれだけ近づいたら閉じる
 
 /** 端での自動スクロール：流れ始める端からの距離・速さ（px/秒）・絵の端をどこまで見せたら止めるか */
-const EDGE_ZONE = 48
-const EDGE_GAIN = 12
-const EDGE_MAX_SPEED = 2400
+// 端の帯の幅は、表示の短い辺の 15%（72〜160px）。帯に入ったらすぐ EDGE_MIN_SPEED で流れ始め、端へ近づくほど速く、
+// 外へ出すとさらに速くなる
+const EDGE_ZONE_RATIO = 0.15
+const EDGE_ZONE_MIN = 72
+const EDGE_ZONE_MAX = 160
+const EDGE_MIN_SPEED = 180
+const EDGE_IN_SPEED = 1100
+const EDGE_OUT_GAIN = 10
+const EDGE_MAX_SPEED = 3200
 const EDGE_STOP = 24
 
 function distToSegment(px: number, py: number, a: Pt, b: Pt): number {
@@ -1239,7 +1245,7 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   }
 
   // ---- 押したまま画面の端へ来たら、その方向へ表示を流す（拡大して塗っているとき、はみ出した先を見ながら続けられる） ----
-  // 端の内側 EDGE_ZONE px に入るか外へ出ると流れ始め、端に近いほど・外へ出るほど速い。絵の端が見えたら止まる。
+  // 端の帯（EDGE_ZONE_*）に入るか外へ出ると流れ始め、端に近いほど・外へ出るほど速い。絵の端が見えたら止まる。
   // 流れているあいだは、同じ位置で動かしたことにして、線・消しゴム・範囲・パスの操作をマウスの下へ伸ばす
   const edgeScroll = useRef<{ pointerId: number; clientX: number; clientY: number; pointerType: string; altKey: boolean; shiftKey: boolean; raf: number; last: number } | null>(null)
   const moveRef = useRef(onPointerMove)
@@ -1259,11 +1265,18 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
       edgeScroll.current = null
       return
     }
-    const dt = Math.min(50, Math.max(0, t - s.last)) / 1000
+    // コマ数が落ちても（拡大中の描き直しが重いとき）、経った時間ぶんだけ進める（タブを離れたときの大きな飛びだけ抑える）
+    const dt = Math.min(200, Math.max(0, t - s.last)) / 1000
     s.last = t
     const r = el.getBoundingClientRect()
     const g = geomRef.current
-    const speed = (dist: number): number => (dist < EDGE_ZONE ? Math.min(EDGE_MAX_SPEED, (EDGE_ZONE - dist) * EDGE_GAIN) : 0)
+    const zone = Math.min(EDGE_ZONE_MAX, Math.max(EDGE_ZONE_MIN, Math.min(r.width, r.height) * EDGE_ZONE_RATIO))
+    const speed = (dist: number): number => {
+      if (dist >= zone) return 0
+      if (dist < 0) return Math.min(EDGE_MAX_SPEED, EDGE_MIN_SPEED + EDGE_IN_SPEED - dist * EDGE_OUT_GAIN)
+      const k = 1 - dist / zone
+      return EDGE_MIN_SPEED + EDGE_IN_SPEED * k * k
+    }
     // 表示（絵）を動かす向き：左端に寄ったら絵を右へ
     let vx = speed(s.clientX - r.left) - speed(r.right - s.clientX)
     let vy = speed(s.clientY - r.top) - speed(r.bottom - s.clientY)
@@ -1287,8 +1300,8 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     s.raf = requestAnimationFrame(edgeStep)
   }
   function noteEdge(e: React.PointerEvent): void {
-    // 指（タッチ）は、端まで描くつもりでも流れると困るので使わない
-    if (e.pointerType === 'touch' || !heldBy(e.pointerId)) return
+    // 指（タッチ）でも流す。2本指のピンチ中は流さない
+    if (!heldBy(e.pointerId) || pinch.current || gestureLock.current) return
     const s = edgeScroll.current
     if (s && s.pointerId === e.pointerId) {
       Object.assign(s, { clientX: e.clientX, clientY: e.clientY, altKey: e.altKey, shiftKey: e.shiftKey })
