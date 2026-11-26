@@ -88,16 +88,15 @@ const RENDER_LEVELS = [0.25, 0.375, 0.5, 0.625, 0.75, 1]
 const DRAG_THRESHOLD = 4 // 画面px。これ未満の移動はクリックとみなす
 const CLOSE_RADIUS = 9 // 画面px。多角形の始点にこれだけ近づいたら閉じる
 
-/** 端での自動スクロール：流れ始める端からの距離・速さ（px/秒）・絵の端をどこまで見せたら止めるか */
-// 端の帯の幅は、表示の短い辺の 15%（72〜160px）。帯に入ったらすぐ EDGE_MIN_SPEED で流れ始め、端へ近づくほど速く、
-// 外へ出すとさらに速くなる
+/** 端での自動スクロール：流れ始める端からの距離・動かした量の何倍流すか・絵の端をどこまで見せたら止めるか */
+// 端の帯の幅は、表示の短い辺の 15%（72〜160px）。帯の中で端へ向かって動かしたときだけ、動かした量に
+// 倍率（帯に入った所で EDGE_GAIN_MIN、端で EDGE_GAIN_MAX、外ではさらに）をかけたぶん流す。止めれば止まる
 const EDGE_ZONE_RATIO = 0.15
 const EDGE_ZONE_MIN = 72
 const EDGE_ZONE_MAX = 160
-const EDGE_MIN_SPEED = 180
-const EDGE_IN_SPEED = 1100
-const EDGE_OUT_GAIN = 10
-const EDGE_MAX_SPEED = 3200
+const EDGE_GAIN_MIN = 1
+const EDGE_GAIN_MAX = 5
+const EDGE_GAIN_OUT = 8
 const EDGE_STOP = 24
 
 function distToSegment(px: number, py: number, a: Pt, b: Pt): number {
@@ -1245,11 +1244,10 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
   }
 
   // ---- 押したまま画面の端へ来たら、その方向へ表示を流す（拡大して塗っているとき、はみ出した先を見ながら続けられる） ----
-  // 端の帯（EDGE_ZONE_*）に入るか外へ出ると流れ始め、端に近いほど・外へ出るほど速い。絵の端が見えたら止まる。
-  // 流れているあいだは、同じ位置で動かしたことにして、線・消しゴム・範囲・パスの操作をマウスの下へ伸ばす
-  const edgeScroll = useRef<{ pointerId: number; clientX: number; clientY: number; pointerType: string; altKey: boolean; shiftKey: boolean; raf: number; last: number } | null>(null)
-  const moveRef = useRef(onPointerMove)
-  moveRef.current = onPointerMove
+  // 端の帯（EDGE_ZONE_*）の中や外で、端へ向かって動かしたときだけ、動かした量に倍率をかけたぶん流す。
+  // 止めたり内側へ戻したりすれば流れない（流れに線が引きずられて勝手に伸びない）。絵の端が見えたら止まる。
+  // 流す量はコマごとにまとめて表示へ足す（同じコマの中の動きは、いまの表示のまま位置を取る）
+  const edgeScroll = useRef<{ pointerId: number; clientX: number; clientY: number; dx: number; dy: number; raf: number } | null>(null)
   const geomRef = useRef({ left, top, dispW, dispH })
   geomRef.current = { left, top, dispW, dispH }
   const heldBy = (id: number): boolean =>
@@ -1258,59 +1256,54 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
     draft.current?.pointerId === id ||
     pathDrag.current?.pointerId === id ||
     (liveDrag.current?.pointerId === id && liveDrag.current.moved)
-  const edgeStep = (t: number): void => {
+  const edgeFlush = (): void => {
     const s = edgeScroll.current
+    if (!s) return
+    s.raf = 0
+    let { dx, dy } = s
+    s.dx = 0
+    s.dy = 0
     const el = containerRef.current
-    if (!s || !el || !heldBy(s.pointerId) || pinch.current) {
-      edgeScroll.current = null
-      return
-    }
-    // コマ数が落ちても（拡大中の描き直しが重いとき）、経った時間ぶんだけ進める（タブを離れたときの大きな飛びだけ抑える）
-    const dt = Math.min(200, Math.max(0, t - s.last)) / 1000
-    s.last = t
+    if (!el || !heldBy(s.pointerId) || pinch.current) return
     const r = el.getBoundingClientRect()
     const g = geomRef.current
-    const zone = Math.min(EDGE_ZONE_MAX, Math.max(EDGE_ZONE_MIN, Math.min(r.width, r.height) * EDGE_ZONE_RATIO))
-    const speed = (dist: number): number => {
-      if (dist >= zone) return 0
-      if (dist < 0) return Math.min(EDGE_MAX_SPEED, EDGE_MIN_SPEED + EDGE_IN_SPEED - dist * EDGE_OUT_GAIN)
-      const k = 1 - dist / zone
-      return EDGE_MIN_SPEED + EDGE_IN_SPEED * k * k
-    }
-    // 表示（絵）を動かす向き：左端に寄ったら絵を右へ
-    let vx = speed(s.clientX - r.left) - speed(r.right - s.clientX)
-    let vy = speed(s.clientY - r.top) - speed(r.bottom - s.clientY)
-    if (vx > 0 && g.left >= EDGE_STOP) vx = 0
-    if (vx < 0 && g.left + g.dispW <= r.width - EDGE_STOP) vx = 0
-    if (vy > 0 && g.top >= EDGE_STOP) vy = 0
-    if (vy < 0 && g.top + g.dispH <= r.height - EDGE_STOP) vy = 0
-    if (vx || vy) {
-      // いまの表示での位置を先に足してから、表示を動かす
-      moveRef.current({
-        pointerId: s.pointerId,
-        clientX: s.clientX,
-        clientY: s.clientY,
-        pointerType: s.pointerType,
-        altKey: s.altKey,
-        shiftKey: s.shiftKey,
-        nativeEvent: { clientX: s.clientX, clientY: s.clientY, timeStamp: performance.now() }
-      } as unknown as React.PointerEvent)
-      setView((v) => ({ ...v, x: v.x + vx * dt, y: v.y + vy * dt }))
-    }
-    s.raf = requestAnimationFrame(edgeStep)
+    // 絵の端が見えたら、それ以上は流さない
+    if (dx > 0) dx = Math.min(dx, Math.max(0, EDGE_STOP - g.left))
+    if (dx < 0) dx = Math.max(dx, Math.min(0, r.width - EDGE_STOP - (g.left + g.dispW)))
+    if (dy > 0) dy = Math.min(dy, Math.max(0, EDGE_STOP - g.top))
+    if (dy < 0) dy = Math.max(dy, Math.min(0, r.height - EDGE_STOP - (g.top + g.dispH)))
+    if (dx || dy) setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }))
   }
   function noteEdge(e: React.PointerEvent): void {
     // 指（タッチ）でも流す。2本指のピンチ中は流さない
     if (!heldBy(e.pointerId) || pinch.current || gestureLock.current) return
     const s = edgeScroll.current
-    if (s && s.pointerId === e.pointerId) {
-      Object.assign(s, { clientX: e.clientX, clientY: e.clientY, altKey: e.altKey, shiftKey: e.shiftKey })
+    if (!s || s.pointerId !== e.pointerId) {
+      if (s?.raf) cancelAnimationFrame(s.raf)
+      edgeScroll.current = { pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY, dx: 0, dy: 0, raf: 0 }
       return
     }
-    if (s) cancelAnimationFrame(s.raf)
-    const n = { pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY, pointerType: e.pointerType, altKey: e.altKey, shiftKey: e.shiftKey, raf: 0, last: performance.now() }
-    edgeScroll.current = n
-    n.raf = requestAnimationFrame(edgeStep)
+    const mx = e.clientX - s.clientX
+    const my = e.clientY - s.clientY
+    s.clientX = e.clientX
+    s.clientY = e.clientY
+    const el = containerRef.current
+    if (!el || (!mx && !my)) return
+    const r = el.getBoundingClientRect()
+    const zone = Math.min(EDGE_ZONE_MAX, Math.max(EDGE_ZONE_MIN, Math.min(r.width, r.height) * EDGE_ZONE_RATIO))
+    // 端からの距離に応じた倍率（帯の外なら 0）
+    const gain = (dist: number): number => {
+      if (dist >= zone) return 0
+      if (dist < 0) return EDGE_GAIN_OUT
+      const k = 1 - dist / zone
+      return EDGE_GAIN_MIN + (EDGE_GAIN_MAX - EDGE_GAIN_MIN) * k * k
+    }
+    // 端へ向かう動きだけ使う。表示（絵）は逆向きへ流す（左端へ動かしたら絵を右へ）
+    if (mx < 0) s.dx += -mx * gain(e.clientX - r.left)
+    if (mx > 0) s.dx -= mx * gain(r.right - e.clientX)
+    if (my < 0) s.dy += -my * gain(e.clientY - r.top)
+    if (my > 0) s.dy -= my * gain(r.bottom - e.clientY)
+    if ((s.dx || s.dy) && !s.raf) s.raf = requestAnimationFrame(edgeFlush)
   }
   useEffect(() => () => {
     if (edgeScroll.current) cancelAnimationFrame(edgeScroll.current.raf)
@@ -1318,6 +1311,11 @@ export function Stage({ onZoomChange }: { onZoomChange: (z: number) => void }): 
 
   const onPointerUp = (e: React.PointerEvent): void => {
     hideLoupe()
+    // 次に押したときは、そこから測り直す（離した位置との差で流さない）
+    if (edgeScroll.current?.pointerId === e.pointerId) {
+      edgeFlush()
+      edgeScroll.current = null
+    }
     if (e.pointerType === 'touch') {
       touches.current.delete(e.pointerId)
       if (touches.current.size < 2 && pinch.current) {
