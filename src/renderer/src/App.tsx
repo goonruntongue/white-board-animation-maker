@@ -30,6 +30,7 @@ import { StrokeList } from './components/StrokeList'
 import { Timeline } from './components/Timeline'
 import { HintLayer } from './components/HintLayer'
 import { Toast } from './components/Toast'
+import { UpdateNotice } from './components/UpdateNotice'
 import { OptionsBar, Toolbar } from './components/Toolbar'
 import { UsageGuide } from './components/UsageGuide'
 import { Tour } from './components/Tour'
@@ -441,6 +442,7 @@ export default function App(): React.JSX.Element {
       {dialog === 'recovery' && <RecoveryDialog />}
       {dialog === 'auto' && <AutoTraceDialog />}
       <Toast />
+      <UpdateNotice />
       <HintLayer phone={isPhone} />
       {tourOpen && <Tour isPhone={isPhone} onClose={() => setTourOpen(false)} />}
       {guideSection !== undefined && <UsageGuide section={guideSection} onClose={() => setGuideSection(undefined)} />}
